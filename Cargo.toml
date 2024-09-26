@@ -24,11 +24,14 @@ gloo-timers = "0.3.0"
 js-sys = "0.3.70"
 wasm-bindgen = "0.2.93"
 wasm-bindgen-futures = "0.4.42"
-web-sys = { version = "0.3.70", features = ["HtmlInputElement", "HtmlFormElement", "SubtleCrypto", "CryptoKey", 
-"Window", "Crypto", "AesKeyGenParams", "AesGcmParams", "IdbFactory", "IdbOpenDbOptions", "HtmlSelectElement", 
-"Clipboard", "IdbOpenDbRequest", "IdbTransaction", "IdbRequest", "IdbDatabase", "IdbObjectStore", "IdbRequestReadyState", 
-"Navigator", "HtmlAudioElement", "HtmlMediaElement", "Geolocation", "Response", "ReadableStream", "IdbTransactionMode", 
-"IdbObjectStoreParameters", "Navigator", "ServiceWorkerContainer", "FetchEvent", "CustomEvent"] }
+web-sys = { version = "0.3.70", features = [
+    "HtmlInputElement", "HtmlFormElement", "SubtleCrypto", "CryptoKey", 
+    "Window", "Crypto", "AesKeyGenParams", "AesGcmParams", "IdbFactory", "IdbOpenDbOptions", "HtmlSelectElement", 
+    "Clipboard", "IdbOpenDbRequest", "IdbTransaction", "IdbRequest", "IdbDatabase", "IdbObjectStore", "IdbRequestReadyState", 
+    "Navigator", "HtmlAudioElement", "HtmlMediaElement", "Geolocation", "Response", "ReadableStream", "IdbTransactionMode", 
+    "IdbObjectStoreParameters", "Navigator", "ServiceWorkerContainer", "FetchEvent", "CustomEvent",
+    "ServiceWorkerGlobalScope", "Cache", "CacheStorage", "Request"
+] }
 
 # PWA stack
 yew = { version = "0.21.0", features = ["csr"] }
@@ -36,3 +39,13 @@ yew-router = "0.18.0"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.42"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "minions"
+path = "src/main.rs"
+
+[workspace]
+members = ["src/service_worker"]

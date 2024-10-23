@@ -1,3 +1,4 @@
+use crate::widgets::toastify::ToastifyOptions;
 use std::{collections::HashSet, sync::Arc};
 
 use async_channel::{unbounded, Sender};
@@ -88,6 +89,7 @@ impl Component for RelayPool {
             children,
         }
     }
+
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
             RelayAction::SendNote(note) => {
@@ -107,6 +109,8 @@ impl Component for RelayPool {
                     if !self.unique_ids.contains(note.get_id()) {
                         self.unique_ids.insert(note.get_id().to_string());
                         self.new_notes.push(note.clone());
+                        // Add notification for new event
+                        ToastifyOptions::new_event_received("note").show();
                     }
                 }
                 self.add_event(event);
@@ -139,6 +143,7 @@ impl RelayPool {
         let mut close_channels = vec![];
 
         for relay in relays {
+            let relay_url = relay.url.clone(); // Original clone
             let (send_note_tx, send_note_rx) = unbounded::<SignedNote>();
             let (filter_tx, filter_rx) = unbounded::<NostrSubscription>();
             let (unsubscribe_tx, unsubscribe_rx) = unbounded::<String>();
@@ -148,11 +153,21 @@ impl RelayPool {
             unsubscribe_channels.push(unsubscribe_tx);
             close_channels.push(close_tx);
             let note_cb = note_cb.clone();
+
+            // Clone URLs for different async blocks
+            let reader_url = relay_url.clone();
+            let close_url = relay_url.clone();
+            
             spawn_local(async move {
-                let relay = NostrRelay::new(&relay.url).await;
+                let relay = NostrRelay::new(&relay_url).await;
                 if let Err(_) = relay {
+                    ToastifyOptions::new_relay_error(&format!("Failed to connect to relay: {}", relay_url))
+                        .show();
                     return;
                 };
+                
+                ToastifyOptions::new_relay_connected(&relay_url).show();
+                
                 let relay = relay.unwrap();
                 let relay_arc = Arc::new(relay);
 
@@ -160,6 +175,8 @@ impl RelayPool {
                 spawn_local(async move {
                     while let Ok(note) = send_note_rx.recv().await {
                         if let Err(e) = sender_relay.send_note(note).await {
+                            ToastifyOptions::new_relay_error(&format!("Error sending note: {}", e))
+                                .show();
                             gloo::console::error!("Error sending note: ", format!("{:?}", e));
                         }
                     }
@@ -169,6 +186,8 @@ impl RelayPool {
                 spawn_local(async move {
                     while let Ok(filter) = filter_rx.recv().await {
                         if let Err(e) = filter_relay.subscribe(&filter).await {
+                            ToastifyOptions::new_relay_error(&format!("Error subscribing: {}", e))
+                                .show();
                             gloo::console::error!("Error subscribing: ", format!("{:?}", e));
                         }
                     }
@@ -178,6 +197,8 @@ impl RelayPool {
                 spawn_local(async move {
                     while let Ok(filter) = unsubscribe_rx.recv().await {
                         if let Err(e) = unsubscribe_relay.unsubscribe(filter).await {
+                            ToastifyOptions::new_relay_error(&format!("Error unsubscribing: {}", e))
+                                .show();
                             gloo::console::error!("Error unsubscribing: ", format!("{:?}", e));
                         }
                     }
@@ -188,12 +209,14 @@ impl RelayPool {
                     while let Ok(event) = reader_relay.relay_event_reader().recv().await {
                         note_cb.emit(event);
                     }
+                    ToastifyOptions::new_relay_disconnected(&reader_url).show();
                 });
 
                 let close_relay = relay_arc.clone();
                 spawn_local(async move {
                     while let Ok(_) = close_rx.recv().await {
                         close_relay.close().await;
+                        ToastifyOptions::new_relay_disconnected(&close_url).show();
                     }
                 });
             });

@@ -43,7 +43,7 @@ impl IdbStoreManager for UserRelay {
     fn document_key(&self) -> JsValue {
         JsValue::from_str(&self.url)
     }
-    fn upgrade_db(event: web_sys::Event) -> Result<(), JsValue> {
+    fn upgrade_db(_event: web_sys::Event) -> Result<(), JsValue> {
         Ok(())
     }
 }

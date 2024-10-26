@@ -6,14 +6,16 @@ pub struct ToastifyOptions {
     text: String,
     duration: u32,
     close: bool,
-    gravity: &'static str,  // `top` or `bottom`
-    position: &'static str, // `left`, `center` or `right`
+    gravity: &'static str,
+    position: &'static str,
     #[serde(rename = "stopOnFocus")]
-    stop_on_focus: bool, // Prevents dismissing of toast on hover
+    stop_on_focus: bool,
     #[serde(rename = "className")]
     class_name: &'static str,
     #[serde(rename = "style")]
-    style: Option<String>,
+    style: String,  // Changed to String instead of Option<String>
+    #[serde(rename = "backgroundColor")]
+    background_color: &'static str,
 }
 
 impl ToastifyOptions {
@@ -22,7 +24,6 @@ impl ToastifyOptions {
         toasts(&options).show_toast();
     }
 
-    // Add new methods for relay events
     pub fn new_relay_connected(relay_url: &str) -> Self {
         ToastifyOptions {
             text: format!("Connected to relay: {}", relay_url),
@@ -32,20 +33,22 @@ impl ToastifyOptions {
             position: "right",
             stop_on_focus: true,
             class_name: "relay-success-toast",
-            style: Some("background: linear-gradient(to right, #00b09b, #96c93d)".to_string()),
+            style: "background: linear-gradient(to right, #00b09b, #96c93d)".to_string(),
+            background_color: "#00b09b",
         }
     }
 
     pub fn new_relay_disconnected(relay_url: &str) -> Self {
         ToastifyOptions {
-            text: format!("Disconnected from relay: {}", relay_url),
-            duration: 4000,
+            text: format!("Disconnected from relay: {}. Please refresh the app.", relay_url),
+            duration: u32::MAX,
             close: true,
             gravity: "top",
             position: "right",
             stop_on_focus: true,
             class_name: "relay-error-toast",
-            style: Some("background: linear-gradient(to right, #ff5f6d, #ffc371)".to_string()),
+            style: "background: linear-gradient(to right, #ff5f6d, #ffc371)".to_string(),
+            background_color: "#ff5f6d",
         }
     }
 
@@ -58,7 +61,8 @@ impl ToastifyOptions {
             position: "right",
             stop_on_focus: true,
             class_name: "event-toast",
-            style: Some("background: linear-gradient(to right, #2193b0, #6dd5ed)".to_string()),
+            style: "background: linear-gradient(to right, #3b82f6, #60a5fa); border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);".to_string(),
+            background_color: "#3b82f6",
         }
     }
 
@@ -71,7 +75,8 @@ impl ToastifyOptions {
             position: "right",
             stop_on_focus: true,
             class_name: "relay-error-toast",
-            style: Some("background: linear-gradient(to right, #cb2d3e, #ef473a)".to_string()),
+            style: "background: linear-gradient(to right, #cb2d3e, #ef473a)".to_string(),
+            background_color: "#cb2d3e",
         }
     }
 
@@ -84,7 +89,8 @@ impl ToastifyOptions {
             position: "left",
             stop_on_focus: true,
             class_name: "success-toast",
-            style: Some("background: linear-gradient(to right, #00b09b, #96c93d)".to_string()),
+            style: "background: linear-gradient(to right, #00b09b, #96c93d)".to_string(),
+            background_color: "#00b09b",
         }
     }
 
@@ -97,7 +103,8 @@ impl ToastifyOptions {
             position: "left",
             stop_on_focus: true,
             class_name: "success-toast",
-            style: Some("background: linear-gradient(to right, #00b09b, #96c93d)".to_string()),
+            style: "background: linear-gradient(to right, #00b09b, #96c93d)".to_string(),
+            background_color: "#00b09b",
         }
     }
 
@@ -110,7 +117,8 @@ impl ToastifyOptions {
             position: "left",
             stop_on_focus: true,
             class_name: "failure-toast",
-            style: Some("background: linear-gradient(to right, #ff5f6d, #ffc371)".to_string()),
+            style: "background: linear-gradient(to right, #ff5f6d, #ffc371)".to_string(),
+            background_color: "#ff5f6d",
         }
     }
 }

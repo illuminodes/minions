@@ -121,8 +121,8 @@ impl Component for RelayProvider {
                 false
             }
             RelayAction::Event(event) => {
-                if let RelayEvents::EVENT(_, ref note) = event {
-                    // Add notification for new event
+                if let RelayEvents::EVENT(_, ref _note) = event {
+                    // Add notification for new event.
                     ToastifyOptions::new_event_received("note").show();
                 }
                 self.add_event(event);

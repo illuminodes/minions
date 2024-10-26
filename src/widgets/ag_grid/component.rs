@@ -1,5 +1,4 @@
 use super::{AgGrid, AgGridOptions, ColumnDefinition};
-use gloo::utils::document;
 use serde::Serialize;
 use web_sys::HtmlElement;
 use yew::prelude::*;

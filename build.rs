@@ -1,8 +1,6 @@
-use std::process::Command;
-
 fn main() {
-    // Step 1: Run Tailwind CSS command
-    // let tailwind_output = Command::new("tailwindcss")
+    // ENABLE THIS FOR HOT RELOADING OF CSS
+    // let tailwind_output = std::process::Command::new("tailwindcss")
     //     .arg("-i")
     //     .arg("./public/styles/input.css")
     //     .arg("-o")
@@ -16,4 +14,5 @@ fn main() {
     //     panic!("Tailwind CSS command failed");
     // }
 }
+
 

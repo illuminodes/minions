@@ -1,4 +1,4 @@
-use wasm_bindgen::JsValue;
+use wasm_bindgen::{JsCast, JsValue};
 
 use crate::browser_api::indexed_db::IdbStoreManager;
 
@@ -44,6 +44,17 @@ impl IdbStoreManager for UserRelay {
         JsValue::from_str(&self.url)
     }
     fn upgrade_db(event: web_sys::Event) -> Result<(), JsValue> {
+        if event.target().is_none() {
+            return Err(JsValue::from_str("Error upgrading database"));
+        };
+        let target = event.target().unwrap();
+        let db = target
+            .dyn_into::<web_sys::IdbOpenDbRequest>()?
+            .result()?
+            .dyn_into::<web_sys::IdbDatabase>()?;
+        let user_relay_params = web_sys::IdbObjectStoreParameters::new();
+        user_relay_params.set_key_path(&JsValue::from_str("url"));
+        db.create_object_store_with_optional_parameters("user_relays", &user_relay_params)?;
         Ok(())
     }
 }

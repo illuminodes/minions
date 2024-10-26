@@ -34,3 +34,4 @@ Due to Rust's compile times, this will not be instant.
 
 Bounties to help drive open contribution forward will be posted as issues on the repository.
 All rewards are paid in Bitcoin.
+

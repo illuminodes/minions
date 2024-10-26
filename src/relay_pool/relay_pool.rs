@@ -1,16 +1,27 @@
 use crate::widgets::toastify::ToastifyOptions;
-use std::{collections::HashSet, sync::Arc};
+use std::collections::HashMap;
 
 use async_channel::{unbounded, Sender};
 use nostro2::{
     notes::SignedNote,
-    relays::{NostrRelay, NostrSubscription, RelayEvents},
+    relays::{NostrSubscription, RelayEvents},
 };
+
+use wasm_bindgen::JsValue;
 use yew::platform::spawn_local;
 use yew::{prelude::*, props};
 
+use super::nostr_relay::UserRelay;
+
+#[derive(Clone, Debug, Properties, PartialEq)]
+pub struct RelayContextProps {
+    pub children: Children,
+    pub relays: Vec<UserRelay>,
+}
+
 pub enum RelayAction {
     Event(RelayEvents),
+    UniqueNote(SignedNote),
     SendNote(SignedNote),
     Subscribe(NostrSubscription),
     Unsubscribe(String),
@@ -20,27 +31,19 @@ pub enum RelayAction {
 #[derive(Properties, Clone, PartialEq)]
 pub struct NostrProps {
     pub relay_events: Vec<RelayEvents>,
-    pub notes: Vec<SignedNote>,
+    pub unique_notes: Vec<SignedNote>,
     pub send_note: Callback<SignedNote>,
     pub subscribe: Callback<NostrSubscription>,
     pub unsubscribe: Callback<String>,
     pub close: Callback<()>,
 }
-
-#[derive(Clone, Debug, Properties, PartialEq)]
-pub struct RelayContextProps {
-    pub children: Children,
-    pub user_relays: Vec<super::nostr_relay::UserRelay>,
-}
-
-pub struct RelayPool {
+pub struct RelayProvider {
     relay_events: Vec<RelayEvents>,
-    new_notes: Vec<SignedNote>,
-    unique_ids: HashSet<String>,
-    sender_channel: Vec<Sender<SignedNote>>,
-    filter_channel: Vec<Sender<NostrSubscription>>,
-    unsubscribe_channel: Vec<Sender<String>>,
-    close_channel: Vec<Sender<()>>,
+    unique_notes: Vec<SignedNote>,
+    sender_channel: Sender<SignedNote>,
+    filter_channel: Sender<NostrSubscription>,
+    unsubscribe_channel: Sender<String>,
+    close_channel: Sender<()>,
     send_note_callback: Callback<SignedNote>,
     subscribe_callback: Callback<NostrSubscription>,
     unsubscribe_callback: Callback<String>,
@@ -48,9 +51,10 @@ pub struct RelayPool {
     children: Children,
 }
 
-impl Component for RelayPool {
+impl Component for RelayProvider {
     type Message = RelayAction;
     type Properties = RelayContextProps;
+
     fn view(&self, _ctx: &Context<Self>) -> Html {
         let props = self.build_props();
         html! {
@@ -61,23 +65,26 @@ impl Component for RelayPool {
             </>
         }
     }
+
     fn create(ctx: &Context<Self>) -> Self {
-        let relays = ctx.props().user_relays.clone();
+        let relays = ctx.props().relays.clone();
         let (sender_channel, filter_channel, unsubscribe_channel, close_channel) =
-            Self::read_relay(ctx.link().callback(RelayAction::Event), relays);
+            Self::read_relays(
+                ctx.link().callback(RelayAction::Event),
+                ctx.link().callback(RelayAction::UniqueNote),
+                relays,
+            );
         let send_note_callback = ctx.link().callback(RelayAction::SendNote);
         let close_callback = ctx.link().callback(move |_| RelayAction::Close);
         let subscribe_callback = ctx.link().callback(RelayAction::Subscribe);
         let unsubscribe_callback = ctx.link().callback(RelayAction::Unsubscribe);
         let children = ctx.props().children.clone();
         let relay_events = Vec::new();
-        let new_notes = Vec::new();
-        let unique_ids = HashSet::new();
+        let unique_notes = Vec::new();
 
         Self {
             relay_events,
-            new_notes,
-            unique_ids,
+            unique_notes,
             sender_channel,
             close_channel,
             filter_channel,
@@ -92,148 +99,160 @@ impl Component for RelayPool {
 
     fn update(&mut self, _ctx: &Context<Self>, msg: Self::Message) -> bool {
         match msg {
-            RelayAction::SendNote(note) => {
-                self.send_nostr_note(note);
-                true
-            }
-            RelayAction::Subscribe(filter) => {
-                self.subscribe(filter);
-                true
-            }
+            RelayAction::SendNote(note) => match self.send_nostr_note(note) {
+                Ok(_) => true,
+                Err(e) => {
+                    gloo::console::error!("Error sending note: {:?}", e);
+                    false
+                }
+            },
+            RelayAction::Subscribe(filter) => match self.subscribe(filter) {
+                Ok(_) => true,
+                Err(e) => {
+                    gloo::console::error!("Error subscribing: {:?}", e);
+                    false
+                }
+            },
             RelayAction::Close => {
-                self.close_ws();
-                true
+                match self.close_ws() {
+                    Ok(_) => (),
+                    Err(e) => gloo::console::error!("Error closing websocket: {:?}", e),
+                }
+                false
             }
             RelayAction::Event(event) => {
                 if let RelayEvents::EVENT(_, ref note) = event {
-                    if !self.unique_ids.contains(note.get_id()) {
-                        self.unique_ids.insert(note.get_id().to_string());
-                        self.new_notes.push(note.clone());
-                        // Add notification for new event
-                        ToastifyOptions::new_event_received("note").show();
-                    }
+                    // Add notification for new event
+                    ToastifyOptions::new_event_received("note").show();
                 }
                 self.add_event(event);
                 true
             }
-            RelayAction::Unsubscribe(filter) => {
-                self.unsubscribe(filter);
+            RelayAction::UniqueNote(note) => {
+                self.add_unique_note(note);
                 true
             }
+            RelayAction::Unsubscribe(filter) => match self.unsubscribe(filter) {
+                Ok(_) => true,
+                Err(e) => {
+                    gloo::console::error!("Error unsubscribing: {:?}", e);
+                    false
+                }
+            },
         }
     }
+
     fn destroy(&mut self, _ctx: &Context<Self>) {
-        self.close_ws();
+        match self.close_ws() {
+            Ok(_) => (),
+            Err(e) => gloo::console::error!("Error closing websocket: {:?}", e),
+        }
     }
 }
 
-impl RelayPool {
-    fn read_relay(
-        note_cb: Callback<RelayEvents>,
-        relays: Vec<super::nostr_relay::UserRelay>,
+impl RelayProvider {
+    fn read_relays(
+        event_cb: Callback<RelayEvents>,
+        note_cb: Callback<SignedNote>,
+        relays: Vec<UserRelay>,
     ) -> (
-        Vec<Sender<SignedNote>>,
-        Vec<Sender<NostrSubscription>>,
-        Vec<Sender<String>>,
-        Vec<Sender<()>>,
+        Sender<SignedNote>,
+        Sender<NostrSubscription>,
+        Sender<String>,
+        Sender<()>,
     ) {
-        let mut send_note_channels = vec![];
-        let mut filter_channels = vec![];
-        let mut unsubscribe_channels = vec![];
-        let mut close_channels = vec![];
-
-        for relay in relays {
-            let relay_url = relay.url.clone(); // Original clone
-            let (send_note_tx, send_note_rx) = unbounded::<SignedNote>();
-            let (filter_tx, filter_rx) = unbounded::<NostrSubscription>();
-            let (unsubscribe_tx, unsubscribe_rx) = unbounded::<String>();
-            let (close_tx, close_rx) = unbounded::<()>();
-            send_note_channels.push(send_note_tx);
-            filter_channels.push(filter_tx);
-            unsubscribe_channels.push(unsubscribe_tx);
-            close_channels.push(close_tx);
-            let note_cb = note_cb.clone();
-
-            // Clone URLs for different async blocks
-            let reader_url = relay_url.clone();
-            let close_url = relay_url.clone();
+        let (send_note_tx, send_note_rx) = unbounded::<SignedNote>();
+        let (filter_tx, filter_rx) = unbounded::<NostrSubscription>();
+        let (unsubscribe_tx, unsubscribe_rx) = unbounded::<String>();
+        let (close_tx, close_rx) = unbounded::<()>();
+        
+        spawn_local(async move {
+            // Show initial connection attempt
+            ToastifyOptions::new_relay_connected("Connecting to relay pool").show();
             
-            spawn_local(async move {
-                let relay = NostrRelay::new(&relay_url).await;
-                if let Err(_) = relay {
-                    ToastifyOptions::new_relay_error(&format!("Failed to connect to relay: {}", relay_url))
+            let relay_pool = match nostro2::pool::RelayPool::new(
+                relays.iter().map(|relay| relay.url.clone()).collect(),
+            ).await {
+                Ok(pool) => {
+                    ToastifyOptions::new_relay_connected("Connected to relay pool").show();
+                    pool
+                },
+                Err(e) => {
+                    ToastifyOptions::new_relay_error(&format!("Failed to create relay pool: {}", e))
                         .show();
                     return;
-                };
-                
-                ToastifyOptions::new_relay_connected(&relay_url).show();
-                
-                let relay = relay.unwrap();
-                let relay_arc = Arc::new(relay);
-
-                let sender_relay = relay_arc.clone();
-                spawn_local(async move {
-                    while let Ok(note) = send_note_rx.recv().await {
-                        if let Err(e) = sender_relay.send_note(note).await {
-                            ToastifyOptions::new_relay_error(&format!("Error sending note: {}", e))
-                                .show();
-                            gloo::console::error!("Error sending note: ", format!("{:?}", e));
+                }
+            };
+    
+            let pooled_notes = relay_pool.pooled_notes();
+            let relay_events = relay_pool.all_events();
+            
+            loop {
+                tokio::select! {
+                    event = relay_events.recv() => {
+                        if let Ok(event) = event {
+                            event_cb.emit(event);
                         }
                     }
-                });
-
-                let filter_relay = relay_arc.clone();
-                spawn_local(async move {
-                    while let Ok(filter) = filter_rx.recv().await {
-                        if let Err(e) = filter_relay.subscribe(&filter).await {
-                            ToastifyOptions::new_relay_error(&format!("Error subscribing: {}", e))
-                                .show();
-                            gloo::console::error!("Error subscribing: ", format!("{:?}", e));
+                    note = pooled_notes.recv() => {
+                        if let Ok(event) = note {
+                            note_cb.emit(event);
+                            // Show notification for new note
+                            ToastifyOptions::new_event_received("note").show();
                         }
                     }
-                });
-
-                let unsubscribe_relay = relay_arc.clone();
-                spawn_local(async move {
-                    while let Ok(filter) = unsubscribe_rx.recv().await {
-                        if let Err(e) = unsubscribe_relay.unsubscribe(filter).await {
-                            ToastifyOptions::new_relay_error(&format!("Error unsubscribing: {}", e))
-                                .show();
-                            gloo::console::error!("Error unsubscribing: ", format!("{:?}", e));
+                    note = send_note_rx.recv() => {
+                        if let Ok(note) = note {
+                            if let Err(e) = relay_pool.broadcast_note(note).await {
+                                ToastifyOptions::new_relay_error(&format!("Error broadcasting note: {}", e))
+                                    .show();
+                            }
                         }
                     }
-                });
-
-                let reader_relay = relay_arc.clone();
-                spawn_local(async move {
-                    while let Ok(event) = reader_relay.relay_event_reader().recv().await {
-                        note_cb.emit(event);
+                    filter = filter_rx.recv() => {
+                        if let Ok(filter) = filter {
+                            if let Err(e) = relay_pool.subscribe(filter).await {
+                                ToastifyOptions::new_relay_error(&format!("Error subscribing: {}", e))
+                                    .show();
+                            }
+                        }
                     }
-                    ToastifyOptions::new_relay_disconnected(&reader_url).show();
-                });
-
-                let close_relay = relay_arc.clone();
-                spawn_local(async move {
-                    while let Ok(_) = close_rx.recv().await {
-                        close_relay.close().await;
-                        ToastifyOptions::new_relay_disconnected(&close_url).show();
+                    unsubscribe = unsubscribe_rx.recv() => {
+                        if let Ok(filter) = unsubscribe {
+                            if let Err(e) = relay_pool.cancel_subscription(filter).await {
+                                ToastifyOptions::new_relay_error(&format!("Error unsubscribing: {}", e))
+                                    .show();
+                            }
+                        }
                     }
-                });
-            });
-        }
-
-        (
-            send_note_channels,
-            filter_channels,
-            unsubscribe_channels,
-            close_channels,
-        )
+                    _ = close_rx.recv() => {
+                        ToastifyOptions::new_relay_disconnected("Disconnecting from relay pool").show();
+                        let _ = relay_pool.close().await;
+                        break;
+                    }
+                }
+            }
+            relay_pool.close().await.unwrap();
+        });
+        
+        (send_note_tx, filter_tx, unsubscribe_tx, close_tx)
     }
 
     pub fn build_props(&self) -> NostrProps {
+        let _unique_notes = self
+            .relay_events
+            .iter()
+            .filter_map(|event| match event {
+                RelayEvents::EVENT(_, note) => Some(note.clone()),
+                _ => None,
+            })
+            .fold(HashMap::new(), |mut acc, note| {
+                acc.insert(note.get_id().to_string(), note);
+                acc
+            });
         props!(NostrProps {
             relay_events: self.relay_events.clone(),
-            notes: self.new_notes.clone(),
+            unique_notes: self.unique_notes.clone(),
             send_note: self.send_note_callback.clone(),
             subscribe: self.subscribe_callback.clone(),
             unsubscribe: self.unsubscribe_callback.clone(),
@@ -241,39 +260,42 @@ impl RelayPool {
         })
     }
 
-    fn send_nostr_note(&self, signed_note: SignedNote) {
-        self.sender_channel.iter().for_each(|channel| {
-            if let Err(e) = channel.try_send(signed_note.clone()) {
-                gloo::console::error!("Error sending note: ", format!("{:?}", e));
-            }
-        });
+    fn send_nostr_note(&self, signed_note: SignedNote) -> Result<(), JsValue> {
+        let _ = self
+            .sender_channel
+            .try_send(signed_note)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(())
     }
 
-    fn subscribe(&self, filter: NostrSubscription) {
-        self.filter_channel.iter().for_each(|channel| {
-            if let Err(e) = channel.try_send(filter.clone()) {
-                gloo::console::error!("Error sending filter: ", format!("{:?}", e));
-            }
-        });
+    fn subscribe(&self, filter: NostrSubscription) -> Result<(), JsValue> {
+        let _ = self
+            .filter_channel
+            .try_send(filter)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(())
     }
 
-    fn unsubscribe(&self, filter: String) {
-        self.unsubscribe_channel.iter().for_each(|channel| {
-            if let Err(e) = channel.try_send(filter.clone()) {
-                gloo::console::error!("Error sending unsubscribe: ", format!("{:?}", e));
-            }
-        });
+    fn unsubscribe(&self, filter: String) -> Result<(), JsValue> {
+        let _ = self
+            .unsubscribe_channel
+            .try_send(filter)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(())
     }
 
     fn add_event(&mut self, event: RelayEvents) {
         self.relay_events.push(event);
     }
+    fn add_unique_note(&mut self, note: SignedNote) {
+        self.unique_notes.push(note);
+    }
 
-    fn close_ws(&self) {
-        self.close_channel.iter().for_each(|channel| {
-            if let Err(e) = channel.try_send(()) {
-                gloo::console::error!("Error closing WS", format!("{:?}", e));
-            }
-        });
+    fn close_ws(&self) -> Result<(), JsValue> {
+        let _ = self
+            .close_channel
+            .try_send(())
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+        Ok(())
     }
 }

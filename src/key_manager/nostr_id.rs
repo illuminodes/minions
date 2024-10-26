@@ -1,9 +1,11 @@
 use nostro2::userkeys::UserKeys;
-use wasm_bindgen::JsValue;
+use wasm_bindgen::{JsCast, JsValue};
 use web_sys::CryptoKey;
 
-use crate::browser_api::{crypto::{crypto_to_user_keys, user_keys_to_crypto}, indexed_db::IdbStoreManager};
-
+use crate::browser_api::{
+    crypto::{crypto_to_user_keys, user_keys_to_crypto},
+    indexed_db::IdbStoreManager,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UserIdentity {
@@ -66,8 +68,16 @@ impl IdbStoreManager for UserIdentity {
     fn document_key(&self) -> JsValue {
         JsValue::from_str(&self.id)
     }
-    fn upgrade_db(_event: web_sys::Event) -> Result<(), JsValue> {
+    fn upgrade_db(event: web_sys::Event) -> Result<(), JsValue> {
+        if event.target().is_none() {
+            return Err(JsValue::from_str("Error upgrading database"));
+        };
+        let target = event.target().unwrap();
+        let db = target
+            .dyn_into::<web_sys::IdbOpenDbRequest>()?
+            .result()?
+            .dyn_into::<web_sys::IdbDatabase>()?;
+        let _ = db.create_object_store("user_identity")?;
         Ok(())
     }
 }
-

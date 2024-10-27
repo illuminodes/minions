@@ -11,8 +11,8 @@ extern "C" {
     pub type AgGrid;
     #[wasm_bindgen(static_method_of = AgGrid, js_name = createGrid, js_class = "agGrid")]
     pub fn create_grid(grid_element: &Element, options: JsValue) -> AgGrid;
-    #[wasm_bindgen(method, js_name = setGridOption)]
-    pub fn set_grid_options(this: &AgGrid, option: &str, value: JsValue);
+    #[wasm_bindgen(method, js_name = "setGridOption")]
+    pub fn set_grid_option(this: &AgGrid, option: &str, value: JsValue);
     #[wasm_bindgen(method, js_name = refreshCells)]
     pub fn refresh_cells(this: &AgGrid);
     #[wasm_bindgen(method, js_name = sizeColumnsToFit)]
@@ -125,7 +125,6 @@ where
     }
 }
 
-// Helper to create column definitions
 pub fn create_column(field: &str, header: &str) -> ColumnDefinition {
     ColumnDefinition {
         field: field.to_string(),

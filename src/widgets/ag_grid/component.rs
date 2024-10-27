@@ -2,6 +2,7 @@ use super::{AgGrid, AgGridOptions, ColumnDefinition};
 use serde::Serialize;
 use web_sys::HtmlElement;
 use yew::prelude::*;
+use gloo::console; 
 
 #[derive(Properties, Clone, PartialEq)]
 pub struct AgGridProps<T>
@@ -66,25 +67,18 @@ where
     {
         let grid = grid.clone();
         let data = props.data.clone();
-        let columns = props.columns.clone();
-        let pagination = props.pagination;
-        let page_size = props.page_size;
-        let auto_size = props.auto_size;
-
         use_effect_with(
-            (data.clone(), columns.clone()),
+            data.clone(),
             move |_| {
                 if let Some(grid) = (*grid).clone() {
-                    let options = AgGridOptions::new(data)
-                        .with_columns(columns)
-                        .with_pagination(pagination, Some(page_size))
-                        .with_row_selection("single");
-                    
-                    grid.set_grid_options("rowData", options.into());
-                    grid.refresh_cells();
-                    
-                    if auto_size {
-                        grid.size_columns_to_fit();
+                    match serde_wasm_bindgen::to_value(&data) {
+                        Ok(data_js) => {
+                            grid.set_grid_option("rowData", data_js);
+                            grid.refresh_cells();
+                        },
+                        Err(e) => {
+                            console::error!("Failed to serialize grid data:", e.to_string());
+                        }
                     }
                 }
                 || ()

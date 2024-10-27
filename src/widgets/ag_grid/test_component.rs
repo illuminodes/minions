@@ -28,20 +28,31 @@ impl From<&SignedNote> for NostrNoteRow {
 #[function_component(NostrNotesGrid)]
 pub fn nostr_notes_grid() -> Html {
     let relay_ctx = use_context::<NostrProps>().expect("No relay context found");
-    
-    // Convert notes to row data
-    let rows: Vec<NostrNoteRow> = relay_ctx
-        .unique_notes
-        .iter()
-        .filter(|note| note.get_kind() == 1) // Only kind 1 events
-        .map(NostrNoteRow::from)
-        .collect();
+    let rows = use_state(Vec::new);
+    {
+        let rows = rows.clone();
+        let notes = relay_ctx.unique_notes.clone();
 
-    // Define columns
+        use_effect_with(
+            notes,
+            move |notes| {
+                // Convert notes to row data
+                let new_rows: Vec<NostrNoteRow> = notes
+                    .iter()
+                    .filter(|note| note.get_kind() == 1)
+                    .map(NostrNoteRow::from)
+                    .collect();
+                
+                rows.set(new_rows);
+                || ()
+            }
+        );
+    }
+
     let columns = vec![
         {
             let mut col = create_column("content", "Content");
-            col.width = Some(400);  // Use width instead of flex
+            col.width = Some(400);
             col
         },
         create_column("pubkey", "Author"),
@@ -52,7 +63,7 @@ pub fn nostr_notes_grid() -> Html {
         <div class="w-full h-full">
             <h2 class="text-xl mb-4">{"Nostr Text Notes (Kind 1)"}</h2>
             <AgGridComponent<NostrNoteRow>
-                data={rows}
+                data={(*rows).clone()}
                 columns={columns}
                 class={classes!("h-[500px]")}
             />

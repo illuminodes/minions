@@ -16,6 +16,7 @@ fn app() -> Html {
             <div class="flex flex-col h-full flex-1 gap-4 p-4 text-center items-center justify-center">
                 <h1 class="text-2xl font-bold">{"Minions App Showcase"}</h1>
                 <RelayPoolTest />
+                // Can add other components here.
             </div>
         </AppContextProviders>
     }

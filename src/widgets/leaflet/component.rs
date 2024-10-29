@@ -5,6 +5,7 @@ use crate::browser_api::geolocation::{GeolocationPosition, GeolocationCoordinate
 use crate::relay_pool::relay_pool::NostrProps;
 use super::leaflet::{L, LeafletMap, Marker};
 use super::nominatim::NominatimLookup;
+use crate::widgets::leaflet::LatLng;
 
 #[derive(Properties, PartialEq)]
 pub struct Props {
@@ -87,12 +88,31 @@ pub fn leaflet_component(props: &Props) -> Html {
     // Handle incoming Nostr events
     {
         let marker = marker.clone();
+        let location_name = location_name.clone(); // Clone here to move into closure
         use_effect_with(relay_ctx.unique_notes.clone(), move |notes| {
             if let Some(note) = notes.last() {
                 if note.get_kind() == 27235 {
+                    web_sys::console::log_1(&"Received location update".into());
                     if let Ok(coords) = serde_json::from_str::<GeolocationCoordinates>(&note.get_content()) {
                         if let Some(marker_ref) = &*marker {
-                            let _ = marker_ref.set_lat_lng(&coords.into());
+                            web_sys::console::log_1(&"Updating marker position".into());
+                            let lat_lng: LatLng = (&coords).into();
+                            if let Ok(js_coords) = lat_lng.try_into() {
+                                marker_ref.set_lat_lng(&js_coords);
+                                
+                                // Also update the map view to show the new location
+                                if let Some(map_ref) = &*map {
+                                    map_ref.set_view(&js_coords, 13);
+                                }
+                                
+                                // Update location name
+                                let location_name = location_name.clone(); // Clone here to move into async block
+                                spawn_local(async move {
+                                    if let Ok(location) = NominatimLookup::reverse(coords).await {
+                                        location_name.set(location.display_name().to_string());
+                                    }
+                                });
+                            }
                         }
                     }
                 }
@@ -114,7 +134,6 @@ pub fn leaflet_component(props: &Props) -> Html {
             }
         });
     }
-
 
     html! {
         <div class="flex flex-col gap-4 w-full">

@@ -4,6 +4,7 @@ use crate::browser_api::geolocation::GeolocationCoordinates;
 use crate::relay_pool::relay_pool::NostrProps;
 use crate::widgets::leaflet::LeafletMap;
 use crate::widgets::leaflet::LeafletLocateOptions;
+use web_sys::MouseEvent;
 
 #[function_component(LeafletTest)]
 pub fn leaflet_test() -> Html {
@@ -31,7 +32,7 @@ pub fn leaflet_test() -> Html {
             );
             let signed_note = new_keys.sign_nostr_event(new_note);
             note_sender.emit(signed_note);
-            crate::widgets::toastify::ToastifyOptions::new_event_received("Test location sent").show();
+            crate::widgets::toastify::ToastifyOptions::new_event_received("Moving marker to test location...").show();
         })
     };
 
@@ -58,7 +59,7 @@ pub fn leaflet_test() -> Html {
     // Geolocation
     let start_locate = {
         let map = map.clone();
-        Callback::from(move |_| {
+        Callback::from(move |_: MouseEvent| {
             if let Some(map_ref) = &*map {
                 let options = LeafletLocateOptions {
                     watch: true,
@@ -76,9 +77,9 @@ pub fn leaflet_test() -> Html {
 
     let stop_locate = {
         let map = map.clone();
-        Callback::from(move |_| {
+        Callback::from(move |_: MouseEvent| {
             if let Some(map_ref) = &*map {
-                map_ref.stop_location_watch();
+                map_ref.stop_locate();
                 crate::widgets::toastify::ToastifyOptions::new_event_received("Stopped location tracking").show();
             }
         })

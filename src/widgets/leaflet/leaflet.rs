@@ -1,4 +1,4 @@
-use js_sys::{Function, Object};
+use js_sys::{Function};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::{convert::FromWasmAbi, prelude::*};
 
@@ -32,6 +32,74 @@ impl From<GeolocationCoordinates> for LatLng {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LeafletMapOptions {
+    pub zoom: u8,
+    #[serde(rename = "zoomControl")]
+    pub zoom_control: bool,
+    #[serde(rename = "scrollWheelZoom")]
+    pub scroll_wheel_zoom: bool,
+    #[serde(rename = "doubleClickZoom")]
+    pub double_click_zoom: bool,
+    #[serde(rename = "dragging")]
+    pub dragging: bool,
+    pub center: Option<LatLng>,
+    #[serde(rename = "minZoom")]
+    pub min_zoom: Option<u8>,
+    #[serde(rename = "maxZoom")]
+    pub max_zoom: Option<u8>,
+}
+
+impl Default for LeafletMapOptions {
+    fn default() -> Self {
+        Self {
+            zoom: 13,
+            zoom_control: true,
+            scroll_wheel_zoom: true,
+            double_click_zoom: true,
+            dragging: true,
+            center: None,
+            min_zoom: None,
+            max_zoom: None,
+        }
+    }
+}
+
+impl TryInto<JsValue> for LeafletMapOptions {
+    type Error = JsValue;
+    fn try_into(self) -> Result<JsValue, Self::Error> {
+        Ok(serde_wasm_bindgen::to_value(&self)?)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TileLayerOptions {
+    pub attribution: String,
+    #[serde(rename = "maxZoom")]
+    pub max_zoom: Option<u8>,
+    #[serde(rename = "minZoom")]
+    pub min_zoom: Option<u8>,
+    pub opacity: f64,
+}
+
+impl Default for TileLayerOptions {
+    fn default() -> Self {
+        Self {
+            attribution: "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors".to_string(),
+            max_zoom: Some(19),
+            min_zoom: None,
+            opacity: 1.0,
+        }
+    }
+}
+
+impl TryInto<JsValue> for TileLayerOptions {
+    type Error = JsValue;
+    fn try_into(self) -> Result<JsValue, Self::Error> {
+        Ok(serde_wasm_bindgen::to_value(&self)?)
+    }
+}
+
 #[wasm_bindgen]
 extern "C" {
     pub type L;
@@ -41,18 +109,22 @@ extern "C" {
     pub fn tile_layer(url: &str, options: JsValue) -> TileLayer;
     #[wasm_bindgen(static_method_of = L, js_name = marker)]
     pub fn marker(coords: &JsValue, options: JsValue) -> NewMarker;
+    #[wasm_bindgen(static_method_of = L, js_name = "map")]
+    pub fn map_with_options(id: &str, options: JsValue) -> LeafletMap;
 }
 impl L {
     pub fn render_map(id: &str, coords: &GeolocationCoordinates) -> Result<LeafletMap, JsValue> {
         let lat_lng: LatLng = coords.into();
-        let new_coords: JsValue = lat_lng.try_into()?;
-        let map = L::map(id);
-        map.get("doubleClickZoom").disable();
-        map.set_view(&new_coords, 13);
-        let map_options: JsValue = Object::new().into();
+        let mut map_options = LeafletMapOptions::default();
+        map_options.center = Some(lat_lng.clone());
+        let js_options: JsValue = map_options.try_into()?;
+        let map = L::map_with_options(id, js_options);
+        let tile_options = TileLayerOptions::default();
+        let js_tile_options: JsValue = tile_options.try_into()?;
+        
         L::tile_layer(
             "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-            map_options,
+            js_tile_options,
         )
         .addTo(&map);
         Ok(map)
@@ -180,6 +252,14 @@ impl LeafletMap {
     }
 
     pub fn stop_location_watch(&self) {self.stop_locate();}
+    pub fn setup_location_tracking(&self, marker: &Marker) {
+        let marker = marker.clone();
+        self.add_closure("locationfound", move |event: JsValue| {
+            if let Ok(lat_lng) = serde_wasm_bindgen::from_value::<LatLng>(event) {
+                let _ = marker.set_lat_lng(&lat_lng.try_into().unwrap());
+            }
+        });
+    }
 }
 #[wasm_bindgen]
 extern "C" {
@@ -198,15 +278,27 @@ extern "C" {
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LeafletMarkerOptions {
-    draggable: bool,
+    pub draggable: bool,
     #[serde(rename = "autoPan")]
-    auto_pan: bool,
+    pub auto_pan: bool,
+    #[serde(rename = "title")]
+    pub title: Option<String>,
+    #[serde(rename = "alt")]
+    pub alt: Option<String>,
+    #[serde(rename = "opacity")]
+    pub opacity: f64,
+    #[serde(rename = "riseOnHover")]
+    pub rise_on_hover: bool,
 }
 impl Default for LeafletMarkerOptions {
     fn default() -> Self {
         Self {
             draggable: false,
             auto_pan: true,
+            title: None,
+            alt: None,
+            opacity: 1.0,
+            rise_on_hover: true,
         }
     }
 }

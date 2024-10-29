@@ -6,8 +6,13 @@ use crate::relay_pool::relay_pool::NostrProps;
 use super::leaflet::{L, LeafletMap, Marker};
 use super::nominatim::NominatimLookup;
 
+#[derive(Properties, PartialEq)]
+pub struct Props {
+    pub on_map_created: Callback<LeafletMap>,
+}
+
 #[function_component(LeafletComponent)]
-pub fn leaflet_component() -> Html {
+pub fn leaflet_component(props: &Props) -> Html {
     let map_id = "leaflet-map";
     let map = use_state(|| None::<LeafletMap>);
     let marker = use_state(|| None::<Marker>);
@@ -33,11 +38,12 @@ pub fn leaflet_component() -> Html {
         });
     }
 
-    // Initial map setup
+    // Initial map setup with props
     {
         let map = map.clone();
         let marker = marker.clone();
         let location_name = location_name.clone();
+        let on_map_created = props.on_map_created.clone();
 
         use_effect_with((), move |_| {
             spawn_local(async move {
@@ -47,26 +53,31 @@ pub fn leaflet_component() -> Html {
                     web_sys::console::log_1(&format!("Got coordinates: {}, {}", coords.latitude, coords.longitude).into());
                     
                     if let Ok(map_instance) = L::render_map(map_id, &coords) {
-                        map.set(Some(map_instance));
+                        // Set map state and emit to parent
+                        map.set(Some(map_instance.clone()));
+                        on_map_created.emit(map_instance.clone());
                         web_sys::console::log_1(&"Map created".into());
 
-                        if let Some(map_ref) = &*map {
-                            web_sys::console::log_1(&"Adding marker...".into());
-                            match map_ref.add_leaflet_marker(&coords) {
-                                Ok(marker_instance) => {
-                                    marker.set(Some(marker_instance));
-                                    web_sys::console::log_1(&"Marker added successfully".into());
-                                }
-                                Err(e) => {
-                                    web_sys::console::error_1(&format!("Error adding marker: {:?}", e).into());
-                                }
+                        // Add marker
+                        web_sys::console::log_1(&"Adding marker...".into());
+                        match map_instance.add_leaflet_marker(&coords) {
+                            Ok(marker_instance) => {
+                                marker.set(Some(marker_instance));
+                                web_sys::console::log_1(&"Marker added successfully".into());
+                            }
+                            Err(e) => {
+                                web_sys::console::error_1(&format!("Error adding marker: {:?}", e).into());
                             }
                         }
 
                         if let Ok(location) = NominatimLookup::reverse(coords).await {
                             location_name.set(location.display_name().to_string());
                         }
+                    } else {
+                        web_sys::console::error_1(&"Failed to create map".into());
                     }
+                } else {
+                    web_sys::console::error_1(&"Failed to get location".into());
                 }
             });
             || ()

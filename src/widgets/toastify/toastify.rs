@@ -13,9 +13,12 @@ pub struct ToastifyOptions {
     #[serde(rename = "className")]
     class_name: &'static str,
     #[serde(rename = "style")]
-    style: String,  // Changed to String instead of Option<String>
-    #[serde(rename = "backgroundColor")]
-    background_color: &'static str,
+    style: ToastifyStyle,  // Changed to use a dedicated style struct
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ToastifyStyle {
+    background: String,
 }
 
 impl ToastifyOptions {
@@ -33,8 +36,9 @@ impl ToastifyOptions {
             position: "right",
             stop_on_focus: true,
             class_name: "relay-success-toast",
-            style: "background: linear-gradient(to right, #00b09b, #96c93d)".to_string(),
-            background_color: "#00b09b",
+            style: ToastifyStyle {
+                background: "linear-gradient(to right, #00b09b, #96c93d)".to_string(),
+            },
         }
     }
 
@@ -47,8 +51,9 @@ impl ToastifyOptions {
             position: "right",
             stop_on_focus: true,
             class_name: "relay-error-toast",
-            style: "background: linear-gradient(to right, #ff5f6d, #ffc371)".to_string(),
-            background_color: "#ff5f6d",
+            style: ToastifyStyle {
+                background: "linear-gradient(to right, #ff5f6d, #ffc371)".to_string(),
+            },
         }
     }
 
@@ -61,8 +66,9 @@ impl ToastifyOptions {
             position: "right",
             stop_on_focus: true,
             class_name: "event-toast",
-            style: "background: linear-gradient(to right, #3b82f6, #60a5fa); border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);".to_string(),
-            background_color: "#3b82f6",
+            style: ToastifyStyle {
+                background: "linear-gradient(to right, #3b82f6, #60a5fa); border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15)".to_string(),
+            },
         }
     }
 
@@ -75,8 +81,9 @@ impl ToastifyOptions {
             position: "right",
             stop_on_focus: true,
             class_name: "relay-error-toast",
-            style: "background: linear-gradient(to right, #cb2d3e, #ef473a)".to_string(),
-            background_color: "#cb2d3e",
+            style: ToastifyStyle {
+                background: "linear-gradient(to right, #cb2d3e, #ef473a)".to_string(),
+            },
         }
     }
 
@@ -89,8 +96,9 @@ impl ToastifyOptions {
             position: "left",
             stop_on_focus: true,
             class_name: "success-toast",
-            style: "background: linear-gradient(to right, #00b09b, #96c93d)".to_string(),
-            background_color: "#00b09b",
+            style: ToastifyStyle {
+                background: "linear-gradient(to right, #00b09b, #96c93d)".to_string(),
+            },
         }
     }
 
@@ -103,8 +111,9 @@ impl ToastifyOptions {
             position: "left",
             stop_on_focus: true,
             class_name: "success-toast",
-            style: "background: linear-gradient(to right, #00b09b, #96c93d)".to_string(),
-            background_color: "#00b09b",
+            style: ToastifyStyle {
+                background: "linear-gradient(to right, #00b09b, #96c93d)".to_string(),
+            },
         }
     }
 
@@ -117,8 +126,9 @@ impl ToastifyOptions {
             position: "left",
             stop_on_focus: true,
             class_name: "failure-toast",
-            style: "background: linear-gradient(to right, #ff5f6d, #ffc371)".to_string(),
-            background_color: "#ff5f6d",
+            style: ToastifyStyle {
+                background: "linear-gradient(to right, #ff5f6d, #ffc371)".to_string(),
+            },
         }
     }
 }

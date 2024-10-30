@@ -5,6 +5,7 @@ use crate::widgets::leaflet::{LeafletMap, LeafletLocateOptions, LatLng};
 use super::component::LeafletComponent;
 use web_sys::MouseEvent;
 use wasm_bindgen::{JsValue};
+use crate::widgets::leaflet::IconOptions;
 use js_sys;
 
 #[function_component(LeafletTest)]
@@ -20,17 +21,15 @@ pub fn leaflet_test() -> Html {
         let map = map.clone();
         
         Callback::from(move |_| {
-            // Array of test locations (you can add more)
+            // Array of test locations
             let test_locations = vec![
-                // Original test location
-                (28.4089, 76.9699, "Gurugram"),
-                // Additional test locations
-                (28.6139, 77.2090, "Delhi"),
-                (28.7041, 77.1025, "New Delhi"),
-                (28.4595, 77.0266, "Gurugram Downtown")
+                (28.4089, 76.9699, "Gurugram", "red"),
+                (28.6139, 77.2090, "Delhi", "green"),
+                (28.7041, 77.1025, "New Delhi", "gold"),
+                (28.4595, 77.0266, "Gurugram Downtown", "violet")
             ];
     
-            for (lat, lng, location_name) in test_locations {
+            for (lat, lng, location_name, color) in test_locations {
                 let coords = GeolocationCoordinates {
                     latitude: lat,
                     longitude: lng,
@@ -41,26 +40,31 @@ pub fn leaflet_test() -> Html {
                 };
                 
                 if let Some(map_instance) = &*map {
+                    let icon_options = IconOptions {
+                        icon_url: format!("https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-{}.png", color),
+                        icon_size: Some(vec![25, 41]),
+                        icon_anchor: Some(vec![12, 41]),
+                    };
+    
+                    // Only add marker once, with custom icon
+                    if let Ok(_marker) = map_instance.add_marker_with_icon(&coords, icon_options) {
+                        let mut new_markers = (*markers).clone();
+                        new_markers.push((coords.latitude, coords.longitude));
+                        markers.set(new_markers);
+                        
+                        web_sys::console::log_1(&format!("Added {} marker for {}", color, location_name).into());
+                    }
+    
+                    // Update view for the last location
                     let lat_lng = LatLng {
                         lat: coords.latitude,
                         lng: coords.longitude,
                     };
-                    
+    
                     if let Ok(js_coords) = lat_lng.try_into() {
-                        // Update map view to see all markers (using the last location)
-                        map_instance.set_view(&js_coords, 10); // Zoom level 10 to see multiple markers
-                        
-                        // Add a new marker
-                        if let Ok(_) = map_instance.add_leaflet_marker(&coords) {
-                            web_sys::console::log_1(&format!("Added marker for {}", location_name).into());
-                        }
+                        map_instance.set_view(&js_coords, 10);
                     }
                 }
-                
-                // Update markers state
-                let mut new_markers = (*markers).clone();
-                new_markers.push((coords.latitude, coords.longitude));
-                markers.set(new_markers);
                 
                 // Send Nostr event
                 let content = serde_json::to_string(&coords).unwrap();
@@ -72,13 +76,11 @@ pub fn leaflet_test() -> Html {
                 );
                 let signed_note = new_keys.sign_nostr_event(new_note);
                 note_sender.emit(signed_note);
-                
-                web_sys::console::log_1(&format!("Added location: {} ({}, {})", 
-                    location_name, coords.latitude, coords.longitude).into());
             }
             
-            crate::widgets::toastify::ToastifyOptions::new_event_received("Added multiple test locations...").show();
+            crate::widgets::toastify::ToastifyOptions::new_event_received("Added multiple colored markers...").show();
         })
+    
     };
 
     let zoom_in = {

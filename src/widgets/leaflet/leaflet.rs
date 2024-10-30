@@ -210,6 +210,15 @@ impl TryInto<JsValue> for LeafletLocateOptions {
     }
 }
 
+#[wasm_bindgen]
+extern "C" {
+    #[derive(Clone)]
+    pub type Icon;
+
+    #[wasm_bindgen(static_method_of = L, js_name = "icon")]
+    pub fn create_icon(options: &JsValue) -> Icon;
+}
+
 impl LeafletMap {
     pub fn add_leaflet_marker(&self, coords: &GeolocationCoordinates) -> Result<Marker, JsValue> {
         let lat_lng: LatLng = coords.into();
@@ -281,7 +290,52 @@ impl LeafletMap {
         web_sys::console::log_1(&"Stopping location tracking...".into());
         self.stop_locate();
     }
+    pub fn add_marker_with_icon(&self, coords: &GeolocationCoordinates, icon_options: IconOptions) -> Result<Marker, JsValue> {
+        let lat_lng: LatLng = coords.into();
+        let new_coords: JsValue = lat_lng.try_into()?;
+        
+        // Create icon
+        let icon_js = icon_options.try_into()?;
+        let icon = L::create_icon(&icon_js);
+        
+        // Create marker options
+        let marker_options = LeafletMarkerOptions::default();
+        let mut marker_options_obj = js_sys::Object::new();
+        js_sys::Reflect::set(&marker_options_obj, &"icon".into(), &icon)?;
+        
+        let marker = L::marker(&new_coords, marker_options_obj.into()).addTo(self);
+        Ok(marker)
+    }
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct IconOptions {
+    #[serde(rename = "iconUrl")]
+    pub icon_url: String,
+    #[serde(rename = "iconSize")]
+    pub icon_size: Option<Vec<i32>>,  // [width, height]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "iconAnchor")]
+    pub icon_anchor: Option<Vec<i32>>, // [x, y]
+}
+
+impl Default for IconOptions {
+    fn default() -> Self {
+        Self {
+            icon_url: "/default-marker.png".to_string(),
+            icon_size: Some(vec![25, 41]),    // Default Leaflet marker size
+            icon_anchor: Some(vec![12, 41]),  // Default Leaflet marker anchor
+        }
+    }
+}
+
+impl TryInto<JsValue> for IconOptions {
+    type Error = JsValue;
+    fn try_into(self) -> Result<JsValue, Self::Error> {
+        Ok(serde_wasm_bindgen::to_value(&self)?)
+    }
+}
+
 #[wasm_bindgen]
 extern "C" {
     pub type NewMarker;
@@ -297,7 +351,7 @@ extern "C" {
     #[wasm_bindgen(method)]
     pub fn remove(this: &Marker);
 }
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct LeafletMarkerOptions {
     pub draggable: bool,
     #[serde(rename = "autoPan")]
@@ -310,6 +364,7 @@ pub struct LeafletMarkerOptions {
     pub opacity: f64,
     #[serde(rename = "riseOnHover")]
     pub rise_on_hover: bool,
+
 }
 impl Default for LeafletMarkerOptions {
     fn default() -> Self {

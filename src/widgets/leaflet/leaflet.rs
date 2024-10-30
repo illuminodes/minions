@@ -1,8 +1,8 @@
 use js_sys::{Function};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::{convert::FromWasmAbi, prelude::*};
+use crate::browser_api::geolocation::{GeolocationPosition, GeolocationCoordinates};
 
-use crate::browser_api::geolocation::GeolocationCoordinates;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LatLng {
@@ -240,25 +240,46 @@ impl LeafletMap {
             pane => Some(pane),
         }
     }
+
+    pub fn setup_location_tracking(&self, marker: &Marker) {
+        let marker = marker.clone();
+        self.add_closure("locationfound", move |event: JsValue| {
+            web_sys::console::log_1(&"Location found event received".into());
+            
+            // Try to convert JsValue to our GeolocationPosition
+            if let Ok(position) = GeolocationPosition::try_from(event) {
+                let geo_coords = position.coords;
+                let lat_lng = LatLng {
+                    lat: geo_coords.latitude,
+                    lng: geo_coords.longitude,
+                };
+                
+                if let Ok(js_coords) = lat_lng.try_into() {
+                    marker.set_lat_lng(&js_coords);
+                }
+            }
+        });
+    }
+
     pub fn start_locate(&self, options: Option<LeafletLocateOptions>) {
+        web_sys::console::log_1(&"Starting location tracking...".into());
         match options {
             Some(opts) => {
                 if let Ok(js_opts) = opts.try_into() {
                     self.locate_with_options(js_opts);
+                    web_sys::console::log_1(&"Location tracking started with options".into());
                 }
             }
-            None => self.locate(),
+            None => {
+                self.locate();
+                web_sys::console::log_1(&"Location tracking started without options".into());
+            }
         }
     }
 
-    pub fn stop_location_watch(&self) {self.stop_locate();}
-    pub fn setup_location_tracking(&self, marker: &Marker) {
-        let marker = marker.clone();
-        self.add_closure("locationfound", move |event: JsValue| {
-            if let Ok(lat_lng) = serde_wasm_bindgen::from_value::<LatLng>(event) {
-                let _ = marker.set_lat_lng(&lat_lng.try_into().unwrap());
-            }
-        });
+    pub fn stop_location_watch(&self) {
+        web_sys::console::log_1(&"Stopping location tracking...".into());
+        self.stop_locate();
     }
 }
 #[wasm_bindgen]

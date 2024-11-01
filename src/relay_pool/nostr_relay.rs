@@ -1,6 +1,6 @@
-use wasm_bindgen::{JsCast, JsValue};
+use wasm_bindgen::JsValue;
 
-use crate::browser_api::indexed_db::IdbStoreManager;
+use crate::browser_api::IdbStoreManager;
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct UserRelay {
@@ -8,53 +8,54 @@ pub struct UserRelay {
     pub read: bool,
     pub write: bool,
 }
-impl UserRelay {
-    pub async fn get_local_relays() -> Result<Vec<Self>, JsValue>
-    where
-        Self: IdbStoreManager,
-    {
-        Self::retrieve_all_from_store::<Self>()?
-            .await
-            .map_err(|e| JsValue::from_str(&e.to_string()))
-    }
-}
 impl TryFrom<JsValue> for UserRelay {
     type Error = JsValue;
     fn try_from(value: JsValue) -> Result<Self, Self::Error> {
         Ok(serde_wasm_bindgen::from_value(value)?)
     }
 }
-impl TryInto<JsValue> for UserRelay {
-    type Error = JsValue;
-    fn try_into(self) -> Result<JsValue, Self::Error> {
-        Ok(serde_wasm_bindgen::to_value(&self)?)
+impl Into<JsValue> for UserRelay {
+    fn into(self) -> JsValue {
+        serde_wasm_bindgen::to_value(&self).unwrap()
     }
 }
 impl IdbStoreManager for UserRelay {
-    fn store_name() -> &'static str {
-        "user_relays"
+    fn config() -> crate::browser_api::IdbStoreConfig {
+        crate::browser_api::IdbStoreConfig {
+            db_version: 1,
+            db_name: "test_db_relays",
+            store_name: "user_relays",
+            document_key: "url",
+        }
     }
-    fn db_name() -> &'static str {
-        "nostr"
-    }
-    fn db_version() -> u32 {
-        1
-    }
-    fn document_key(&self) -> JsValue {
+    fn key(&self) -> JsValue {
         JsValue::from_str(&self.url)
     }
-    fn upgrade_db(event: web_sys::Event) -> Result<(), JsValue> {
-        if event.target().is_none() {
-            return Err(JsValue::from_str("Error upgrading database"));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wasm_bindgen_test::*;
+
+    wasm_bindgen_test_configure!(run_in_browser);
+
+    #[wasm_bindgen_test]
+    async fn _relay_idb_manager() -> Result<(), JsValue> {
+        let user_relay = UserRelay {
+            url: "wss://example.com".to_string(),
+            read: true,
+            write: false,
         };
-        let target = event.target().unwrap();
-        let db = target
-            .dyn_into::<web_sys::IdbOpenDbRequest>()?
-            .result()?
-            .dyn_into::<web_sys::IdbDatabase>()?;
-        let user_relay_params = web_sys::IdbObjectStoreParameters::new();
-        user_relay_params.set_key_path(&JsValue::from_str("url"));
-        db.create_object_store_with_optional_parameters("user_relays", &user_relay_params)?;
+        user_relay
+            .save_to_store()
+            .await
+            .expect("Error saving to store");
+        let retrieved: UserRelay =
+            UserRelay::retrieve_from_store(&JsValue::from_str("wss://example.com"))
+                .await
+                .expect("Error retrieving from store");
+        assert_eq!(retrieved.url, "wss://example.com");
         Ok(())
     }
 }

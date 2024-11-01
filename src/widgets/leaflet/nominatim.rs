@@ -3,7 +3,7 @@ use wasm_bindgen::JsValue;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::Response;
 
-use crate::browser_api::geolocation::GeolocationCoordinates;
+use crate::browser_api::GeolocationCoordinates;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct NominatimLookup {

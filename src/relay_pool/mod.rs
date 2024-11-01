@@ -1,5 +1,7 @@
-pub mod nostr_relay;
-pub mod relay_pool;
+mod nostr_relay;
+mod relay_pool;
+pub use nostr_relay::*;
+pub use relay_pool::*;
 
 #[yew::function_component(RelayPoolTest)]
 pub fn relay_pool_test() -> yew::Html {
@@ -15,7 +17,7 @@ pub fn relay_pool_test() -> yew::Html {
             .subscribe();
         let kind_one_filter = nostro2::relays::NostrFilter::default()
             .new_kind(1)
-            .new_limit(100)
+            .new_limit(20)
             .subscribe();
         id_handle.set(Some(nostr_sub.id()));
         subscriber.emit(nostr_sub);

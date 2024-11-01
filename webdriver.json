@@ -1,0 +1,28 @@
+{
+  "moz:firefoxOptions": {
+    "prefs": {
+      "media.navigator.streams.fake": true,
+      "media.navigator.permission.disabled": true,
+      "geo.enabled": true,
+      "geo.prompt.testing": true,
+      "geo.prompt.testing.allow": true,
+      "security.mixed_content.block_active_content": false,  
+      "security.mixed_content.block_display_content": false,  
+      "security.mixed_content.send_http": true,
+      "security.fileuri.strict_origin_policy": false,
+      "privacy.trackingprotection.enabled": false,
+      "dom.disable_open_during_restricted": false
+    },
+    "args": ["--allow-insecure-localhost"]
+  },
+  "goog:chromeOptions": {
+    "args": [
+      "--use-fake-device-for-media-stream",
+      "--use-fake-ui-for-media-stream"
+    ],
+    "prefs": {
+      "profile.default_content_setting_values.geolocation": 1
+    }
+  }
+}
+

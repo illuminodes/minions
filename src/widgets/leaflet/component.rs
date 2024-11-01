@@ -1,6 +1,6 @@
 use yew::prelude::*;
 use wasm_bindgen_futures::spawn_local;
-use crate::browser_api::geolocation::{GeolocationPosition, GeolocationCoordinates};
+use crate::browser_api::{GeolocationPosition, GeolocationCoordinates};
 use super::leaflet::{L, LeafletMap, Marker};
 use super::nominatim::NominatimLookup;
 

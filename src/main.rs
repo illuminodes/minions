@@ -5,7 +5,6 @@ use minions::{
     widgets::full_calendar::FullCalendarTest,
 };
 use yew::prelude::*;
-use minions::widgets::ag_grid::NostrNotesGrid;
 
 fn main() {
     yew::Renderer::<App>::new().render();
@@ -19,6 +18,9 @@ fn app() -> Html {
                 <h1 class="text-2xl font-bold">{"Minions App Showcase"}</h1>
                 // Will remove it later
                 <FullCalendarTest />
+                // ADD NEW TEST COMPONENTS HERE WITH INLINES
+                // <minions::widgets::ag_grid::NostrNotesGrid />
+                // <minions::widgets::leaflet::LeafletTest />
             </div>
         </AppContextProviders>
     }

@@ -61,3 +61,18 @@ impl TryFrom<web_sys::Geolocation> for GeolocationPosition {
         Ok(serde_wasm_bindgen::from_value(value.into())?)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wasm_bindgen_test::wasm_bindgen_test_configure;
+    use wasm_bindgen_test::*;
+
+    wasm_bindgen_test_configure!(run_in_browser);
+
+    #[wasm_bindgen_test]
+    async fn __get_geolocation() {
+        let position = GeolocationPosition::locate().await;
+        assert!(position.is_ok());
+    }
+}

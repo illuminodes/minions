@@ -1,4 +1,4 @@
-use crate::relay_pool::relay_pool::NostrProps;
+use crate::relay_pool::NostrProps;
 use crate::widgets::ag_grid::{AgGridComponent, create_column};
 use nostro2::notes::SignedNote;
 use serde::Serialize;

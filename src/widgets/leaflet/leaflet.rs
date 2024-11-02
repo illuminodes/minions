@@ -1,8 +1,7 @@
-use js_sys::{Function};
+use crate::browser_api::{GeolocationCoordinates, GeolocationPosition};
+use js_sys::Function;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::{convert::FromWasmAbi, prelude::*};
-use crate::browser_api::geolocation::{GeolocationPosition, GeolocationCoordinates};
-
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LatLng {
@@ -23,12 +22,18 @@ impl TryFrom<JsValue> for LatLng {
 }
 impl From<&GeolocationCoordinates> for LatLng {
     fn from(value: &GeolocationCoordinates) -> Self {
-        Self { lat: value.latitude, lng: value.longitude }
+        Self {
+            lat: value.latitude,
+            lng: value.longitude,
+        }
     }
 }
 impl From<GeolocationCoordinates> for LatLng {
     fn from(value: GeolocationCoordinates) -> Self {
-        Self { lat: value.latitude, lng: value.longitude }
+        Self {
+            lat: value.latitude,
+            lng: value.longitude,
+        }
     }
 }
 
@@ -121,7 +126,7 @@ impl L {
         let map = L::map_with_options(id, js_options);
         let tile_options = TileLayerOptions::default();
         let js_tile_options: JsValue = tile_options.try_into()?;
-        
+
         L::tile_layer(
             "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
             js_tile_options,
@@ -237,12 +242,22 @@ impl LeafletMap {
         self.on(event, map_function);
     }
 
-    pub fn zoom_level(&self) -> f64 {self.getZoom()}
-    pub fn set_zoom_level(&self, zoom: f64) {self.setZoom(zoom)}
-    pub fn zoom_in(&self) {self.zoomIn()}
-    pub fn zoom_out(&self) {self.zoomOut()}
+    pub fn zoom_level(&self) -> f64 {
+        self.getZoom()
+    }
+    pub fn set_zoom_level(&self, zoom: f64) {
+        self.setZoom(zoom)
+    }
+    pub fn zoom_in(&self) {
+        self.zoomIn()
+    }
+    pub fn zoom_out(&self) {
+        self.zoomOut()
+    }
 
-    pub fn create_map_pane(&self, name: &str) {self.create_pane(name)}
+    pub fn create_map_pane(&self, name: &str) {
+        self.create_pane(name)
+    }
     pub fn get_map_pane(&self, name: &str) -> Option<web_sys::Element> {
         match self.get_pane(name) {
             pane if pane.is_undefined() => None,
@@ -254,7 +269,7 @@ impl LeafletMap {
         let marker = marker.clone();
         self.add_closure("locationfound", move |event: JsValue| {
             web_sys::console::log_1(&"Location found event received".into());
-            
+
             // Try to convert JsValue to our GeolocationPosition
             if let Ok(position) = GeolocationPosition::try_from(event) {
                 let geo_coords = position.coords;
@@ -262,7 +277,7 @@ impl LeafletMap {
                     lat: geo_coords.latitude,
                     lng: geo_coords.longitude,
                 };
-                
+
                 if let Ok(js_coords) = lat_lng.try_into() {
                     marker.set_lat_lng(&js_coords);
                 }
@@ -290,20 +305,23 @@ impl LeafletMap {
         web_sys::console::log_1(&"Stopping location tracking...".into());
         self.stop_locate();
     }
-    pub fn add_marker_with_icon(&self, coords: &GeolocationCoordinates, icon_options: IconOptions) -> Result<Marker, JsValue> {
+    pub fn add_marker_with_icon(
+        &self,
+        coords: &GeolocationCoordinates,
+        icon_options: IconOptions,
+    ) -> Result<Marker, JsValue> {
         let lat_lng: LatLng = coords.into();
         let new_coords: JsValue = lat_lng.try_into()?;
-        
+
         // Create icon
         let icon_js = icon_options.try_into()?;
         let icon = L::create_icon(&icon_js);
-        
+
         // Create marker options
-        let marker_options = LeafletMarkerOptions::default();
-        let mut marker_options_obj = js_sys::Object::new();
-        js_sys::Reflect::set(&marker_options_obj, &"icon".into(), &icon)?;
-        
-        let marker = L::marker(&new_coords, marker_options_obj.into()).addTo(self);
+        let marker_options: JsValue = LeafletMarkerOptions::default().try_into()?;
+        js_sys::Reflect::set(&marker_options, &"icon".into(), &icon)?;
+
+        let marker = L::marker(&new_coords, marker_options).addTo(self);
         Ok(marker)
     }
 }
@@ -313,7 +331,7 @@ pub struct IconOptions {
     #[serde(rename = "iconUrl")]
     pub icon_url: String,
     #[serde(rename = "iconSize")]
-    pub icon_size: Option<Vec<i32>>,  // [width, height]
+    pub icon_size: Option<Vec<i32>>, // [width, height]
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "iconAnchor")]
     pub icon_anchor: Option<Vec<i32>>, // [x, y]
@@ -323,8 +341,8 @@ impl Default for IconOptions {
     fn default() -> Self {
         Self {
             icon_url: "/default-marker.png".to_string(),
-            icon_size: Some(vec![25, 41]),    // Default Leaflet marker size
-            icon_anchor: Some(vec![12, 41]),  // Default Leaflet marker anchor
+            icon_size: Some(vec![25, 41]), // Default Leaflet marker size
+            icon_anchor: Some(vec![12, 41]), // Default Leaflet marker anchor
         }
     }
 }
@@ -364,7 +382,6 @@ pub struct LeafletMarkerOptions {
     pub opacity: f64,
     #[serde(rename = "riseOnHover")]
     pub rise_on_hover: bool,
-
 }
 impl Default for LeafletMarkerOptions {
     fn default() -> Self {

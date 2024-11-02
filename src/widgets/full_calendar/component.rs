@@ -1,9 +1,7 @@
 use yew::prelude::*;
 use web_sys::HtmlElement;
-use wasm_bindgen::JsCast;
-use super::full_calendar::{Calendar, FullCalendarEvent, FullCalendarOptions, FullCalendarHeaderOptions, FullCalendarSelectEvent};
+use super::full_calendar::{Calendar, FullCalendarEvent, FullCalendarOptions, FullCalendarSelectEvent};
 use js_sys::Date;
-use serde_json::Value;
 use wasm_bindgen::JsValue;
 
 #[derive(Properties, PartialEq)]
@@ -90,7 +88,9 @@ pub fn calendar_component(props: &Props) -> Html {
             if let Some(calendar_instance) = (*calendar).clone() {
                 calendar_instance.clear_events();
                 for event in events {
-                    calendar_instance.add_or_replace_event(event.clone());
+                    if let Err(e) = calendar_instance.add_or_replace_event(event.clone()) {
+                        gloo::console::error!("Failed to add/replace event:", e);
+                    }
                 }
             }
             || ()

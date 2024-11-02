@@ -3,6 +3,7 @@ use crate::relay_pool::relay_pool::NostrProps;
 use super::{FullCalendarComponent, FullCalendarEvent};
 use js_sys::Date;
 use nostro2::notes::SignedNote;
+use nostro2::relays::{NostrFilter, NostrSubscription};
 use serde_json::json;
 use wasm_bindgen::JsValue;
 use crate::widgets::toastify::ToastifyOptions;
@@ -11,10 +12,18 @@ use crate::widgets::toastify::ToastifyOptions;
 pub fn calendar_test() -> Html {
     let relay_ctx = use_context::<NostrProps>().expect("No relay context found");
     let events = use_state(Vec::new);
+    // Set up subscription for calendar events
     {
         let relay_ctx = relay_ctx.clone();
         use_effect_with((), move |_| {
-            gloo::console::log!("Initial relay context:", relay_ctx.unique_notes.len());
+            // Create and configure filter for calendar events
+            let filter = NostrFilter::default()
+                .new_kinds(vec![31924])
+                .new_limit(50);
+            
+            // Create and send subscription
+            let subscription = NostrSubscription::new(filter);
+            relay_ctx.subscribe.emit(subscription);
             || ()
         });
     }

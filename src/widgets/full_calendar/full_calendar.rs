@@ -63,7 +63,9 @@ impl Calendar {
     pub fn update_events(&self, events: Vec<FullCalendarEvent>) {
         self.clear_events();
         for event in events {
-            self.add_calendar_event(event);
+            if let Err(e) = self.add_calendar_event(event) {
+                gloo::console::error!("Failed to add calendar event:", e);
+            }
         }
     }
 

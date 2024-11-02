@@ -36,7 +36,6 @@ pub fn calendar_test() -> Html {
             if let Ok(content) = serde_json::from_str::<serde_json::Value>(&note.get_content()) {
                 gloo::console::log!("Parsed content:", content.to_string());
                 
-                // Try to parse start and end times
                 let start_str = content["start"].as_str()?;
                 let end_str = content["end"].as_str()?;
                 gloo::console::log!("Start:", start_str, "End:", end_str);
@@ -104,7 +103,7 @@ let handle_date_select = {
             "backgroundColor": FullCalendarEvent::COLOR_BLUE,
             "textColor": "#ffffff",
             "allDay": false,
-            "timeFormat": "h:mm a" // 12-hour format with am/pm
+            "timeFormat": "h:mm a"
         });
 
         gloo::console::log!("Event content:", content.to_string());

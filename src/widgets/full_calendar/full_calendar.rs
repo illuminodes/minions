@@ -210,7 +210,7 @@ impl FullCalendarOptions {
         }
         Ok(())
     }
-    // And add validation to the Into<JsValue> implementation:
+
     pub fn to_js_value(&self) -> Result<JsValue, JsValue> {
         self.validate_handler()?;
         
@@ -327,7 +327,6 @@ impl FullCalendarEvent {
         self
     }
 
-    // Add these methods
     pub fn get_title(&self) -> &str {
         &self.title
     }

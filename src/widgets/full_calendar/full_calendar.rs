@@ -102,6 +102,13 @@ pub struct FullCalendarHeaderOptions {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventTimeFormat {
+    pub hour: &'static str,
+    pub minute: &'static str,
+    pub meridiem: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FullCalendarOptions {
     #[serde(rename = "initialView")]
     pub intial_view: &'static str,
@@ -125,6 +132,10 @@ pub struct FullCalendarOptions {
     select_handler: Option<Function>,
     #[serde(skip)]
     date_click_handler: Option<Function>,
+    #[serde(rename = "displayEventTime")]
+    pub display_event_time: bool,
+    #[serde(rename = "eventTimeFormat")]
+    pub event_time_format: EventTimeFormat,
 }
 impl FullCalendarOptions {
     pub fn new() -> Self {
@@ -145,6 +156,12 @@ impl FullCalendarOptions {
             event_click_handler: None,
             select_handler: None,
             date_click_handler: None,
+            display_event_time: true,
+            event_time_format: EventTimeFormat {
+                hour: "numeric",
+                minute: "2-digit",
+                meridiem: "short",
+            },
         }
     }
 

@@ -86,19 +86,25 @@ pub fn calendar_test() -> Html {
 let handle_date_select = {
     let relay_ctx = relay_ctx.clone();
     Callback::from(move |(start, end): (Date, Date)| {
-        gloo::console::log!("Creating new event");
-        
         // Convert JsString to String
+        let start_time = start.to_locale_time_string("en-US")
+            .as_string()
+            .unwrap_or_default();
+        
+        let event_title = format!("Event at {}", start_time);
+        
         let start_str = start.to_iso_string().as_string().unwrap_or_default();
         let end_str = end.to_iso_string().as_string().unwrap_or_default();
 
         let content = json!({
-            "title": "New Calendar Event",
+            "title": event_title,
             "start": start_str,
             "end": end_str,
             "type": "calendar_event",
             "backgroundColor": FullCalendarEvent::COLOR_BLUE,
-            "textColor": "#ffffff"
+            "textColor": "#ffffff",
+            "allDay": false,
+            "timeFormat": "h:mm a" // 12-hour format with am/pm
         });
 
         gloo::console::log!("Event content:", content.to_string());

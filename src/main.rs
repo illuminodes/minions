@@ -15,6 +15,7 @@ fn app() -> Html {
                 // ADD NEW TEST COMPONENTS HERE WITH INLINES
                 // <minions::widgets::ag_grid::NostrNotesGrid />
                 // <minions::widgets::leaflet::LeafletTest />
+                // <minions::widgets::full_calendar::FullCalendarTest />
             </div>
         </AppContextProviders>
     }

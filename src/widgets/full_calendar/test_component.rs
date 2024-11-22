@@ -7,6 +7,7 @@ use nostro2::relays::{NostrFilter, NostrSubscription};
 use serde_json::json;
 use wasm_bindgen::JsValue;
 use yew::prelude::*;
+use crate::widgets::toastify::ToastifyOptions;
 
 #[function_component(FullCalendarTest)]
 pub fn calendar_test() -> Html {
@@ -17,8 +18,10 @@ pub fn calendar_test() -> Html {
         let relay_ctx = relay_ctx.clone();
         use_effect_with((), move |_| {
             // Create and configure filter for calendar events
-            let filter = NostrFilter::default().new_kinds(vec![31924]).new_limit(50);
-
+            let filter = NostrFilter::default()
+                .new_kinds(vec![31924])
+                .new_limit(50);
+            
             // Create and send subscription
             let subscription = NostrSubscription::new(filter);
             relay_ctx.subscribe.emit(subscription);
@@ -37,11 +40,11 @@ pub fn calendar_test() -> Html {
                 let start_str = content["start"].as_str()?;
                 let end_str = content["end"].as_str()?;
                 gloo::console::log!("Start:", start_str, "End:", end_str);
-
+                
                 let start = Date::new(&JsValue::from_str(start_str));
                 let end = Date::new(&JsValue::from_str(end_str));
                 let title = content["title"].as_str()?;
-
+    
                 let event = FullCalendarEvent::new(
                     &note.get_id().to_string(),
                     title,
@@ -124,7 +127,7 @@ pub fn calendar_test() -> Html {
     {
         let events = events.clone();
         let notes = relay_ctx.unique_notes.clone();
-
+        
         use_effect_with(notes, move |notes| {
             gloo::console::log!("Received notes update, total notes:", notes.len());
             let calendar_events: Vec<FullCalendarEvent> = notes
@@ -136,7 +139,6 @@ pub fn calendar_test() -> Html {
                     convert_note_to_event(note)
                 })
                 .collect();
-
             gloo::console::log!("Created calendar events:", calendar_events.len());
             events.set(calendar_events);
             || ()

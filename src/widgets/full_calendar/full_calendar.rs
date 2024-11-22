@@ -182,7 +182,7 @@ impl FullCalendarOptions {
         Self::default()
     }
 
-    pub fn with_event_click<F>(mut self, f: F) -> Self
+    pub fn with_event_click<F>(mut self, f: F) -> Self 
     where
         F: Fn(JsValue) + 'static,
     {
@@ -245,7 +245,6 @@ impl FullCalendarOptions {
             let value = js_sys::Reflect::get(&base_obj, &key)?;
             js_sys::Reflect::set(&obj, &key, &value)?;
         }
-
         // Add handlers
         if let Some(handler) = &self.event_click_handler {
             js_sys::Reflect::set(&obj, &JsValue::from_str("eventClick"), handler)?;
@@ -258,6 +257,21 @@ impl FullCalendarOptions {
         }
 
         Ok(obj.into())
+    }
+}
+impl Default for FullCalendarHeaderOptions {
+    fn default() -> Self {
+        Self {
+            start: "prev,next today",
+            center: "title",
+            end: "dayGridMonth,timeGridWeek,timeGridDay",
+        }
+    }
+}
+
+impl Default for FullCalendarOptions {
+    fn default() -> Self {
+        Self::new()
     }
 }
 impl Default for FullCalendarHeaderOptions {
@@ -293,7 +307,6 @@ pub struct FullCalendarSelectEvent {
 
 impl TryFrom<JsValue> for FullCalendarSelectEvent {
     type Error = JsValue;
-
     fn try_from(value: JsValue) -> Result<Self, Self::Error> {
         serde_wasm_bindgen::from_value(value)
             .map_err(|e| JsValue::from_str(&format!("Failed to convert select event: {}", e)))
@@ -326,7 +339,6 @@ impl FullCalendarEvent {
     pub const COLOR_RED: &'static str = "#e74c3c";
     pub const COLOR_YELLOW: &'static str = "#f1c40f";
     pub const COLOR_PURPLE: &'static str = "#9b59b6";
-
     // Add a builder-style method for setting color
     pub fn with_color(mut self, color: &str) -> Self {
         self.background_color = color.to_string();
@@ -356,7 +368,6 @@ impl FullCalendarEvent {
         let current_minutes = end.get_minutes() as u32;
         let total_minutes = current_minutes + duration_mins as u32;
         end.set_minutes(total_minutes);
-
         Self::new(
             id,
             title,
@@ -445,7 +456,6 @@ impl Into<JsValue> for FullCalendarEvent {
 // Add TryFrom for better error handling
 impl TryFrom<JsValue> for FullCalendarEvent {
     type Error = JsValue;
-
     fn try_from(value: JsValue) -> Result<Self, Self::Error> {
         serde_wasm_bindgen::from_value(value)
             .map_err(|e| JsValue::from_str(&format!("Failed to convert calendar event: {}", e)))
@@ -474,7 +484,6 @@ impl Into<JsValue> for FullCalendarDateClickInfo {
 
 impl TryFrom<JsValue> for FullCalendarDateClickInfo {
     type Error = JsValue;
-
     fn try_from(value: JsValue) -> Result<Self, Self::Error> {
         serde_wasm_bindgen::from_value(value)
             .map_err(|e| JsValue::from_str(&format!("Failed to convert date click info: {}", e)))

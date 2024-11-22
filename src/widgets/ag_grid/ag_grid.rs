@@ -50,6 +50,7 @@ pub struct DefaultColDef {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub flex: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "minWidth")]
     pub min_width: Option<i32>,
 }
 

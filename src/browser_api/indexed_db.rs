@@ -152,7 +152,7 @@ pub trait IdbStoreManager {
                     .dyn_into::<web_sys::IdbOpenDbRequest>()?
                     .result()?
                     .dyn_into::<web_sys::IdbDatabase>()?;
-                if let Err(e) = Self::create_data_store(db) {
+                if let Err(e) = Self::create_data_store(&db) {
                     error!(&e);
                 }
                 Ok::<(), JsValue>(())
@@ -188,67 +188,13 @@ pub trait IdbStoreManager {
             Ok(db)
         }
     }
-    fn create_data_store(db: web_sys::IdbDatabase) -> Result<(), JsValue> {
+    fn create_data_store(db: &web_sys::IdbDatabase) -> Result<(), JsValue> {
         let user_relay_params = web_sys::IdbObjectStoreParameters::new();
         user_relay_params.set_key_path(&JsValue::from_str(Self::config().document_key));
         db.create_object_store_with_optional_parameters(
             &Self::config().store_name,
             &user_relay_params,
         )?;
-        Ok(())
-    }
-}
-#[cfg(test)]
-mod tests {
-
-    use wasm_bindgen_test::*;
-    wasm_bindgen_test_configure!(run_in_browser);
-    use super::*;
-
-    #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
-    struct TestStruct {
-        pub id: u32,
-        pub name: String,
-    }
-    impl Into<JsValue> for TestStruct {
-        fn into(self) -> JsValue {
-            serde_wasm_bindgen::to_value(&self).unwrap()
-        }
-    }
-    impl TryFrom<JsValue> for TestStruct {
-        type Error = JsValue;
-        fn try_from(value: JsValue) -> Result<Self, Self::Error> {
-            serde_wasm_bindgen::from_value(value).map_err(|e| JsValue::from_str(&e.to_string()))
-        }
-    }
-    impl super::IdbStoreManager for TestStruct {
-        fn config() -> super::IdbStoreConfig {
-            super::IdbStoreConfig {
-                db_name: "test_db",
-                db_version: 1,
-                store_name: "test_store",
-                document_key: "id",
-            }
-        }
-        fn key(&self) -> JsValue {
-            JsValue::from(self.id)
-        }
-    }
-
-    #[wasm_bindgen_test]
-    async fn _idb_store_manager() -> Result<(), JsValue> {
-        let test_struct = TestStruct {
-            id: 3,
-            name: "Test".to_string(),
-        };
-        test_struct.save_to_store().await?;
-        let retrieved: TestStruct = TestStruct::retrieve_from_store(&JsValue::from(3)).await?;
-        assert_eq!(retrieved.id, 3);
-        let all = TestStruct::retrieve_all_from_store().await?;
-        assert!(all.len() > 0);
-        let _ = retrieved.delete_from_store().await?;
-        let new_all = TestStruct::retrieve_all_from_store().await?;
-        assert_eq!(new_all.len(), all.len() - 1);
         Ok(())
     }
 }

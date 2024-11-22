@@ -73,45 +73,47 @@ impl Calendar {
     pub fn reload(&self) {
         self.render();
     }
-    
+
     pub fn update_view(&self, view_name: &str) {
         let current_date = js_sys::Date::new_0();
         let date_str = current_date.to_iso_string().as_string().unwrap_or_default();
         self.change_view(view_name, &date_str);
     }
-    
+
     pub fn update_view_to_date(&self, view_name: &str, date: &js_sys::Date) {
         let date_str = date.to_iso_string().as_string().unwrap_or_default();
         self.change_view(view_name, &date_str);
     }
 
     // Batch Operations
-    pub fn batch_update<F>(&self, f: F) 
-    where 
-        F: FnOnce(&Self)
+    pub fn batch_update<F>(&self, f: F)
+    where
+        F: FnOnce(&Self),
     {
         f(self);
         self.render();
     }
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FullCalendarHeaderOptions {
     start: &'static str,
     center: &'static str,
     end: &'static str,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EventTimeFormat {
     pub hour: &'static str,
     pub minute: &'static str,
     pub meridiem: &'static str,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FullCalendarOptions {
     #[serde(rename = "initialView")]
-    pub intial_view: &'static str,
+    pub initial_view: &'static str,
+    #[serde(rename = "initialDate")]
+    pub initial_date: String,
     pub locale: &'static str,
     #[serde(rename = "expandRows")]
     pub expand_rows: bool,
@@ -127,30 +129,31 @@ pub struct FullCalendarOptions {
     #[serde(rename = "selectLongPressDelay")]
     pub select_long_press_delay: u32,
     #[serde(skip)]
-    event_click_handler: Option<Function>,
+    pub event_click_handler: Option<Function>,
     #[serde(skip)]
-    select_handler: Option<Function>,
+    pub select_handler: Option<Function>,
     #[serde(skip)]
-    date_click_handler: Option<Function>,
+    pub date_click_handler: Option<Function>,
     #[serde(rename = "displayEventTime")]
     pub display_event_time: bool,
     #[serde(rename = "eventTimeFormat")]
     pub event_time_format: EventTimeFormat,
 }
-impl FullCalendarOptions {
-    pub fn new() -> Self {
+impl Default for FullCalendarOptions {
+    fn default() -> Self {
         Self {
-            intial_view: "dayGridMonth",
-            locale: "en",
+            initial_view: "dayGridMonth",
+            initial_date: js_sys::Date::new_0().to_iso_string().as_string().unwrap(),
+            locale: "es-SV",
             expand_rows: true,
-            all_day_slot: true,
+            all_day_slot: false,
             selectable: true,
             first_day: 0,
             slot_duration: "00:30:00".to_string(),
             header_toolbar: FullCalendarHeaderOptions {
-                start: "prev,next today",
-                center: "title",
-                end: "dayGridMonth,timeGridWeek,timeGridDay",
+                start: "title",
+                center: "",
+                end: "prev,next",
             },
             select_long_press_delay: 250,
             event_click_handler: None,
@@ -164,8 +167,22 @@ impl FullCalendarOptions {
             },
         }
     }
+}
+impl Default for EventTimeFormat {
+    fn default() -> Self {
+        Self {
+            hour: "numeric",
+            minute: "2-digit",
+            meridiem: "short",
+        }
+    }
+}
+impl FullCalendarOptions {
+    pub fn new() -> Self {
+        Self::default()
+    }
 
-    pub fn with_event_click<F>(mut self, f: F) -> Self 
+    pub fn with_event_click<F>(mut self, f: F) -> Self
     where
         F: Fn(JsValue) + 'static,
     {
@@ -213,13 +230,13 @@ impl FullCalendarOptions {
 
     pub fn to_js_value(&self) -> Result<JsValue, JsValue> {
         self.validate_handler()?;
-        
+
         let obj = js_sys::Object::new();
-        
+
         // Convert the basic options
         let base_options = serde_wasm_bindgen::to_value(&self)
             .map_err(|e| JsValue::from_str(&format!("Failed to convert options: {}", e)))?;
-        
+
         // Copy properties
         let base_obj: Object = base_options.into();
         let keys = js_sys::Object::keys(&base_obj);
@@ -228,7 +245,7 @@ impl FullCalendarOptions {
             let value = js_sys::Reflect::get(&base_obj, &key)?;
             js_sys::Reflect::set(&obj, &key, &value)?;
         }
-        
+
         // Add handlers
         if let Some(handler) = &self.event_click_handler {
             js_sys::Reflect::set(&obj, &JsValue::from_str("eventClick"), handler)?;
@@ -239,25 +256,20 @@ impl FullCalendarOptions {
         if let Some(handler) = &self.date_click_handler {
             js_sys::Reflect::set(&obj, &JsValue::from_str("dateClick"), handler)?;
         }
-        
+
         Ok(obj.into())
     }
 }
 impl Default for FullCalendarHeaderOptions {
     fn default() -> Self {
         Self {
-            start: "prev,next today",
-            center: "title",
-            end: "dayGridMonth,timeGridWeek,timeGridDay",
+            start: "title",
+            center: "",
+            end: "prev,next today",
         }
     }
 }
 
-impl Default for FullCalendarOptions {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 impl Into<JsValue> for FullCalendarOptions {
     fn into(self) -> JsValue {
         self.to_js_value().unwrap_or_else(|e| {
@@ -281,7 +293,7 @@ pub struct FullCalendarSelectEvent {
 
 impl TryFrom<JsValue> for FullCalendarSelectEvent {
     type Error = JsValue;
-    
+
     fn try_from(value: JsValue) -> Result<Self, Self::Error> {
         serde_wasm_bindgen::from_value(value)
             .map_err(|e| JsValue::from_str(&format!("Failed to convert select event: {}", e)))
@@ -314,7 +326,7 @@ impl FullCalendarEvent {
     pub const COLOR_RED: &'static str = "#e74c3c";
     pub const COLOR_YELLOW: &'static str = "#f1c40f";
     pub const COLOR_PURPLE: &'static str = "#9b59b6";
-    
+
     // Add a builder-style method for setting color
     pub fn with_color(mut self, color: &str) -> Self {
         self.background_color = color.to_string();
@@ -344,14 +356,14 @@ impl FullCalendarEvent {
         let current_minutes = end.get_minutes() as u32;
         let total_minutes = current_minutes + duration_mins as u32;
         end.set_minutes(total_minutes);
-        
+
         Self::new(
             id,
             title,
             start,
             end,
             Self::COLOR_BLUE,
-            serde_json::Value::Null
+            serde_json::Value::Null,
         )
     }
 
@@ -421,6 +433,9 @@ impl FullCalendarEvent {
     pub fn get_dates(&self) -> (Date, Date) {
         (self.start.clone(), self.end.clone())
     }
+    pub fn get_props(&self) -> &Value {
+        &self.extended_props
+    }
 }
 impl Into<JsValue> for FullCalendarEvent {
     fn into(self) -> JsValue {
@@ -430,7 +445,7 @@ impl Into<JsValue> for FullCalendarEvent {
 // Add TryFrom for better error handling
 impl TryFrom<JsValue> for FullCalendarEvent {
     type Error = JsValue;
-    
+
     fn try_from(value: JsValue) -> Result<Self, Self::Error> {
         serde_wasm_bindgen::from_value(value)
             .map_err(|e| JsValue::from_str(&format!("Failed to convert calendar event: {}", e)))
@@ -459,7 +474,7 @@ impl Into<JsValue> for FullCalendarDateClickInfo {
 
 impl TryFrom<JsValue> for FullCalendarDateClickInfo {
     type Error = JsValue;
-    
+
     fn try_from(value: JsValue) -> Result<Self, Self::Error> {
         serde_wasm_bindgen::from_value(value)
             .map_err(|e| JsValue::from_str(&format!("Failed to convert date click info: {}", e)))

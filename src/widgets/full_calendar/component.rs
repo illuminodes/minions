@@ -1,12 +1,17 @@
 use yew::prelude::*;
 use web_sys::HtmlElement;
+use crate::widgets::toastify::ToastifyOptions;
+
 use super::full_calendar::{Calendar, FullCalendarEvent, FullCalendarOptions, FullCalendarSelectEvent};
 use js_sys::Date;
 use wasm_bindgen::JsValue;
 
 #[derive(Properties, PartialEq)]
 pub struct Props {
+    pub calendar_state: UseStateHandle<Option<Calendar>>,
     pub calendar_id: AttrValue,
+    #[prop_or_default]
+    pub calendar_options: FullCalendarOptions,
     #[prop_or_default]
     pub events: Vec<FullCalendarEvent>,
     #[prop_or_default]
@@ -22,7 +27,7 @@ pub struct Props {
 #[function_component(FullCalendarComponent)]
 pub fn calendar_component(props: &Props) -> Html {
     let calendar_ref = use_node_ref();
-    let calendar = use_state(|| None::<Calendar>);
+    let calendar = props.calendar_state.clone();
 
     // Initialize calendar
     {
@@ -32,12 +37,13 @@ pub fn calendar_component(props: &Props) -> Html {
         let on_calendar_created = props.on_calendar_created.clone();
         let on_event_click = props.on_event_click.clone();
         let on_date_select = props.on_date_select.clone();
+        let options = props.calendar_options.clone();
 
         use_effect_with((), move |_| {
             if let Some(element) = calendar_ref.cast::<HtmlElement>() {
                 // Create options and add handlers
                 let options = {
-                    let mut opt = FullCalendarOptions::new();
+                    let mut opt = options.clone();
                     
                     // Add event click handler if callback provided
                     if let Some(event_cb) = on_event_click {
@@ -64,7 +70,9 @@ pub fn calendar_component(props: &Props) -> Html {
                 
                 // Add initial events
                 for event in events {
-                    calendar_instance.add_or_replace_event(event);
+                    if let Err(e) = calendar_instance.add_or_replace_event(event) {
+                        ToastifyOptions::new_relay_error(&e.as_string().unwrap()).show();
+                    }
                 }
 
                 calendar_instance.render();

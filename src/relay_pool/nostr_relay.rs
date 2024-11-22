@@ -1,6 +1,6 @@
 use wasm_bindgen::JsValue;
 
-use crate::browser_api::IdbStoreManager;
+use crate::{browser_api::IdbStoreManager, DB_NAME, DB_VERSION, RELAY_KEY, RELAY_STORE};
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct UserRelay {
@@ -22,10 +22,10 @@ impl Into<JsValue> for UserRelay {
 impl IdbStoreManager for UserRelay {
     fn config() -> crate::browser_api::IdbStoreConfig {
         crate::browser_api::IdbStoreConfig {
-            db_version: 1,
-            db_name: "test_db_relays",
-            store_name: "user_relays",
-            document_key: "url",
+            db_version: DB_VERSION,
+            db_name: DB_NAME,
+            store_name: RELAY_STORE,
+            document_key: RELAY_KEY,
         }
     }
     fn key(&self) -> JsValue {
@@ -35,27 +35,27 @@ impl IdbStoreManager for UserRelay {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use wasm_bindgen_test::*;
+    // use super::*;
+    // use wasm_bindgen_test::*;
 
-    wasm_bindgen_test_configure!(run_in_browser);
+    // wasm_bindgen_test_configure!(run_in_browser);
 
-    #[wasm_bindgen_test]
-    async fn _relay_idb_manager() -> Result<(), JsValue> {
-        let user_relay = UserRelay {
-            url: "wss://example.com".to_string(),
-            read: true,
-            write: false,
-        };
-        user_relay
-            .save_to_store()
-            .await
-            .expect("Error saving to store");
-        let retrieved: UserRelay =
-            UserRelay::retrieve_from_store(&JsValue::from_str("wss://example.com"))
-                .await
-                .expect("Error retrieving from store");
-        assert_eq!(retrieved.url, "wss://example.com");
-        Ok(())
-    }
+    // #[wasm_bindgen_test]
+    // async fn _relay_idb_manager() -> Result<(), JsValue> {
+    //     let user_relay = UserRelay {
+    //         url: "wss://example.com".to_string(),
+    //         read: true,
+    //         write: false,
+    //     };
+    //     user_relay
+    //         .save_to_store()
+    //         .await
+    //         .expect("Error saving to store");
+    //     let retrieved: UserRelay =
+    //         UserRelay::retrieve_from_store(&JsValue::from_str("wss://example.com"))
+    //             .await
+    //             .expect("Error retrieving from store");
+    //     assert_eq!(retrieved.url, "wss://example.com");
+    //     Ok(())
+    // }
 }

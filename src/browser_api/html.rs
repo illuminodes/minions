@@ -1,8 +1,9 @@
-use wasm_bindgen::{JsCast, JsValue};
+use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
 use web_sys::{HtmlFormElement, HtmlInputElement, HtmlSelectElement, SubmitEvent};
 
 pub struct HtmlDocument {
-    document: web_sys::Document,
+    pub window: web_sys::Window,
+    pub document: web_sys::Document,
 }
 impl HtmlDocument {
     pub fn new() -> Result<Self, JsValue> {
@@ -10,7 +11,7 @@ impl HtmlDocument {
         let document = window
             .document()
             .ok_or(JsValue::from_str("No document available"))?;
-        Ok(Self { document })
+        Ok(Self { window, document })
     }
     pub fn find_element_by_id<T>(&self, id: &str) -> Result<T, JsValue>
     where
@@ -31,6 +32,18 @@ impl HtmlDocument {
             .ok_or(JsValue::from_str("Elements not found"))?
             .dyn_into::<T>()
             .map_err(|_| JsValue::from_str("Failed to cast element"))
+    }
+    pub fn edit_document_title(self, title: &str) {
+        self.document.set_title(title);
+
+        let closure: js_sys::Function = Closure::<dyn FnMut()>::new(move || {
+            self.document.set_title("Portal SALUD");
+        })
+        .into_js_value()
+        .into();
+        self.window
+            .add_event_listener_with_callback("focus", &closure)
+            .unwrap();
     }
 }
 

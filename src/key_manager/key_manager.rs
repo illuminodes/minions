@@ -22,6 +22,7 @@ impl NostrId {
 pub enum NostrIdAction {
     FinishedLoadingKey,
     LoadIdentity(super::nostr_id::UserIdentity, nostro2::userkeys::UserKeys),
+    DeleteIdentity,
 }
 impl Reducible for NostrId {
     type Action = NostrIdAction;
@@ -37,6 +38,11 @@ impl Reducible for NostrId {
                 has_loaded: true,
                 identity: self.identity.clone(),
                 keys: self.keys.clone(),
+            }),
+            NostrIdAction::DeleteIdentity => Rc::new(NostrId {
+                has_loaded: self.has_loaded,
+                identity: None,
+                keys: None,
             }),
         }
     }

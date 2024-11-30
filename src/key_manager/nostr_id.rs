@@ -2,7 +2,10 @@ use nostro2::userkeys::UserKeys;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::CryptoKey;
 
-use crate::browser_api::{BrowserCrypto, IdbStoreConfig, IdbStoreManager};
+use crate::{
+    browser_api::{BrowserCrypto, IdbStoreConfig, IdbStoreManager},
+    DB_NAME, DB_VERSION, IDENTITY_KEY, IDENTITY_STORE,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UserIdentity {
@@ -44,7 +47,7 @@ impl UserIdentity {
         let key = BrowserCrypto::default()
             .crypto_key_to_hex(self.crypto_key.clone())
             .await?;
-        Ok(UserKeys::new(&key).map_err(|e| JsValue::from_str(&e.to_string()))?)
+        Ok(UserKeys::new_extractable(&key).map_err(|e| JsValue::from_str(&e.to_string()))?)
     }
     pub fn get_pubkey(&self) -> String {
         self.pubkey.clone()
@@ -83,10 +86,10 @@ impl TryFrom<JsValue> for UserIdentity {
 impl IdbStoreManager for UserIdentity {
     fn config() -> IdbStoreConfig {
         IdbStoreConfig {
-            store_name: "user_identity",
-            db_name: "test_db_3",
-            db_version: 1,
-            document_key: "pubkey",
+            store_name: IDENTITY_STORE,
+            db_name: DB_NAME,
+            db_version: DB_VERSION,
+            document_key: IDENTITY_KEY,
         }
     }
     fn key(&self) -> JsValue {
@@ -96,11 +99,14 @@ impl IdbStoreManager for UserIdentity {
 
 #[cfg(test)]
 mod tests {
+    use crate::init_nostr_db;
+
     use super::*;
     use wasm_bindgen_test::*;
     wasm_bindgen_test_configure!(run_in_browser);
     #[wasm_bindgen_test]
     async fn _user_identity_fb() -> Result<(), JsValue> {
+        init_nostr_db().unwrap();
         let user_identity = UserIdentity::new_local_identity().await.unwrap();
         let user_keys = user_identity.get_user_keys().await.unwrap();
         let user_identity = UserIdentity::find_local_identity().await.unwrap();

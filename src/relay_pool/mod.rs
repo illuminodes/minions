@@ -1,5 +1,5 @@
-pub mod nostr_relay;
-pub mod relay_pool;
+mod nostr_relay;
+mod relay_pool;
 pub use nostr_relay::*;
 pub use relay_pool::*;
 
@@ -12,14 +12,17 @@ pub fn relay_pool_test() -> yew::Html {
     let subscriber = relay_ctx.subscribe.clone();
     let id_handle = subscription_id.clone();
     yew::use_effect_with((), move |_| {
-        let nostr_sub = nostro2::relays::NostrFilter::default()
-            .new_kind(20001)
-            .subscribe();
-        let kind_one_filter = nostro2::relays::NostrFilter::default()
-            .new_kind(1)
-            .new_limit(20)
-            .subscribe();
-        id_handle.set(Some(nostr_sub.id()));
+        let nostr_sub = nostro2::relays::NostrSubscription {
+            kinds: Some(vec![20001]),
+            ..Default::default()
+        }
+        .relay_subscription();
+        let kind_one_filter = nostro2::relays::NostrSubscription{
+            kinds: Some(vec![1]),
+            limit: Some(20),
+            ..Default::default()
+        }.relay_subscription();
+        id_handle.set(Some(nostr_sub.1.clone()));
         subscriber.emit(nostr_sub);
         subscriber.emit(kind_one_filter);
         || {}
@@ -43,12 +46,8 @@ pub fn relay_pool_test() -> yew::Html {
     let note_sender = relay_ctx.send_note.clone();
     let send_note_onclick = yew::Callback::from(move |_| {
         let new_keys = nostro2::userkeys::UserKeys::generate();
-        let timestamp = nostro2::utils::get_unix_timestamp();
-        let new_note = nostro2::notes::Note::new(
-            &new_keys.get_public_key(),
-            20001,
-            &format!("Minion Note at {}", timestamp),
-        );
+        let new_note =
+            nostro2::notes::Note::new(&new_keys.get_public_key(), 20001, &format!("Minion Note"));
         let signed_note = new_keys.sign_nostr_event(new_note);
         note_sender.emit(signed_note);
     });

@@ -1,6 +1,6 @@
 use wasm_bindgen::JsValue;
 
-use crate::browser_api::IdbStoreManager;
+use crate::{browser_api::IdbStoreManager, DB_NAME, DB_VERSION, RELAY_KEY, RELAY_STORE};
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct UserRelay {
@@ -22,10 +22,10 @@ impl Into<JsValue> for UserRelay {
 impl IdbStoreManager for UserRelay {
     fn config() -> crate::browser_api::IdbStoreConfig {
         crate::browser_api::IdbStoreConfig {
-            db_version: 1,
-            db_name: "test_db_relays",
-            store_name: "user_relays",
-            document_key: "url",
+            db_version: DB_VERSION,
+            db_name: DB_NAME,
+            store_name: RELAY_STORE,
+            document_key: RELAY_KEY,
         }
     }
     fn key(&self) -> JsValue {
@@ -35,6 +35,8 @@ impl IdbStoreManager for UserRelay {
 
 #[cfg(test)]
 mod tests {
+    use crate::init_nostr_db;
+
     use super::*;
     use wasm_bindgen_test::*;
 
@@ -42,6 +44,7 @@ mod tests {
 
     #[wasm_bindgen_test]
     async fn _relay_idb_manager() -> Result<(), JsValue> {
+        init_nostr_db().expect("Error initializing db");
         let user_relay = UserRelay {
             url: "wss://example.com".to_string(),
             read: true,

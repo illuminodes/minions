@@ -1230,9 +1230,9 @@ dependencies = [
 
 [[package]]
 name = "nostro2"
-version = "0.1.32"
+version = "0.1.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87ed96ac7f26fe1d97e5872c55e2881c43f2c9b6c83c718c95fa2ea4398964fb"
+checksum = "fc5500b4ab2d2afaa2ce702d71f9f88b47af815048c3349efc74a00c39d716ad"
 dependencies = [
  "anyhow",
  "base64",
@@ -1247,7 +1247,7 @@ dependencies = [
  "libaes",
  "rand",
  "ring",
- "rustls 0.23.15",
+ "rustls 0.23.19",
  "secp256k1",
  "serde",
  "serde-wasm-bindgen 0.6.5",
@@ -1529,9 +1529,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.15"
+version = "0.23.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5fbb44d7acc4e873d613422379f69f237a1b141928c02f6bc6ccfddddc2d7993"
+checksum = "934b404430bb06b3fae2cba809eb45a1ab1aecd64491213d7c3301b88393f8d1"
 dependencies = [
  "once_cell",
  "ring",
@@ -1936,7 +1936,7 @@ version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c7bc40d0e5a97695bb96e27995cd3a08538541b0a846f65bba7a359f36700d4"
 dependencies = [
- "rustls 0.23.15",
+ "rustls 0.23.19",
  "rustls-pki-types",
  "tokio",
 ]
@@ -1976,7 +1976,7 @@ checksum = "edc5f74e248dc973e0dbb7b74c7e0d6fcc301c694ff50049504004ef4d0cdcd9"
 dependencies = [
  "futures-util",
  "log",
- "rustls 0.23.15",
+ "rustls 0.23.19",
  "rustls-native-certs",
  "rustls-pki-types",
  "tokio",
@@ -2111,7 +2111,7 @@ dependencies = [
  "httparse",
  "log",
  "rand",
- "rustls 0.23.15",
+ "rustls 0.23.19",
  "rustls-pki-types",
  "sha1",
  "thiserror",

@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 
 # Nostr Stack
-nostro2 = "0.1.32"
+nostro2 = "0.1.33"
 
 # JSON manipulation
 serde = { version = "1.0.133", features = ["derive"] }

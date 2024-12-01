@@ -164,7 +164,6 @@ impl RelayProvider {
 
         spawn_local(async move {
             // Show initial connection attempt
-            ToastifyOptions::new_relay_connected("Connecting to relay pool").show();
 
             let mut relay_pool = match nostro2::relays::RelayPool::new(
                 relays.iter().map(|relay| relay.url.clone()).collect(),
@@ -194,8 +193,6 @@ impl RelayProvider {
                     }
                     Some(note) = relay_pool.note_channel.recv() => {
                         note_cb.emit(note.1);
-                        // Show notification for new note
-                        ToastifyOptions::new_event_received("note").show();
                     }
                     Some(note) = send_note_rx.recv() => {
                         if let Err(e) = relay_pool.broadcast_note(note) {

@@ -1,5 +1,5 @@
 use html::ChildrenProps;
-use minions::{
+use crate::{
     key_manager::NostrIdProvider,
     relay_pool::{RelayPoolTest, RelayProvider, UserRelay},
 };

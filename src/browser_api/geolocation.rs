@@ -1,3 +1,5 @@
+use crate::widgets::leaflet::LatLng;
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct GeolocationCoordinates {
     pub accuracy: f64,
@@ -16,6 +18,18 @@ impl Into<wasm_bindgen::JsValue> for GeolocationCoordinates {
 impl From<wasm_bindgen::JsValue> for GeolocationCoordinates {
     fn from(value: wasm_bindgen::JsValue) -> Self {
         serde_wasm_bindgen::from_value(value).unwrap()
+    }
+}
+impl From<LatLng> for GeolocationCoordinates {
+    fn from(value: LatLng) -> Self {
+        Self {
+            accuracy: 0.0,
+            altitude: None,
+            altitude_accuracy: None,
+            latitude: value.lat,
+            longitude: value.lng,
+            speed: None,
+        }
     }
 }
 

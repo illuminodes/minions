@@ -2,6 +2,7 @@ use super::component::LeafletComponent;
 use crate::browser_api::GeolocationCoordinates;
 use crate::relay_pool::NostrProps;
 use crate::widgets::leaflet::IconOptions;
+use crate::widgets::leaflet::nominatim::NominatimLookup;
 use crate::widgets::leaflet::{LatLng, LeafletLocateOptions, LeafletMap};
 use js_sys;
 use wasm_bindgen::JsValue;
@@ -253,14 +254,13 @@ pub fn leaflet_test() -> Html {
             <LeafletComponent
                 map_id="leaflet-map"
                 markers={(*markers).clone()}
-                show_location_name=true
                 on_map_created={Callback::from({
                     let map = map.clone();
                     move |map_instance: LeafletMap| map.set(Some(map_instance))
                 })}
                 on_location_name_changed={Callback::from({
                     let location_name = location_name.clone();
-                    move |name: String| location_name.set(name)
+                    move |name: NominatimLookup| location_name.set(name.display_name().to_string())
                 })}
             />
             <div class="flex gap-2">

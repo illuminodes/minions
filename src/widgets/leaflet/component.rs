@@ -62,7 +62,9 @@ pub fn leaflet_component(props: &Props) -> Html {
 
                         match icon_options {
                             Some(options) => {
-                                if let Ok(marker) = map_instance.add_marker_with_icon(&coords, options) {
+                                if let Ok(marker) =
+                                    map_instance.add_marker_with_icon(&coords, options)
+                                {
                                     let mut current_markers = (*markers).clone();
                                     current_markers.push(marker.clone());
                                     markers.set(current_markers);

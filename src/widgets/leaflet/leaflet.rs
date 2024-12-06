@@ -174,6 +174,8 @@ extern "C" {
     pub fn zoomIn(this: &LeafletMap);
     #[wasm_bindgen(method)]
     pub fn zoomOut(this: &LeafletMap);
+    #[wasm_bindgen(method)]
+    pub fn fitBounds(this: &LeafletMap, bounds: &JsValue);
     // Pane methods
     #[wasm_bindgen(method, js_name = "createPane")]
     pub fn create_pane(this: &LeafletMap, name: &str);

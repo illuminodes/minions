@@ -170,10 +170,7 @@ impl RelayProvider {
             )
             .await
             {
-                Ok(pool) => {
-                    ToastifyOptions::new_relay_connected("Connected to relay pool").show();
-                    pool
-                }
+                Ok(pool) => pool,
                 Err(e) => {
                     ToastifyOptions::new_relay_error(&format!(
                         "Failed to create relay pool: {}",
@@ -186,13 +183,15 @@ impl RelayProvider {
 
             loop {
                 tokio::select! {
-                    event = relay_pool.event_channel.recv() => {
-                        if let Some(event) = event {
-                            event_cb.emit(event);
+                    Some(note) = relay_pool.incoming_channel.recv() => {
+                        match note.1 {
+                            RelayEvent::NewNote( NoteEvent(_, _, note)) => {
+                                note_cb.emit(note);
+                            }
+                            event => {
+                                event_cb.emit(event);
+                            }
                         }
-                    }
-                    Some(note) = relay_pool.note_channel.recv() => {
-                        note_cb.emit(note.1);
                     }
                     Some(note) = send_note_rx.recv() => {
                         if let Err(e) = relay_pool.broadcast_note(note) {

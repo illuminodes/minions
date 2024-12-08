@@ -5,13 +5,13 @@ use yew::{platform::spawn_local, prelude::*};
 pub struct NostrId {
     has_loaded: bool,
     identity: Option<super::nostr_id::UserIdentity>,
-    keys: Option<nostro2::userkeys::UserKeys>,
+    keys: Option<nostro2::keypair::NostrKeypair>,
 }
 impl NostrId {
     pub fn finished_loading(&self) -> bool {
         self.has_loaded
     }
-    pub fn get_nostr_key(&self) -> Option<nostro2::userkeys::UserKeys> {
+    pub fn get_nostr_key(&self) -> Option<nostro2::keypair::NostrKeypair> {
         self.keys.clone()
     }
     pub fn get_identity(&self) -> Option<super::nostr_id::UserIdentity> {
@@ -21,7 +21,7 @@ impl NostrId {
 
 pub enum NostrIdAction {
     FinishedLoadingKey,
-    LoadIdentity(super::nostr_id::UserIdentity, nostro2::userkeys::UserKeys),
+    LoadIdentity(super::nostr_id::UserIdentity, nostro2::keypair::NostrKeypair),
     DeleteIdentity,
 }
 impl Reducible for NostrId {

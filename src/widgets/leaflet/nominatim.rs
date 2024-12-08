@@ -13,7 +13,6 @@ pub struct NominatimLookup {
     name: String,
     display_name: String,
 }
-
 impl NominatimLookup {
     pub fn long_as_f64(&self) -> f64 {
         self.lon.parse().unwrap_or(0.0)
@@ -64,6 +63,17 @@ impl NominatimLookup {
             Ok(nominatim)
         } else {
             Err(JsValue::from_str("No response body"))
+        }
+    }
+}
+impl Default for NominatimLookup {
+    fn default() -> Self {
+        Self {
+            place_id: 0,
+            lat: "0".to_string(),
+            lon: "0".to_string(),
+            name: "".to_string(),
+            display_name: "".to_string(),
         }
     }
 }

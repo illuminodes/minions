@@ -2,7 +2,7 @@ use crate::widgets::toastify::ToastifyOptions;
 use std::collections::HashMap;
 
 use nostro2::{
-    notes::SignedNote,
+    notes::NostrNote,
     relays::{NoteEvent, RelayEvent, SubscribeEvent},
 };
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
@@ -21,8 +21,8 @@ pub struct RelayContextProps {
 
 pub enum RelayAction {
     Event(RelayEvent),
-    UniqueNote(SignedNote),
-    SendNote(SignedNote),
+    UniqueNote(NostrNote),
+    SendNote(NostrNote),
     Subscribe(SubscribeEvent),
     Unsubscribe(String),
     Close,
@@ -31,20 +31,20 @@ pub enum RelayAction {
 #[derive(Properties, Clone, PartialEq)]
 pub struct NostrProps {
     pub relay_events: Vec<RelayEvent>,
-    pub unique_notes: Vec<SignedNote>,
-    pub send_note: Callback<SignedNote>,
+    pub unique_notes: Vec<NostrNote>,
+    pub send_note: Callback<NostrNote>,
     pub subscribe: Callback<SubscribeEvent>,
     pub unsubscribe: Callback<String>,
     pub close: Callback<()>,
 }
 pub struct RelayProvider {
     relay_events: Vec<RelayEvent>,
-    unique_notes: Vec<SignedNote>,
-    sender_channel: UnboundedSender<SignedNote>,
+    unique_notes: Vec<NostrNote>,
+    sender_channel: UnboundedSender<NostrNote>,
     filter_channel: UnboundedSender<SubscribeEvent>,
     unsubscribe_channel: UnboundedSender<String>,
     close_channel: UnboundedSender<()>,
-    send_note_callback: Callback<SignedNote>,
+    send_note_callback: Callback<NostrNote>,
     subscribe_callback: Callback<SubscribeEvent>,
     unsubscribe_callback: Callback<String>,
     close_callback: Callback<()>,
@@ -149,32 +149,28 @@ impl Component for RelayProvider {
 impl RelayProvider {
     fn read_relays(
         event_cb: Callback<RelayEvent>,
-        note_cb: Callback<SignedNote>,
+        note_cb: Callback<NostrNote>,
         relays: Vec<UserRelay>,
     ) -> (
-        UnboundedSender<SignedNote>,
+        UnboundedSender<NostrNote>,
         UnboundedSender<SubscribeEvent>,
         UnboundedSender<String>,
         UnboundedSender<()>,
     ) {
-        let (send_note_tx, mut send_note_rx) = unbounded_channel::<SignedNote>();
+        let (send_note_tx, mut send_note_rx) = unbounded_channel::<NostrNote>();
         let (filter_tx, mut filter_rx) = unbounded_channel::<SubscribeEvent>();
         let (unsubscribe_tx, mut unsubscribe_rx) = unbounded_channel::<String>();
         let (close_tx, mut close_rx) = unbounded_channel::<()>();
 
         spawn_local(async move {
             // Show initial connection attempt
-            ToastifyOptions::new_relay_connected("Connecting to relay pool").show();
 
-            let mut relay_pool = match nostro2::relays::RelayPool::new(
+            let mut relay_pool = match nostro2::relays::NostrRelayPool::new(
                 relays.iter().map(|relay| relay.url.clone()).collect(),
             )
             .await
             {
-                Ok(pool) => {
-                    ToastifyOptions::new_relay_connected("Connected to relay pool").show();
-                    pool
-                }
+                Ok(pool) => pool,
                 Err(e) => {
                     ToastifyOptions::new_relay_error(&format!(
                         "Failed to create relay pool: {}",
@@ -187,30 +183,30 @@ impl RelayProvider {
 
             loop {
                 tokio::select! {
-                    event = relay_pool.event_channel.recv() => {
-                        if let Some(event) = event {
-                            event_cb.emit(event);
+                    Some(note) = relay_pool.listener.recv() => {
+                        match note.1 {
+                            RelayEvent::NewNote( NoteEvent(_, _, note)) => {
+                                note_cb.emit(note);
+                            }
+                            event => {
+                                event_cb.emit(event);
+                            }
                         }
                     }
-                    Some(note) = relay_pool.note_channel.recv() => {
-                        note_cb.emit(note.1);
-                        // Show notification for new note
-                        ToastifyOptions::new_event_received("note").show();
-                    }
                     Some(note) = send_note_rx.recv() => {
-                        if let Err(e) = relay_pool.broadcast_note(note) {
+                        if let Err(e) = relay_pool.broadcast_note(note).await {
                             ToastifyOptions::new_relay_error(&format!("Error broadcasting note: {}", e))
                                 .show();
                         }
                     }
                     Some(filter) = filter_rx.recv() => {
-                        if let Err(e) = relay_pool.subscribe(filter) {
+                        if let Err(e) = relay_pool.subscribe(filter).await {
                             ToastifyOptions::new_relay_error(&format!("Error subscribing: {}", e))
                                 .show();
                         }
                     }
                     Some(filter_id) = unsubscribe_rx.recv() => {
-                        if let Err(e) = relay_pool.cancel_subscription(filter_id) {
+                        if let Err(e) = relay_pool.cancel_subscription(filter_id).await {
                             ToastifyOptions::new_relay_error(&format!("Error unsubscribing: {}", e))
                                 .show();
                         }
@@ -240,7 +236,7 @@ impl RelayProvider {
                 _ => None,
             })
             .fold(HashMap::new(), |mut acc, note| {
-                acc.insert(note.get_id().to_string(), note);
+                acc.insert(note.id.clone().unwrap(), note);
                 acc
             });
         props!(NostrProps {
@@ -253,7 +249,7 @@ impl RelayProvider {
         })
     }
 
-    fn send_nostr_note(&self, signed_note: SignedNote) -> Result<(), JsValue> {
+    fn send_nostr_note(&self, signed_note: NostrNote) -> Result<(), JsValue> {
         let _ = self
             .sender_channel
             .send(signed_note)
@@ -280,7 +276,7 @@ impl RelayProvider {
     fn add_event(&mut self, event: RelayEvent) {
         self.relay_events.push(event);
     }
-    fn add_unique_note(&mut self, note: SignedNote) {
+    fn add_unique_note(&mut self, note: NostrNote) {
         self.unique_notes.push(note);
     }
 

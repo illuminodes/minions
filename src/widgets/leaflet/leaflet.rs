@@ -8,6 +8,13 @@ pub struct LatLng {
     pub lat: f64,
     pub lng: f64,
 }
+impl TryFrom<yew::MouseEvent> for LatLng {
+    type Error = JsValue;
+    fn try_from(value: yew::MouseEvent) -> Result<Self, Self::Error> {
+        let reflected = js_sys::Reflect::get(&value, &"latlng".into())?;
+        serde_wasm_bindgen::from_value(reflected).map_err(|e| e.into())
+    }
+}
 impl TryInto<JsValue> for LatLng {
     type Error = JsValue;
     fn try_into(self) -> Result<JsValue, Self::Error> {
@@ -118,9 +125,17 @@ extern "C" {
     pub fn map_with_options(id: &str, options: JsValue) -> LeafletMap;
 }
 impl L {
-    pub fn render_map(id: &str, coords: &GeolocationCoordinates) -> Result<LeafletMap, JsValue> {
+    pub fn render_map(
+        id: &str,
+        coords: &GeolocationCoordinates,
+        options: Option<LeafletMapOptions>,
+    ) -> Result<LeafletMap, JsValue> {
         let lat_lng: LatLng = coords.into();
-        let mut map_options = LeafletMapOptions::default();
+        let mut map_options = if let Some(opts) = options {
+            opts.clone()
+        } else {
+            LeafletMapOptions::default()
+        };
         map_options.center = Some(lat_lng.clone());
         let js_options: JsValue = map_options.try_into()?;
         let map = L::map_with_options(id, js_options);
@@ -159,6 +174,8 @@ extern "C" {
     pub fn zoomIn(this: &LeafletMap);
     #[wasm_bindgen(method)]
     pub fn zoomOut(this: &LeafletMap);
+    #[wasm_bindgen(method)]
+    pub fn fitBounds(this: &LeafletMap, bounds: &JsValue);
     // Pane methods
     #[wasm_bindgen(method, js_name = "createPane")]
     pub fn create_pane(this: &LeafletMap, name: &str);

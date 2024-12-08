@@ -1,4 +1,4 @@
-use nostro2::userkeys::UserKeys;
+use nostro2::keypair::NostrKeypair;
 use wasm_bindgen::{JsCast, JsValue};
 use web_sys::CryptoKey;
 
@@ -21,7 +21,7 @@ impl UserIdentity {
         Self::retrieve_from_store::<Self>(&JsValue::from_str("privateKey")).await
     }
     pub async fn new_local_identity() -> Result<Self, JsValue> {
-        let user_key = UserKeys::generate_extractable();
+        let user_key = NostrKeypair::generate(true);
         let crypto_key = BrowserCrypto::default()
             .crypto_key_from_bytes(&user_key.get_secret_key())
             .await?;
@@ -32,7 +32,7 @@ impl UserIdentity {
         new_identity.clone().save_to_store().await?;
         Ok(new_identity)
     }
-    pub async fn from_new_keys(keys: UserKeys) -> Result<Self, JsValue> {
+    pub async fn from_new_keys(keys: NostrKeypair) -> Result<Self, JsValue> {
         let crypto_key: CryptoKey = BrowserCrypto::default()
             .crypto_key_from_bytes(&keys.get_secret_key())
             .await?;
@@ -43,11 +43,11 @@ impl UserIdentity {
         user_identity.clone().save_to_store().await?;
         Ok(user_identity)
     }
-    pub async fn get_user_keys(&self) -> Result<UserKeys, JsValue> {
+    pub async fn get_user_keys(&self) -> Result<NostrKeypair, JsValue> {
         let key = BrowserCrypto::default()
             .crypto_key_to_hex(self.crypto_key.clone())
             .await?;
-        Ok(UserKeys::new_extractable(&key).map_err(|e| JsValue::from_str(&e.to_string()))?)
+        Ok(NostrKeypair::new_extractable(&key).map_err(|e| JsValue::from_str(&e.to_string()))?)
     }
     pub fn get_pubkey(&self) -> String {
         self.pubkey.clone()
@@ -107,10 +107,10 @@ mod tests {
     #[wasm_bindgen_test]
     async fn _user_identity_fb() -> Result<(), JsValue> {
         init_nostr_db().unwrap();
-        let user_identity = UserIdentity::new_local_identity().await.unwrap();
-        let user_keys = user_identity.get_user_keys().await.unwrap();
-        let user_identity = UserIdentity::find_local_identity().await.unwrap();
-        let user_keys2 = user_identity.get_user_keys().await.unwrap();
+        let user_identity = UserIdentity::new_local_identity().await?;
+        let user_keys = user_identity.get_user_keys().await?;
+        let user_identity = UserIdentity::find_local_identity().await?;
+        let user_keys2 = user_identity.get_user_keys().await?;
         assert_eq!(user_keys, user_keys2);
         Ok(())
     }

@@ -1,3 +1,18 @@
-/target
-/dist
-/public/styles/output.css
+**/target/
+**/dist/
+**/node_modules/
+/test
+
+# Ignore output.css files
+**/output*.css
+
+# Ignore secret files
+*.pem
+*.key
+*.macaroon
+
+
+# Ignore text scripts
+*.sh
+
+

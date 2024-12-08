@@ -4,9 +4,6 @@ pub mod relay_pool;
 pub mod router;
 pub mod widgets;
 
-// #[cfg(debug_assertions)]
-// mod test_app;
-
 pub const DB_NAME: &str = "nostr_db";
 pub const DB_VERSION: u32 = 2;
 pub const RELAY_STORE: &str = "user_relays";
@@ -54,3 +51,6 @@ fn upgrade_nostr_db(event: web_sys::Event) -> Result<(), JsValue> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod test_app;

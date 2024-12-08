@@ -1,6 +1,7 @@
 mod nostr_relay;
 mod relay_pool;
 pub use nostr_relay::*;
+use nostro2::notes::NostrNote;
 pub use relay_pool::*;
 
 #[yew::function_component(RelayPoolTest)]
@@ -17,11 +18,12 @@ pub fn relay_pool_test() -> yew::Html {
             ..Default::default()
         }
         .relay_subscription();
-        let kind_one_filter = nostro2::relays::NostrSubscription{
+        let kind_one_filter = nostro2::relays::NostrSubscription {
             kinds: Some(vec![1]),
             limit: Some(20),
             ..Default::default()
-        }.relay_subscription();
+        }
+        .relay_subscription();
         id_handle.set(Some(nostr_sub.1.clone()));
         subscriber.emit(nostr_sub);
         subscriber.emit(kind_one_filter);
@@ -33,10 +35,10 @@ pub fn relay_pool_test() -> yew::Html {
     let counter_handle = note_counter.clone();
     yew::use_effect_with(relay_ctx.unique_notes.clone(), move |notes| {
         if let Some(note) = notes.last() {
-            if note.get_kind() == 20001 {
+            if note.kind == 20001 {
                 note_handle.set(Some(note.clone()));
             }
-            if note.get_kind() == 1 {
+            if note.kind == 1 {
                 counter_handle.set(*counter_handle + 1);
             }
         }
@@ -45,11 +47,15 @@ pub fn relay_pool_test() -> yew::Html {
 
     let note_sender = relay_ctx.send_note.clone();
     let send_note_onclick = yew::Callback::from(move |_| {
-        let new_keys = nostro2::userkeys::UserKeys::generate();
-        let new_note =
-            nostro2::notes::Note::new(&new_keys.get_public_key(), 20001, &format!("Minion Note"));
-        let signed_note = new_keys.sign_nostr_event(new_note);
-        note_sender.emit(signed_note);
+        let new_keys = nostro2::keypair::NostrKeypair::generate(false);
+        let mut new_note = NostrNote {
+            content: "Minion Note".to_string(),
+            kind: 20001,
+            pubkey: new_keys.public_key().to_string(),
+            ..Default::default()
+        };
+        new_keys.sign_nostr_event(&mut new_note);
+        note_sender.emit(new_note);
     });
 
     match subscription_id.as_ref() {
@@ -79,7 +85,7 @@ pub fn relay_pool_test() -> yew::Html {
                             Some(note) => yew::html! {
                                 <div>
                                     <h3>{"My Latest Note"}</h3>
-                                    <p>{note.get_content()}</p>
+                                    <p>{note.content.as_str()}</p>
                                 </div>
                             },
                             None => yew::html! { <div>{"Send a note!"}</div> },

@@ -4,8 +4,9 @@ use crate::{
     relay_pool::{RelayPoolTest, RelayProvider, UserRelay},
 };
 use yew::prelude::*;
-
-fn main() {
+// Uncomment the following line to enable the app demo
+// #[wasm_bindgen_test::wasm_bindgen_test]
+fn _main_app() {
     yew::Renderer::<App>::new().render();
 }
 

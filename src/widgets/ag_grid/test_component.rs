@@ -1,6 +1,6 @@
 use crate::relay_pool::NostrProps;
-use crate::widgets::ag_grid::{AgGridComponent, create_column};
-use nostro2::notes::SignedNote;
+use crate::widgets::ag_grid::{create_column, AgGridComponent};
+use nostro2::notes::NostrNote;
 use serde::Serialize;
 use yew::prelude::*;
 
@@ -9,18 +9,18 @@ struct NostrNoteRow {
     id: String,
     pubkey: String,
     content: String,
-    created_at: u64,  
-    kind: u32,        
+    created_at: i64,
+    kind: u32,
 }
 
-impl From<&SignedNote> for NostrNoteRow {
-    fn from(note: &SignedNote) -> Self {
+impl From<&NostrNote> for NostrNoteRow {
+    fn from(note: &NostrNote) -> Self {
         NostrNoteRow {
-            id: note.get_id().to_string(),
-            pubkey: note.get_pubkey().to_string(),
-            content: note.get_content().to_string(),
-            created_at: note.get_created_at(),
-            kind: note.get_kind(),
+            id: note.id.clone().unwrap_or_default(),
+            pubkey: note.pubkey.clone(),
+            content: note.content.clone(),
+            created_at: note.created_at,
+            kind: note.kind,
         }
     }
 }
@@ -33,20 +33,17 @@ pub fn nostr_notes_grid() -> Html {
         let rows = rows.clone();
         let notes = relay_ctx.unique_notes.clone();
 
-        use_effect_with(
-            notes,
-            move |notes| {
-                // Convert notes to row data
-                let new_rows: Vec<NostrNoteRow> = notes
-                    .iter()
-                    .filter(|note| note.get_kind() == 1)
-                    .map(NostrNoteRow::from)
-                    .collect();
-                
-                rows.set(new_rows);
-                || ()
-            }
-        );
+        use_effect_with(notes, move |notes| {
+            // Convert notes to row data
+            let new_rows: Vec<NostrNoteRow> = notes
+                .iter()
+                .filter(|note| note.kind == 1)
+                .map(NostrNoteRow::from)
+                .collect();
+
+            rows.set(new_rows);
+            || ()
+        });
     }
 
     let columns = vec![

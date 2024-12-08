@@ -1,10 +1,11 @@
 use super::component::LeafletComponent;
 use crate::browser_api::GeolocationCoordinates;
 use crate::relay_pool::NostrProps;
-use crate::widgets::leaflet::IconOptions;
 use crate::widgets::leaflet::nominatim::NominatimLookup;
+use crate::widgets::leaflet::IconOptions;
 use crate::widgets::leaflet::{LatLng, LeafletLocateOptions, LeafletMap};
 use js_sys;
+use nostro2::notes::NostrNote;
 use wasm_bindgen::JsValue;
 use web_sys::MouseEvent;
 use yew::prelude::*;
@@ -71,11 +72,15 @@ pub fn leaflet_test() -> Html {
 
                 // Send Nostr event
                 let content = serde_json::to_string(&coords).unwrap();
-                let new_keys = nostro2::userkeys::UserKeys::generate();
-                let new_note =
-                    nostro2::notes::Note::new(&new_keys.get_public_key(), 27235, &content);
-                let signed_note = new_keys.sign_nostr_event(new_note);
-                note_sender.emit(signed_note);
+                let new_keys = nostro2::keypair::NostrKeypair::generate(false);
+                let mut new_note = NostrNote {
+                    pubkey: new_keys.public_key(),
+                    kind: 27235,
+                    content,
+                    ..Default::default()
+                };
+                new_keys.sign_nostr_event(&mut new_note);
+                note_sender.emit(new_note);
             }
 
             crate::widgets::toastify::ToastifyOptions::new_event_received(

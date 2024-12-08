@@ -1210,7 +1210,7 @@ dependencies = [
 
 [[package]]
 name = "nostr-minions"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "gloo 0.11.0",
  "gloo-timers 0.3.0",
@@ -1230,9 +1230,9 @@ dependencies = [
 
 [[package]]
 name = "nostro2"
-version = "0.1.35"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "851f0d89dc551ca00a74858dbc548937bcd5e9da42bbd01a6f32b48c9aba7f11"
+checksum = "5efde2fc26074cf6c39c1d0d88235f3d22666371682c7f3b5aa07f24d1536f82"
 dependencies = [
  "anyhow",
  "base64",
@@ -1245,7 +1245,6 @@ dependencies = [
  "hkdf",
  "hmac",
  "libaes",
- "rand",
  "ring",
  "rustls 0.23.19",
  "secp256k1",
@@ -1258,8 +1257,6 @@ dependencies = [
  "tokio-tungstenite-wasm",
  "tracing",
  "tracing-subscriber",
- "url",
- "wasm-bindgen",
  "wasm-bindgen-futures",
 ]
 

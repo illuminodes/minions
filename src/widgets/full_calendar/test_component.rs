@@ -2,7 +2,7 @@ use super::{FullCalendarComponent, FullCalendarEvent};
 use crate::relay_pool::NostrProps;
 use crate::widgets::toastify::ToastifyOptions;
 use js_sys::Date;
-use nostro2::notes::SignedNote;
+use nostro2::notes::NostrNote;
 use nostro2::relays::NostrSubscription;
 use serde_json::json;
 use wasm_bindgen::JsValue;
@@ -31,11 +31,11 @@ pub fn calendar_test() -> Html {
     }
 
     // Convert notes to calendar events
-    let convert_note_to_event = |note: &SignedNote| -> Option<FullCalendarEvent> {
-        gloo::console::log!("Processing note:", note.get_kind());
-        if note.get_kind() == 31924 {
-            gloo::console::log!("Found calendar note:", note.get_content());
-            if let Ok(content) = serde_json::from_str::<serde_json::Value>(&note.get_content()) {
+    let convert_note_to_event = |note: &NostrNote| -> Option<FullCalendarEvent> {
+        gloo::console::log!("Processing note:", note.kind);
+        if note.kind == 31924 {
+            gloo::console::log!("Found calendar note:", note.content.as_str());
+            if let Ok(content) = serde_json::from_str::<serde_json::Value>(&note.content) {
                 gloo::console::log!("Parsed content:", content.to_string());
 
                 let start_str = content["start"].as_str()?;
@@ -47,14 +47,14 @@ pub fn calendar_test() -> Html {
                 let title = content["title"].as_str()?;
 
                 let event = FullCalendarEvent::new(
-                    &note.get_id().to_string(),
+                    note.id.as_ref().unwrap().as_str(),
                     title,
                     start,
                     end,
                     FullCalendarEvent::COLOR_BLUE,
                     json!({
-                        "noteId": note.get_id().to_string(),
-                        "pubkey": note.get_pubkey().to_string(),
+                        "noteId": note.id.as_ref().unwrap(),
+                        "pubkey": note.pubkey,
                         "kind": 31924,
                     }),
                 );
@@ -111,14 +111,21 @@ pub fn calendar_test() -> Html {
 
             gloo::console::log!("Event content:", content.to_string());
 
-            let new_keys = nostro2::userkeys::UserKeys::generate();
-            let new_note =
-                nostro2::notes::Note::new(&new_keys.get_public_key(), 31924, &content.to_string());
-            let signed_note = new_keys.sign_nostr_event(new_note);
+            let new_keys = nostro2::keypair::NostrKeypair::generate(false);
+            let mut new_note = NostrNote {
+                pubkey: new_keys.public_key(),
+                kind: 31924,
+                content: content.to_string(),
+                ..Default::default()
+            };
+            new_keys.sign_nostr_event(&mut new_note);
 
-            gloo::console::log!("Sending note to relay:", signed_note.get_id().to_string());
+            gloo::console::log!(
+                "Sending note to relay:",
+                new_note.id.as_ref().unwrap().as_str()
+            );
 
-            relay_ctx.send_note.emit(signed_note);
+            relay_ctx.send_note.emit(new_note);
 
             ToastifyOptions::new_success("Created new calendar event").show();
         })
@@ -134,8 +141,11 @@ pub fn calendar_test() -> Html {
             let calendar_events: Vec<FullCalendarEvent> = notes
                 .iter()
                 .filter_map(|note| {
-                    if note.get_kind() == 31924 {
-                        gloo::console::log!("Processing calendar note:", note.get_id().to_string());
+                    if note.kind == 31924 {
+                        gloo::console::log!(
+                            "Processing calendar note:",
+                            note.id.as_ref().unwrap().as_str()
+                        );
                     }
                     convert_note_to_event(note)
                 })
@@ -169,4 +179,3 @@ pub fn calendar_test() -> Html {
         </div>
     }
 }
-

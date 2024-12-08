@@ -194,19 +194,19 @@ impl RelayProvider {
                         }
                     }
                     Some(note) = send_note_rx.recv() => {
-                        if let Err(e) = relay_pool.broadcast_note(note).await {
+                        if let Err(e) = relay_pool.writer.broadcast_note(note).await {
                             ToastifyOptions::new_relay_error(&format!("Error broadcasting note: {}", e))
                                 .show();
                         }
                     }
                     Some(filter) = filter_rx.recv() => {
-                        if let Err(e) = relay_pool.subscribe(filter).await {
+                        if let Err(e) = relay_pool.writer.subscribe(filter).await {
                             ToastifyOptions::new_relay_error(&format!("Error subscribing: {}", e))
                                 .show();
                         }
                     }
                     Some(filter_id) = unsubscribe_rx.recv() => {
-                        if let Err(e) = relay_pool.cancel_subscription(filter_id).await {
+                        if let Err(e) = relay_pool.writer.cancel_subscription(filter_id).await {
                             ToastifyOptions::new_relay_error(&format!("Error unsubscribing: {}", e))
                                 .show();
                         }

@@ -28,7 +28,7 @@ web-sys = { version = "0.3.70", features = ["HtmlInputElement", "HtmlFormElement
 "IdbObjectStoreParameters", "Navigator", "ServiceWorkerContainer", "FetchEvent", "CustomEvent", "DomStringList"] }
 
 # I/O
-tokio = { version = "1.41.0", features = ["macros", "sync"] }
+tokio = { version = "1.42.0", features = ["macros", "sync"] }
 wasm-bindgen-futures = "0.4.45"
 
 # PWA stack

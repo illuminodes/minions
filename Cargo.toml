@@ -10,7 +10,7 @@ homepage = "https://github.com/illuminodes/minions"
 
 [dependencies]
 # Nostr Stack
-nostro2 = "0.2.1"
+nostro2 = "0.2.2"
 
 # JSON manipulation
 serde = { version = "1.0.133", features = ["derive"] }

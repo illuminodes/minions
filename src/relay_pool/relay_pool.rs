@@ -7,7 +7,7 @@ use nostro2::{
 };
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
-use wasm_bindgen::JsValue;
+use web_sys::wasm_bindgen::JsValue;
 use yew::platform::spawn_local;
 use yew::{prelude::*, props};
 

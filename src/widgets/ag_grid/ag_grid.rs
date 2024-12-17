@@ -1,8 +1,8 @@
 use gloo::utils::format::JsValueSerdeExt;
 use serde::{Deserialize, Serialize};
-use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsValue;
+use web_sys::wasm_bindgen::JsValue;
 use web_sys::Element;
+use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 extern "C" {

@@ -1,4 +1,4 @@
-use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
+use web_sys::wasm_bindgen::{prelude::Closure, JsCast, JsValue};
 use web_sys::{HtmlFormElement, HtmlInputElement, HtmlSelectElement, SubmitEvent};
 
 pub struct HtmlDocument {
@@ -36,7 +36,7 @@ impl HtmlDocument {
     pub fn edit_document_title(self, title: &str) {
         self.document.set_title(title);
 
-        let closure: js_sys::Function = Closure::<dyn FnMut()>::new(move || {
+        let closure: web_sys::js_sys::Function = Closure::<dyn FnMut()>::new(move || {
             self.document.set_title("Portal SALUD");
         })
         .into_js_value()

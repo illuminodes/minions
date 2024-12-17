@@ -1,4 +1,4 @@
-use wasm_bindgen::JsValue;
+use web_sys::wasm_bindgen::JsValue;
 
 pub struct AppServiceWorker {
     sw: web_sys::ServiceWorkerContainer,

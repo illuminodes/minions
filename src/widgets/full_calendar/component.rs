@@ -5,7 +5,7 @@ use yew::prelude::*;
 use super::full_calendar::{
     Calendar, FullCalendarEvent, FullCalendarOptions, FullCalendarSelectEvent,
 };
-use js_sys::Date;
+use web_sys::js_sys::Date;
 use wasm_bindgen::JsValue;
 
 #[derive(Properties, PartialEq)]

@@ -1,5 +1,5 @@
 use nostro2::keypair::NostrKeypair;
-use wasm_bindgen::{JsCast, JsValue};
+use web_sys::wasm_bindgen::{JsCast, JsValue};
 use web_sys::CryptoKey;
 
 use crate::{
@@ -55,14 +55,14 @@ impl UserIdentity {
 }
 impl Into<JsValue> for UserIdentity {
     fn into(self) -> JsValue {
-        let obj = js_sys::Object::new();
-        js_sys::Reflect::set(
+        let obj = web_sys::js_sys::Object::new();
+        web_sys::js_sys::Reflect::set(
             &obj,
             &JsValue::from_str("pubkey"),
             &JsValue::from_str(&self.pubkey),
         )
         .unwrap();
-        js_sys::Reflect::set(
+        web_sys::js_sys::Reflect::set(
             &obj,
             &JsValue::from_str("crypto_key"),
             &self.crypto_key.into(),
@@ -74,11 +74,11 @@ impl Into<JsValue> for UserIdentity {
 impl TryFrom<JsValue> for UserIdentity {
     type Error = JsValue;
     fn try_from(value: JsValue) -> Result<Self, Self::Error> {
-        let obj = js_sys::Object::try_from(&value).ok_or(JsValue::from_str("Not an object"))?;
-        let pubkey = js_sys::Reflect::get(&obj, &JsValue::from_str("pubkey"))?
+        let obj = web_sys::js_sys::Object::try_from(&value).ok_or(JsValue::from_str("Not an object"))?;
+        let pubkey = web_sys::js_sys::Reflect::get(&obj, &JsValue::from_str("pubkey"))?
             .as_string()
             .ok_or(JsValue::from_str("id not found"))?;
-        let crypto_key = js_sys::Reflect::get(&obj, &JsValue::from_str("crypto_key"))?;
+        let crypto_key = web_sys::js_sys::Reflect::get(&obj, &JsValue::from_str("crypto_key"))?;
         let crypto_key = crypto_key.dyn_into::<CryptoKey>()?;
         Ok(UserIdentity { pubkey, crypto_key })
     }

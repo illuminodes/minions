@@ -1,4 +1,4 @@
-use wasm_bindgen::{JsCast, JsValue};
+use web_sys::wasm_bindgen::{JsCast, JsValue};
 use web_sys::{AesKeyGenParams, CryptoKey, SubtleCrypto};
 
 pub struct BrowserCrypto {
@@ -15,10 +15,10 @@ impl Default for BrowserCrypto {
 }
 impl BrowserCrypto {
     pub async fn crypto_key_from_bytes(&self, p_key: &[u8; 32]) -> Result<CryptoKey, JsValue> {
-        let array = js_sys::Uint8Array::from(&p_key[..]);
-        let key_object: js_sys::Object = array.buffer().into();
+        let array = web_sys::js_sys::Uint8Array::from(&p_key[..]);
+        let key_object: web_sys::js_sys::Object = array.buffer().into();
         let algo = AesKeyGenParams::new("AES-GCM", 256);
-        let usage_tags: js_sys::Array =
+        let usage_tags: web_sys::js_sys::Array =
             vec![JsValue::from_str("encrypt"), JsValue::from_str("decrypt")]
                 .iter()
                 .collect();
@@ -31,8 +31,8 @@ impl BrowserCrypto {
     pub async fn crypto_key_to_hex(&self, js_value: CryptoKey) -> Result<String, JsValue> {
         let key =
             wasm_bindgen_futures::JsFuture::from(self.crypto.export_key("raw", &js_value)?).await?;
-        let key_array: js_sys::ArrayBuffer = key.into();
-        let key_array = js_sys::Uint8Array::new(&key_array);
+        let key_array: web_sys::js_sys::ArrayBuffer = key.into();
+        let key_array = web_sys::js_sys::Uint8Array::new(&key_array);
         let key_array = key_array.to_vec();
         Ok(key_array
             .iter()

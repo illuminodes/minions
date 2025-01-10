@@ -3,11 +3,11 @@ use std::collections::HashMap;
 
 use nostro2::{
     notes::NostrNote,
-    relays::{NoteEvent, RelayEvent, SubscribeEvent},
+    relays::{CloseEvent, RelayEvent, SubscribeEvent},
 };
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
 
-use wasm_bindgen::JsValue;
+use web_sys::wasm_bindgen::JsValue;
 use yew::platform::spawn_local;
 use yew::{prelude::*, props};
 
@@ -183,9 +183,9 @@ impl RelayProvider {
 
             loop {
                 tokio::select! {
-                    Some(note) = relay_pool.listener.recv() => {
+                    Some(note) = relay_pool.reader.recv() => {
                         match note.1 {
-                            RelayEvent::NewNote( NoteEvent(_, _, note)) => {
+                            RelayEvent::NewNote((_, _, note)) => {
                                 note_cb.emit(note);
                             }
                             event => {
@@ -194,19 +194,20 @@ impl RelayProvider {
                         }
                     }
                     Some(note) = send_note_rx.recv() => {
-                        if let Err(e) = relay_pool.writer.broadcast_note(note).await {
+                        if let Err(e) = relay_pool.broadcaster.send(note.into()) {
                             ToastifyOptions::new_relay_error(&format!("Error broadcasting note: {}", e))
                                 .show();
                         }
                     }
                     Some(filter) = filter_rx.recv() => {
-                        if let Err(e) = relay_pool.writer.subscribe(filter).await {
+                        if let Err(e) = relay_pool.broadcaster.send(filter.into()) {
                             ToastifyOptions::new_relay_error(&format!("Error subscribing: {}", e))
                                 .show();
                         }
                     }
                     Some(filter_id) = unsubscribe_rx.recv() => {
-                        if let Err(e) = relay_pool.writer.cancel_subscription(filter_id).await {
+                        let close_event: CloseEvent = filter_id.into();
+                        if let Err(e) = relay_pool.broadcaster.send(close_event.into()) {
                             ToastifyOptions::new_relay_error(&format!("Error unsubscribing: {}", e))
                                 .show();
                         }
@@ -232,7 +233,7 @@ impl RelayProvider {
             .relay_events
             .iter()
             .filter_map(|event| match event {
-                RelayEvent::NewNote(NoteEvent(_, _, note)) => Some(note.clone()),
+                RelayEvent::NewNote((_, _, note)) => Some(note.clone()),
                 _ => None,
             })
             .fold(HashMap::new(), |mut acc, note| {

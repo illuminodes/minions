@@ -1,3 +1,5 @@
+use gloo::utils::format::JsValueSerdeExt;
+
 use crate::widgets::leaflet::LatLng;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -10,14 +12,17 @@ pub struct GeolocationCoordinates {
     pub longitude: f64,
     pub speed: Option<f64>,
 }
-impl Into<wasm_bindgen::JsValue> for GeolocationCoordinates {
-    fn into(self) -> wasm_bindgen::JsValue {
-        serde_wasm_bindgen::to_value(&self).unwrap()
+impl Into<web_sys::wasm_bindgen::JsValue> for GeolocationCoordinates {
+    fn into(self) -> web_sys::wasm_bindgen::JsValue {
+        web_sys::wasm_bindgen::JsValue::from_serde(&self).unwrap()
     }
 }
-impl From<wasm_bindgen::JsValue> for GeolocationCoordinates {
-    fn from(value: wasm_bindgen::JsValue) -> Self {
-        serde_wasm_bindgen::from_value(value).unwrap()
+impl TryFrom<web_sys::wasm_bindgen::JsValue> for GeolocationCoordinates {
+    type Error = web_sys::wasm_bindgen::JsValue;
+    fn try_from(value: web_sys::wasm_bindgen::JsValue) -> Result<Self, Self::Error> {
+        value
+            .into_serde()
+            .map_err(|e| web_sys::wasm_bindgen::JsValue::from_str(&e.to_string()))
     }
 }
 impl From<LatLng> for GeolocationCoordinates {
@@ -39,40 +44,50 @@ pub struct GeolocationPosition {
     pub timestamp: f64,
 }
 impl GeolocationPosition {
-    pub async fn locate() -> Result<Self, wasm_bindgen::JsValue> {
-        let window =
-            web_sys::window().ok_or(wasm_bindgen::JsValue::from_str("No window available"))?;
+    pub async fn locate() -> Result<Self, web_sys::wasm_bindgen::JsValue> {
+        let window = web_sys::window().ok_or(web_sys::wasm_bindgen::JsValue::from_str(
+            "No window available",
+        ))?;
         let geolocation = window.navigator().geolocation()?;
         let (sender, receiver) = yew::platform::pinned::oneshot::channel::<GeolocationPosition>();
-        let on_success: js_sys::Function =
-            wasm_bindgen::closure::Closure::once_into_js(move |event: web_sys::Geolocation| {
-                if let Ok(geo) = GeolocationPosition::try_from(event) {
-                    let _ = sender.send(geo);
-                }
-            })
+        let on_success: web_sys::js_sys::Function =
+            web_sys::wasm_bindgen::closure::Closure::once_into_js(
+                move |event: web_sys::Geolocation| {
+                    if let Ok(geo) = GeolocationPosition::try_from(event) {
+                        let _ = sender.send(geo);
+                    }
+                },
+            )
             .into();
         geolocation.get_current_position(&on_success)?;
         receiver
             .await
-            .map_err(|e| wasm_bindgen::JsValue::from_str(&e.to_string()))
+            .map_err(|e| web_sys::wasm_bindgen::JsValue::from_str(&e.to_string()))
     }
 }
-impl TryFrom<wasm_bindgen::JsValue> for GeolocationPosition {
-    type Error = wasm_bindgen::JsValue;
-    fn try_from(value: wasm_bindgen::JsValue) -> Result<Self, Self::Error> {
-        Ok(serde_wasm_bindgen::from_value(value)?)
+impl TryFrom<web_sys::wasm_bindgen::JsValue> for GeolocationPosition {
+    type Error = web_sys::wasm_bindgen::JsValue;
+    fn try_from(value: web_sys::wasm_bindgen::JsValue) -> Result<Self, Self::Error> {
+        let value = value
+            .into_serde()
+            .map_err(|e| web_sys::wasm_bindgen::JsValue::from_str(&e.to_string()))?;
+        Ok(value)
     }
 }
-impl TryInto<wasm_bindgen::JsValue> for GeolocationPosition {
-    type Error = wasm_bindgen::JsValue;
-    fn try_into(self) -> Result<wasm_bindgen::JsValue, Self::Error> {
-        Ok(serde_wasm_bindgen::to_value(&self)?)
+impl TryInto<web_sys::wasm_bindgen::JsValue> for GeolocationPosition {
+    type Error = web_sys::wasm_bindgen::JsValue;
+    fn try_into(self) -> Result<web_sys::wasm_bindgen::JsValue, Self::Error> {
+        web_sys::wasm_bindgen::JsValue::from_serde(&self)
+            .map_err(|e| web_sys::wasm_bindgen::JsValue::from_str(&e.to_string()))
     }
 }
 impl TryFrom<web_sys::Geolocation> for GeolocationPosition {
-    type Error = wasm_bindgen::JsValue;
-    fn try_from(value: web_sys::Geolocation) -> Result<Self, Self::Error> {
-        Ok(serde_wasm_bindgen::from_value(value.into())?)
+    type Error = web_sys::wasm_bindgen::JsValue;
+    fn try_from(coords: web_sys::Geolocation) -> Result<Self, Self::Error> {
+        let js_value: web_sys::wasm_bindgen::JsValue = coords.into();
+        js_value
+            .into_serde()
+            .map_err(|e| web_sys::wasm_bindgen::JsValue::from_str(&e.to_string()))
     }
 }
 

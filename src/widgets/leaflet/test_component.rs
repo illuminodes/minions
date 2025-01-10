@@ -4,7 +4,6 @@ use crate::relay_pool::NostrProps;
 use crate::widgets::leaflet::nominatim::NominatimLookup;
 use crate::widgets::leaflet::IconOptions;
 use crate::widgets::leaflet::{LatLng, LeafletLocateOptions, LeafletMap};
-use js_sys;
 use nostro2::notes::NostrNote;
 use wasm_bindgen::JsValue;
 use web_sys::MouseEvent;
@@ -133,9 +132,9 @@ pub fn leaflet_test() -> Html {
                     web_sys::console::log_1(&event);
 
                     // Try to get latitude and longitude directly from the event
-                    let latitude = js_sys::Reflect::get(&event, &JsValue::from_str("latitude"))
+                    let latitude = web_sys::js_sys::Reflect::get(&event, &JsValue::from_str("latitude"))
                         .and_then(|v| Ok(v.as_f64().unwrap_or(0.0)));
-                    let longitude = js_sys::Reflect::get(&event, &JsValue::from_str("longitude"))
+                    let longitude = web_sys::js_sys::Reflect::get(&event, &JsValue::from_str("longitude"))
                         .and_then(|v| Ok(v.as_f64().unwrap_or(0.0)));
 
                     if let (Ok(lat), Ok(lng)) = (latitude, longitude) {
@@ -173,11 +172,11 @@ pub fn leaflet_test() -> Html {
                     } else {
                         // Try alternate event format with latlng property
                         if let Ok(latlng) =
-                            js_sys::Reflect::get(&event, &JsValue::from_str("latlng"))
+                            web_sys::js_sys::Reflect::get(&event, &JsValue::from_str("latlng"))
                         {
-                            let lat = js_sys::Reflect::get(&latlng, &JsValue::from_str("lat"))
+                            let lat = web_sys::js_sys::Reflect::get(&latlng, &JsValue::from_str("lat"))
                                 .and_then(|v| Ok(v.as_f64().unwrap_or(0.0)));
-                            let lng = js_sys::Reflect::get(&latlng, &JsValue::from_str("lng"))
+                            let lng = web_sys::js_sys::Reflect::get(&latlng, &JsValue::from_str("lng"))
                                 .and_then(|v| Ok(v.as_f64().unwrap_or(0.0)));
 
                             if let (Ok(lat), Ok(lng)) = (lat, lng) {

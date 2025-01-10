@@ -1,4 +1,4 @@
-use js_sys::{Function, Object, Reflect};
+use web_sys::js_sys::{Function, Object, Reflect};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use web_sys::{Element, HtmlElement};

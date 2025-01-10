@@ -1,7 +1,7 @@
 use super::{FullCalendarComponent, FullCalendarEvent};
 use crate::relay_pool::NostrProps;
 use crate::widgets::toastify::ToastifyOptions;
-use js_sys::Date;
+use web_sys::js_sys::Date;
 use nostro2::notes::NostrNote;
 use nostro2::relays::NostrSubscription;
 use serde_json::json;
@@ -22,7 +22,7 @@ pub fn calendar_test() -> Html {
                 limit: Some(50),
                 ..Default::default()
             }
-            .relay_subscription();
+            .into();
 
             // Create and send subscription
             relay_ctx.subscribe.emit(filter);

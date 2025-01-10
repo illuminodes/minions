@@ -1,4 +1,5 @@
-use wasm_bindgen::JsValue;
+use gloo::utils::format::JsValueSerdeExt;
+use web_sys::wasm_bindgen::JsValue;
 
 use crate::{browser_api::IdbStoreManager, DB_NAME, DB_VERSION, RELAY_KEY, RELAY_STORE};
 
@@ -11,12 +12,12 @@ pub struct UserRelay {
 impl TryFrom<JsValue> for UserRelay {
     type Error = JsValue;
     fn try_from(value: JsValue) -> Result<Self, Self::Error> {
-        Ok(serde_wasm_bindgen::from_value(value)?)
+        value.into_serde().map_err(|e| JsValue::from_str(&e.to_string()))
     }
 }
 impl Into<JsValue> for UserRelay {
     fn into(self) -> JsValue {
-        serde_wasm_bindgen::to_value(&self).unwrap()
+        JsValue::from_serde(&self).unwrap()
     }
 }
 impl IdbStoreManager for UserRelay {

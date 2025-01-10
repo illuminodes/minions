@@ -1,7 +1,7 @@
 use std::future::Future;
 
 use gloo::console::error;
-use wasm_bindgen::{closure::Closure, JsCast, JsValue};
+use web_sys::wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use web_sys::{IdbObjectStore, IdbTransactionMode};
 use yew::platform::pinned::oneshot::{self};
 
@@ -17,7 +17,7 @@ pub trait IdbStoreManager {
     fn key(&self) -> JsValue;
     fn save_to_store(self) -> impl Future<Output = Result<(), JsValue>>
     where
-        Self: Into<JsValue> + Sized,
+        Self: Into<web_sys::wasm_bindgen::JsValue> + Sized,
     {
         async {
             let object_store_request = Self::request_store_open().await?;
@@ -45,7 +45,7 @@ pub trait IdbStoreManager {
     }
     fn retrieve_from_store<T>(key: &JsValue) -> impl Future<Output = Result<T, JsValue>>
     where
-        T: TryFrom<JsValue> + 'static,
+        T: TryFrom<web_sys::wasm_bindgen::JsValue> + 'static,
     {
         async move {
             let object_store = Self::request_store_open().await?;
@@ -94,7 +94,7 @@ pub trait IdbStoreManager {
             let (sender, receiver) = oneshot::channel();
             let on_success = Closure::once_into_js(move |_event: web_sys::Event| {
                 let result: JsValue = req_clone.result().unwrap();
-                let js_array: js_sys::Array = result.dyn_into().unwrap();
+                let js_array: web_sys::js_sys::Array = result.dyn_into().unwrap();
                 let result: Vec<Self> = js_array
                     .iter()
                     .map(|value| {

@@ -1,7 +1,7 @@
 mod nostr_relay;
 mod relay_pool;
 pub use nostr_relay::*;
-use nostro2::notes::NostrNote;
+use nostro2::{notes::NostrNote, relays::SubscribeEvent};
 pub use relay_pool::*;
 
 #[yew::function_component(RelayPoolTest)]
@@ -13,17 +13,17 @@ pub fn relay_pool_test() -> yew::Html {
     let subscriber = relay_ctx.subscribe.clone();
     let id_handle = subscription_id.clone();
     yew::use_effect_with((), move |_| {
-        let nostr_sub = nostro2::relays::NostrSubscription {
+        let nostr_sub: SubscribeEvent = nostro2::relays::NostrSubscription {
             kinds: Some(vec![20001]),
             ..Default::default()
         }
-        .relay_subscription();
+        .into();
         let kind_one_filter = nostro2::relays::NostrSubscription {
             kinds: Some(vec![1]),
-            limit: Some(20),
+            limit: Some(2000),
             ..Default::default()
         }
-        .relay_subscription();
+        .into();
         id_handle.set(Some(nostr_sub.1.clone()));
         subscriber.emit(nostr_sub);
         subscriber.emit(kind_one_filter);

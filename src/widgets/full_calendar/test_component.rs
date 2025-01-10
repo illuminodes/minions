@@ -22,7 +22,7 @@ pub fn calendar_test() -> Html {
                 limit: Some(50),
                 ..Default::default()
             }
-            .relay_subscription();
+            .into();
 
             // Create and send subscription
             relay_ctx.subscribe.emit(filter);

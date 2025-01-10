@@ -5,7 +5,7 @@ use crate::{
 };
 use yew::prelude::*;
 // Uncomment the following line to enable the app demo
-// #[wasm_bindgen_test::wasm_bindgen_test]
+#[wasm_bindgen_test::wasm_bindgen_test]
 fn _main_app() {
     yew::Renderer::<App>::new().render();
 }

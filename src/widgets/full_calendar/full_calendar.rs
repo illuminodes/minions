@@ -1,4 +1,3 @@
-use gloo::utils::format::JsValueSerdeExt;
 use web_sys::js_sys::{Function, Object, Reflect};
 use serde::Deserialize;
 use serde::Serialize;
@@ -35,7 +34,8 @@ extern "C" {
 }
 impl Calendar {
     pub fn add_calendar_event(&self, event: FullCalendarEvent) -> Result<(), JsValue> {
-        let js_value = JsValue::from_serde(&event).map_err(|e| JsValue::from_str(&format!("Failed to convert event: {}", e)))?;
+        let js_value = serde_wasm_bindgen::to_value(&event)
+            .map_err(|e| JsValue::from_str(&format!("Failed to convert event: {}", e)))?;
         self.add_event(js_value);
         Ok(())
     }
@@ -96,9 +96,9 @@ impl Calendar {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FullCalendarHeaderOptions {
-    start: &'static str,
-    center: &'static str,
-    end: &'static str,
+    pub start: &'static str,
+    pub center: &'static str,
+    pub end: &'static str,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -455,7 +455,7 @@ impl FullCalendarEvent {
 }
 impl Into<JsValue> for FullCalendarEvent {
     fn into(self) -> JsValue {
-        JsValue::from_serde(&self).unwrap()
+        serde_wasm_bindgen::to_value(&self).expect("Failed to convert FullCalendarEvent to JsValue")
     }
 }
 // Add TryFrom for better error handling
@@ -463,7 +463,7 @@ impl TryFrom<JsValue> for FullCalendarEvent {
     type Error = JsValue;
     fn try_from(value: JsValue) -> Result<Self, Self::Error> {
         serde_wasm_bindgen::from_value(value)
-            .map_err(|e| JsValue::from_str(&format!("Failed to convert event: {}", e)))
+            .map_err(|e| JsValue::from_str(&format!("Failed to convert calendar event: {}", e)))
     }
 }
 
@@ -494,3 +494,4 @@ impl TryFrom<JsValue> for FullCalendarDateClickInfo {
             .map_err(|e| JsValue::from_str(&format!("Failed to convert date click info: {}", e)))
     }
 }
+

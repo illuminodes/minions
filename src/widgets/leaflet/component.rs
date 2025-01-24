@@ -8,6 +8,7 @@ use yew::prelude::*;
 // Make Props cloneable
 #[derive(Properties, PartialEq, Clone)]
 pub struct Props {
+    pub map: UseStateHandle<Option<LeafletMap>>,
     pub map_id: AttrValue,
     #[prop_or_default]
     pub map_options: Option<LeafletMapOptions>,
@@ -33,12 +34,11 @@ pub struct Props {
 
 #[function_component(LeafletComponent)]
 pub fn leaflet_component(props: &Props) -> Html {
-    let map = use_state(|| None::<LeafletMap>);
     let markers = use_state(|| Vec::<Marker>::new());
 
     // Initial map setup
     {
-        let map = map.clone();
+        let map = props.map.clone();
         let markers = markers.clone();
         let map_id = props.map_id.clone();
         let on_map_created = props.on_map_created.clone();
@@ -49,30 +49,56 @@ pub fn leaflet_component(props: &Props) -> Html {
         let icon_options = props.location_icon_options.clone();
         let map_options = props.map_options.clone();
 
-        use_effect_with((), move |_| {
-            spawn_local(async move {
-                if let Ok(position) = GeolocationPosition::locate().await {
-                    let coords = position.coords;
-                    on_location_changed.emit(coords.clone());
+        use_effect_with(map.clone(), move |map| {
+            if map.is_none() {
+                let map = map.clone();
+                spawn_local(async move {
+                    if let Ok(position) = GeolocationPosition::locate().await {
+                        let coords = position.coords;
+                        on_location_changed.emit(coords.clone());
 
-                    if let Ok(map_instance) = L::render_map(&map_id, &coords, map_options) {
-                        // Set map state and emit to parent
-                        map.set(Some(map_instance.clone()));
-                        on_map_created.emit(map_instance.clone());
+                        if let Ok(map_instance) = L::render_map(&map_id, &coords, map_options) {
+                            // Set map state and emit to parent
+                            map.set(Some(map_instance.clone()));
+                            on_map_created.emit(map_instance.clone());
 
-                        match icon_options {
-                            Some(options) => {
-                                if let Ok(marker) =
-                                    map_instance.add_marker_with_icon(&coords, options)
-                                {
-                                    let mut current_markers = (*markers).clone();
-                                    current_markers.push(marker.clone());
-                                    markers.set(current_markers);
-                                    on_marker_created.emit(marker);
+                            match icon_options {
+                                Some(options) => {
+                                    if let Ok(marker) =
+                                        map_instance.add_marker_with_icon(&coords, options)
+                                    {
+                                        let mut current_markers = (*markers).clone();
+                                        current_markers.push(marker.clone());
+                                        markers.set(current_markers);
+                                        on_marker_created.emit(marker);
+                                    }
+                                }
+                                None => {
+                                    // Add marker for current location
+                                    if let Ok(marker) = map_instance.add_leaflet_marker(&coords) {
+                                        let mut current_markers = (*markers).clone();
+                                        current_markers.push(marker.clone());
+                                        markers.set(current_markers);
+                                        on_marker_created.emit(marker);
+                                    }
                                 }
                             }
-                            None => {
-                                // Add marker for current location
+
+                            // Get location name
+                            if let Ok(location) = NominatimLookup::reverse(coords).await {
+                                on_location_name_changed.emit(location);
+                            }
+
+                            // Add markers from props
+                            for (lat, lng) in initial_markers {
+                                let coords = GeolocationCoordinates {
+                                    latitude: lat,
+                                    longitude: lng,
+                                    accuracy: 1.0,
+                                    altitude: None,
+                                    altitude_accuracy: None,
+                                    speed: None,
+                                };
                                 if let Ok(marker) = map_instance.add_leaflet_marker(&coords) {
                                     let mut current_markers = (*markers).clone();
                                     current_markers.push(marker.clone());
@@ -81,32 +107,9 @@ pub fn leaflet_component(props: &Props) -> Html {
                                 }
                             }
                         }
-
-                        // Get location name
-                        if let Ok(location) = NominatimLookup::reverse(coords).await {
-                            on_location_name_changed.emit(location);
-                        }
-
-                        // Add markers from props
-                        for (lat, lng) in initial_markers {
-                            let coords = GeolocationCoordinates {
-                                latitude: lat,
-                                longitude: lng,
-                                accuracy: 1.0,
-                                altitude: None,
-                                altitude_accuracy: None,
-                                speed: None,
-                            };
-                            if let Ok(marker) = map_instance.add_leaflet_marker(&coords) {
-                                let mut current_markers = (*markers).clone();
-                                current_markers.push(marker.clone());
-                                markers.set(current_markers);
-                                on_marker_created.emit(marker);
-                            }
-                        }
                     }
-                }
-            });
+                });
+            }
             || ()
         });
     }

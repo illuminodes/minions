@@ -1,40 +1,88 @@
-var CACHE_NAME = 'MINION-CACHE';
-var urlsToCache = [
-    '/',
+const CACHE_NAME = 'MINION-CACHE';
+const CACHE_STORAGE = 'etag-cache';
+const ROOT_URL = '/';
+const INDEX_HTML = '/index.html';
+
+const urlsToCache = [
+    ROOT_URL,
+    INDEX_HTML, // Cache the main entry HTML
 ];
 
-
-/* Start the service worker and cache all of the app's content */
-// Install event: cache the URLs
-self.addEventListener('install', function(event) {
+self.addEventListener('install', (event) => {
     self.skipWaiting();
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
-            return cache.addAll([
-                urlsToCache
-            ]);
+            // Cache the root index.html and other essential assets during installation
+            return cache.addAll(urlsToCache);
         })
     );
 });
 
-/* Serve cached content when offline */
 self.addEventListener('fetch', (event) => {
-    event.respondWith(
-        caches.match(event.request).then((cachedResponse) => {
-            if (cachedResponse) {
-                // Check if the cached file's hash matches the requested one
-                // You may need to implement your own logic to handle hash checks
-                return cachedResponse; // Return the cached response if available
-            }
+    if (event.request.mode === 'navigate') {
+        event.respondWith(
+            (async () => {
+                try {
 
-            // If not in cache, perform a network fetch
-            return fetch(event.request).then((networkResponse) => {
-                // Optionally cache the new response for future use
-                return caches.open('wasm-cache').then((cache) => {
-                    cache.put(event.request, networkResponse.clone());
+                    const cache = await caches.open(CACHE_NAME);
+                    const cachedResponse = await cache.match(INDEX_HTML);
+
+                    if (cachedResponse) {
+                        const etag = cachedResponse.headers.get('ETag');
+                        const headers = new Headers();
+                        if (etag) {
+                            headers.set('If-None-Match', etag); // Add If-None-Match header
+                        }
+
+                        const networkResponse = await fetch(event.request, { headers });
+
+                        if (networkResponse.status === 304) {
+                            return cachedResponse; // Use cached version if not modified
+                        } else if (networkResponse.ok) {
+                            await cache.put(INDEX_HTML, networkResponse.clone()); // Update cache
+                            return networkResponse;
+                        }
+                    }
+
+                    // Fallback to fetching and caching
+                    const networkResponse = await fetch(event.request);
+                    if (networkResponse.ok) {
+                        const etag = networkResponse.headers.get('ETag');
+                        if (etag) {
+                            await cache.put(INDEX_HTML, networkResponse.clone()); // Update cache
+                        }
+                    }
                     return networkResponse;
-                });
-            });
+                } catch (error) {
+                    // Serve cached version if there's an error (e.g., offline)
+                    const cache = await caches.open(CACHE_NAME);
+                    return cache.match(INDEX_HTML);
+                }
+            })()
+        );
+    } else {
+        // For non-navigation requests (like assets), serve from the cache first
+        event.respondWith(
+            caches.match(event.request).then((cachedResponse) => {
+                return cachedResponse || fetch(event.request); // Return cached or fetch from network
+            })
+        );
+    }
+});
+
+// Optional: Activate the service worker and clear old caches when a new version is available
+self.addEventListener('activate', (event) => {
+    const cacheWhitelist = [CACHE_NAME]; // Define the caches we want to keep
+    event.waitUntil(
+        caches.keys().then((cacheNames) => {
+            return Promise.all(
+                cacheNames.map((cacheName) => {
+                    if (!cacheWhitelist.includes(cacheName)) {
+                        return caches.delete(cacheName); // Delete old caches
+                    }
+                })
+            );
         })
     );
 });
+

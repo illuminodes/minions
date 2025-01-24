@@ -256,6 +256,7 @@ pub fn leaflet_test() -> Html {
         <div class="flex flex-col gap-4 p-4">
             <h1 class="text-2xl font-bold">{"Leaflet Map Test"}</h1>
             <LeafletComponent
+                map={map.clone()}
                 map_id="leaflet-map"
                 markers={(*markers).clone()}
                 on_map_created={Callback::from({

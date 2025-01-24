@@ -5,17 +5,15 @@ use yew::prelude::*;
 use super::full_calendar::{
     Calendar, FullCalendarEvent, FullCalendarOptions, FullCalendarSelectEvent,
 };
-use web_sys::js_sys::Date;
 use wasm_bindgen::JsValue;
+use web_sys::js_sys::Date;
 
 #[derive(Properties, PartialEq)]
 pub struct Props {
-    pub calendar_state: UseStateHandle<Option<Calendar>>,
     pub calendar_id: AttrValue,
     #[prop_or_default]
     pub calendar_options: FullCalendarOptions,
-    #[prop_or_default]
-    pub events: Vec<FullCalendarEvent>,
+    pub events: UseStateHandle<Vec<FullCalendarEvent>>,
     #[prop_or_default]
     pub on_event_click: Option<Callback<FullCalendarEvent>>,
     #[prop_or_default]
@@ -29,11 +27,11 @@ pub struct Props {
 #[function_component(FullCalendarComponent)]
 pub fn calendar_component(props: &Props) -> Html {
     let calendar_ref = use_node_ref();
-    let calendar = props.calendar_state.clone();
+    let calendar_state = use_state(|| None);
 
     // Initialize calendar
     {
-        let calendar = calendar.clone();
+        let calendar = calendar_state.clone();
         let calendar_ref = calendar_ref.clone();
         let events = props.events.clone();
         let on_calendar_created = props.on_calendar_created.clone();
@@ -73,9 +71,10 @@ pub fn calendar_component(props: &Props) -> Html {
 
                 let calendar_instance = Calendar::new(&element, options.into());
 
+                calendar.set(Some(calendar_instance.clone()));
                 // Add initial events
-                for event in events {
-                    if let Err(e) = calendar_instance.add_or_replace_event(event) {
+                for event in &*events {
+                    if let Err(e) = calendar_instance.add_or_replace_event(event.clone()) {
                         ToastifyOptions::new_relay_error(&e.as_string().unwrap()).show();
                     }
                 }
@@ -86,7 +85,6 @@ pub fn calendar_component(props: &Props) -> Html {
                     cb.emit(calendar_instance.clone());
                 }
 
-                calendar.set(Some(calendar_instance));
             }
             || ()
         });
@@ -94,13 +92,13 @@ pub fn calendar_component(props: &Props) -> Html {
 
     // Update events when props change
     {
-        let calendar = calendar.clone();
+        let calendar = calendar_state.clone();
         let events = props.events.clone();
 
         use_effect_with(events, move |events| {
             if let Some(calendar_instance) = (*calendar).clone() {
                 calendar_instance.clear_events();
-                for event in events {
+                for event in &**events {
                     if let Err(e) = calendar_instance.add_or_replace_event(event.clone()) {
                         gloo::console::error!("Failed to add/replace event:", e);
                     }

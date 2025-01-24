@@ -1,4 +1,4 @@
-use super::{FullCalendarComponent, FullCalendarEvent};
+use super::{FullCalendarComponent, FullCalendarEvent, Calendar};
 use crate::relay_pool::NostrProps;
 use crate::widgets::toastify::ToastifyOptions;
 use web_sys::js_sys::Date;
@@ -6,6 +6,7 @@ use nostro2::notes::NostrNote;
 use nostro2::relays::NostrSubscription;
 use serde_json::json;
 use wasm_bindgen::JsValue;
+use web_sys::js_sys::Date;
 use yew::prelude::*;
 
 #[function_component(FullCalendarTest)]
@@ -156,9 +157,15 @@ pub fn calendar_test() -> Html {
             || ()
         });
     }
-    let events_debug = (*events).clone();
+    let events_debug = events.clone();
     gloo::console::log!("Rendering with events:", events_debug.len());
     let calendar_state = use_state(|| None);
+    let on_calendar_created = {
+        let calendar_state = calendar_state.clone();
+        Callback::from(move |calendar: Calendar| {
+            calendar_state.set(Some(calendar));
+        })
+    };
 
     html! {
         <div class="flex flex-col gap-4 p-4">
@@ -169,11 +176,11 @@ pub fn calendar_test() -> Html {
                 <p class="text-sm text-gray-500">{"All events are stored as Nostr notes (kind: 31924)"}</p>
             </div>
             <FullCalendarComponent
-                {calendar_state}
                 calendar_id="full-calendar"
                 events={events_debug}  // Use our debug copy
                 on_event_click={handle_event_click}
                 on_date_select={handle_date_select}
+                {on_calendar_created}
                 class={classes!("rounded-lg", "shadow-lg", "bg-white")}
         />
         </div>

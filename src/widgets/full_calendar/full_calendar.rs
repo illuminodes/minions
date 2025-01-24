@@ -1,4 +1,3 @@
-use gloo::utils::format::JsValueSerdeExt;
 use web_sys::js_sys::{Function, Object, Reflect};
 use serde::Deserialize;
 use serde::Serialize;
@@ -96,9 +95,9 @@ impl Calendar {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FullCalendarHeaderOptions {
-    start: &'static str,
-    center: &'static str,
-    end: &'static str,
+    pub start: &'static str,
+    pub center: &'static str,
+    pub end: &'static str,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -494,3 +493,4 @@ impl TryFrom<JsValue> for FullCalendarDateClickInfo {
             .map_err(|e| JsValue::from_str(&format!("Failed to convert date click info: {}", e)))
     }
 }
+

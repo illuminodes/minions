@@ -23,7 +23,7 @@ web-sys = { version = "0.3.76", features = ["HtmlInputElement", "HtmlFormElement
 "Window", "Crypto", "AesKeyGenParams", "AesGcmParams", "IdbFactory", "IdbOpenDbOptions", "HtmlSelectElement", 
 "Clipboard", "IdbOpenDbRequest", "IdbTransaction", "IdbRequest", "IdbDatabase", "IdbObjectStore", "IdbRequestReadyState", 
 "Navigator", "HtmlAudioElement", "HtmlMediaElement", "Geolocation", "Response", "ReadableStream", "IdbTransactionMode", 
-"IdbObjectStoreParameters", "Navigator", "ServiceWorkerContainer", "FetchEvent", "CustomEvent", "DomStringList"] }
+"IdbObjectStoreParameters", "Navigator", "ServiceWorkerContainer", "ServiceWorkerGlobalScope", "FetchEvent", "CustomEvent", "DomStringList"] }
 
 # I/O
 tokio = { version = "1.42.0", features = ["macros", "sync"] }

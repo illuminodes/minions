@@ -1,9 +1,9 @@
-use web_sys::js_sys::{Function, Object, Reflect};
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsValue;
+use web_sys::js_sys::{Function, Object, Reflect};
 use web_sys::Element;
 
 use web_sys::js_sys::Date;
@@ -34,7 +34,8 @@ extern "C" {
 }
 impl Calendar {
     pub fn add_calendar_event(&self, event: FullCalendarEvent) -> Result<(), JsValue> {
-        let js_value = JsValue::from_serde(&event).map_err(|e| JsValue::from_str(&format!("Failed to convert event: {}", e)))?;
+        let js_value = serde_wasm_bindgen::to_value(&event)
+            .map_err(|e| JsValue::from_str(&format!("Failed to convert event: {}", e)))?;
         self.add_event(js_value);
         Ok(())
     }
@@ -155,7 +156,10 @@ impl Default for FullCalendarOptions {
     fn default() -> Self {
         Self {
             initial_view: "dayGridMonth",
-            initial_date: web_sys::js_sys::Date::new_0().to_iso_string().as_string().unwrap(),
+            initial_date: web_sys::js_sys::Date::new_0()
+                .to_iso_string()
+                .as_string()
+                .unwrap(),
             locale: "es-SV",
             expand_rows: true,
             all_day_slot: false,
@@ -200,7 +204,7 @@ impl FullCalendarOptions {
         Self::default()
     }
 
-    pub fn with_event_click<F>(mut self, f: F) -> Self 
+    pub fn with_event_click<F>(mut self, f: F) -> Self
     where
         F: Fn(JsValue) + 'static,
     {
@@ -454,7 +458,7 @@ impl FullCalendarEvent {
 }
 impl Into<JsValue> for FullCalendarEvent {
     fn into(self) -> JsValue {
-        JsValue::from_serde(&self).unwrap()
+        serde_wasm_bindgen::to_value(&self).unwrap()
     }
 }
 // Add TryFrom for better error handling
@@ -493,4 +497,3 @@ impl TryFrom<JsValue> for FullCalendarDateClickInfo {
             .map_err(|e| JsValue::from_str(&format!("Failed to convert date click info: {}", e)))
     }
 }
-

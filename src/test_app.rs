@@ -1,6 +1,6 @@
 use crate::{
     key_manager::NostrIdProvider,
-    relay_pool::{RelayPoolTest, RelayProvider, UserRelay},
+    relay_pool::{RelayProvider, UserRelay},
 };
 use html::ChildrenProps;
 use yew::prelude::*;

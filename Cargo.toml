@@ -1,6 +1,6 @@
 [package]
 name = "nostr-minions"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2021"
 license = "BSD-3-Clause"
 description = "A Yew-based framework for client side Nostr apps"

@@ -1,7 +1,6 @@
 use super::{FullCalendarComponent, FullCalendarEvent, Calendar};
 use crate::relay_pool::NostrProps;
 use crate::widgets::toastify::ToastifyOptions;
-use web_sys::js_sys::Date;
 use nostro2::notes::NostrNote;
 use nostro2::relays::NostrSubscription;
 use serde_json::json;

@@ -4,9 +4,10 @@ use crate::{
 };
 use html::ChildrenProps;
 use yew::prelude::*;
-// Uncomment the following line to enable the app demo
+
+
 #[wasm_bindgen_test::wasm_bindgen_test]
-fn _main_app() {
+pub fn _main_app() {
     yew::Renderer::<App>::new().render();
 }
 
@@ -19,6 +20,7 @@ fn app() -> Html {
                 // ADD NEW TEST COMPONENTS HERE WITH INLINES
                 // <minions::widgets::ag_grid::NostrNotesGrid />
                 // <minions::widgets::leaflet::LeafletTest />
+                <crate::key_manager::NostrIdLoginTest />
             </div>
         </AppContextProviders>
     }

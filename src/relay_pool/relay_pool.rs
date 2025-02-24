@@ -1,4 +1,3 @@
-use crate::widgets::toastify::ToastifyOptions;
 use std::collections::HashMap;
 
 use nostro2::{
@@ -172,11 +171,7 @@ impl RelayProvider {
             {
                 Ok(pool) => pool,
                 Err(e) => {
-                    ToastifyOptions::new_relay_error(&format!(
-                        "Failed to create relay pool: {}",
-                        e
-                    ))
-                    .show();
+                    gloo::console::error!("Error connecting to relay pool: ", format!("{:?}", e));
                     return;
                 }
             };
@@ -195,25 +190,22 @@ impl RelayProvider {
                     }
                     Some(note) = send_note_rx.recv() => {
                         if let Err(e) = relay_pool.broadcaster.send(note.into()) {
-                            ToastifyOptions::new_relay_error(&format!("Error broadcasting note: {}", e))
-                                .show();
+                            gloo::console::error!("Error sending note: ", format!("{:?}", e));
                         }
                     }
                     Some(filter) = filter_rx.recv() => {
                         if let Err(e) = relay_pool.broadcaster.send(filter.into()) {
-                            ToastifyOptions::new_relay_error(&format!("Error subscribing: {}", e))
-                                .show();
+                            gloo::console::error!("Error subscribing: ", format!("{:?}", e));
                         }
                     }
                     Some(filter_id) = unsubscribe_rx.recv() => {
                         let close_event: CloseEvent = filter_id.into();
                         if let Err(e) = relay_pool.broadcaster.send(close_event.into()) {
-                            ToastifyOptions::new_relay_error(&format!("Error unsubscribing: {}", e))
-                                .show();
+                            gloo::console::error!("Error unsubscribing: ", format!("{:?}", e));
                         }
                     }
                     _ = close_rx.recv() => {
-                        ToastifyOptions::new_relay_disconnected("Disconnecting from relay pool").show();
+                        gloo::console::log!("Closing relay pool");
                         let _ = relay_pool.close();
                         break;
                     }

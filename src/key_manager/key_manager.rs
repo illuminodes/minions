@@ -1,27 +1,58 @@
+use nostro2::notes::NostrNote;
 use std::rc::Rc;
+use wasm_bindgen::JsValue;
 use yew::{platform::spawn_local, prelude::*};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NostrId {
-    has_loaded: bool,
+    loaded: bool,
     identity: Option<super::nostr_id::UserIdentity>,
-    keys: Option<nostro2::keypair::NostrKeypair>,
+    pubkey: Option<String>,
 }
 impl NostrId {
-    pub fn finished_loading(&self) -> bool {
-        self.has_loaded
+    pub fn loaded(&self) -> bool {
+        self.loaded
     }
-    pub fn get_nostr_key(&self) -> Option<nostro2::keypair::NostrKeypair> {
-        self.keys.clone()
+    pub fn get_identity(&self) -> Option<&super::nostr_id::UserIdentity> {
+        self.identity.as_ref()
     }
-    pub fn get_identity(&self) -> Option<super::nostr_id::UserIdentity> {
-        self.identity.clone()
+    pub fn get_pubkey(&self) -> Option<String> {
+        self.pubkey.clone()
+    }
+    pub async fn sign_note(&self, event: NostrNote) -> Result<NostrNote, JsValue> {
+        let id = self
+            .identity
+            .as_ref()
+            .ok_or(JsValue::from_str("No identity"))?;
+        id.sign_nostr_note(event).await
+    }
+    pub async fn sign_encrypted_note(
+        &self,
+        event: NostrNote,
+        pubkey: String,
+    ) -> Result<NostrNote, JsValue> {
+        let id = self
+            .identity
+            .as_ref()
+            .ok_or(JsValue::from_str("No identity"))?;
+        id.sign_nip44(event, pubkey).await
+    }
+    pub async fn decrypt_note(&self, event: &NostrNote) -> Result<String, JsValue> {
+        let id = self
+            .identity
+            .as_ref()
+            .ok_or(JsValue::from_str("No identity"))?;
+        id.decrypt_nip44(event).await
+    }
+    pub async fn get_nostr_key(&self) -> Option<nostro2::keypair::NostrKeypair> {
+        let id = self.identity.as_ref()?;
+        id.get_user_keys().await.ok()
     }
 }
 
 pub enum NostrIdAction {
     FinishedLoadingKey,
-    LoadIdentity(super::nostr_id::UserIdentity, nostro2::keypair::NostrKeypair),
+    LoadIdentity(String, super::nostr_id::UserIdentity),
     DeleteIdentity,
 }
 impl Reducible for NostrId {
@@ -29,20 +60,20 @@ impl Reducible for NostrId {
 
     fn reduce(self: Rc<Self>, action: Self::Action) -> Rc<Self> {
         match action {
-            NostrIdAction::LoadIdentity(identity, key) => Rc::new(NostrId {
-                has_loaded: self.has_loaded,
-                identity: Some(identity),
-                keys: Some(key),
+            NostrIdAction::LoadIdentity(pubkey, id) => Rc::new(NostrId {
+                loaded: true,
+                pubkey: Some(pubkey),
+                identity: Some(id),
             }),
             NostrIdAction::FinishedLoadingKey => Rc::new(NostrId {
-                has_loaded: true,
+                loaded: true,
+                pubkey: self.pubkey.clone(),
                 identity: self.identity.clone(),
-                keys: self.keys.clone(),
             }),
             NostrIdAction::DeleteIdentity => Rc::new(NostrId {
-                has_loaded: self.has_loaded,
+                loaded: self.loaded,
+                pubkey: None,
                 identity: None,
-                keys: None,
             }),
         }
     }
@@ -52,22 +83,25 @@ pub type NostrIdStore = UseReducerHandle<NostrId>;
 #[function_component(NostrIdProvider)]
 pub fn key_handler(props: &yew::html::ChildrenProps) -> Html {
     let ctx = use_reducer(|| NostrId {
-        has_loaded: false,
+        loaded: false,
+        pubkey: None,
         identity: None,
-        keys: None,
     });
 
     let ctx_clone = ctx.clone();
     use_effect_with((), |_| {
         spawn_local(async move {
-            if let Ok(id) = super::nostr_id::UserIdentity::find_local_identity().await {
-                let keys = id.get_user_keys().await.expect("Error getting user keys");
-                ctx_clone.dispatch(NostrIdAction::LoadIdentity(id, keys));
-                ctx_clone.dispatch(NostrIdAction::FinishedLoadingKey);
-            } else {
-                ctx_clone.dispatch(NostrIdAction::FinishedLoadingKey);
-                gloo::console::error!("Loaded with no keys");
-            }
+            match super::nostr_id::UserIdentity::find_identity().await {
+                Ok(id) => {
+                    let pubkey = id.get_pubkey().await.expect("No pubkey");
+                    ctx_clone.dispatch(NostrIdAction::LoadIdentity(pubkey, id));
+                    ctx_clone.dispatch(NostrIdAction::FinishedLoadingKey);
+                }
+                Err(e) => {
+                    gloo::console::error!("Error loading identity: ", e);
+                    ctx_clone.dispatch(NostrIdAction::FinishedLoadingKey);
+                }
+            } 
         });
         || {}
     });

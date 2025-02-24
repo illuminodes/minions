@@ -20,7 +20,7 @@ fn app() -> Html {
                 // ADD NEW TEST COMPONENTS HERE WITH INLINES
                 // <minions::widgets::ag_grid::NostrNotesGrid />
                 // <minions::widgets::leaflet::LeafletTest />
-                <crate::key_manager::NostrIdLoginTest />
+                // <crate::key_manager::NostrIdLoginTest />
             </div>
         </AppContextProviders>
     }

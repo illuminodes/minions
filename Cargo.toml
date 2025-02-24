@@ -1,6 +1,6 @@
 [package]
 name = "nostr-minions"
-version = "0.1.9"
+version = "0.1.10"
 edition = "2021"
 license = "BSD-3-Clause"
 description = "A Yew-based framework for client side Nostr apps"
@@ -10,7 +10,7 @@ homepage = "https://github.com/illuminodes/minions"
 
 [dependencies]
 # Nostr Stack
-nostro2 = "0.2.6"
+nostro2 = "0.2.7"
 
 # JSON manipulation
 serde = { version = "1", features = ["derive"] }

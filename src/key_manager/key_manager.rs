@@ -1,20 +1,14 @@
-#[cfg(target_arch = "wasm32")]
 use nostro2::notes::NostrNote;
-#[cfg(target_arch = "wasm32")]
 use std::rc::Rc;
-#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsValue;
-#[cfg(target_arch = "wasm32")]
 use yew::{platform::spawn_local, prelude::*};
 
-#[cfg(target_arch = "wasm32")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NostrId {
     loaded: bool,
     identity: Option<super::nostr_id::UserIdentity>,
     pubkey: Option<String>,
 }
-#[cfg(target_arch = "wasm32")]
 impl NostrId {
     pub fn loaded(&self) -> bool {
         self.loaded
@@ -58,11 +52,9 @@ impl NostrId {
 
 pub enum NostrIdAction {
     FinishedLoadingKey,
-    #[cfg(target_arch = "wasm32")]
     LoadIdentity(String, super::nostr_id::UserIdentity),
     DeleteIdentity,
 }
-#[cfg(target_arch = "wasm32")]
 impl Reducible for NostrId {
     type Action = NostrIdAction;
 
@@ -86,10 +78,8 @@ impl Reducible for NostrId {
         }
     }
 }
-#[cfg(target_arch = "wasm32")]
 pub type NostrIdStore = UseReducerHandle<NostrId>;
 
-#[cfg(target_arch = "wasm32")]
 #[function_component(NostrIdProvider)]
 pub fn key_handler(props: &yew::html::ChildrenProps) -> Html {
     let ctx = use_reducer(|| NostrId {

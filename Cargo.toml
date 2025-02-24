@@ -8,9 +8,12 @@ repository = "https://github.com/illuminodes/minions"
 readme = "README.md"
 homepage = "https://github.com/illuminodes/minions"
 
+[lib]
+crate-type = ["cdylib"]
+
 [dependencies]
 # Nostr Stack
-nostro2 = { version = "0.2.5", features = ["wasm"] }
+nostro2 = "0.2.6"
 
 # JSON manipulation
 serde = { version = "1", features = ["derive"] }

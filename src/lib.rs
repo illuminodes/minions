@@ -1,7 +1,12 @@
+#[cfg(target_arch = "wasm32")]
 pub mod browser_api;
+#[cfg(target_arch = "wasm32")]
 pub mod key_manager;
+#[cfg(target_arch = "wasm32")]
 pub mod relay_pool;
+#[cfg(target_arch = "wasm32")]
 pub mod router;
+#[cfg(target_arch = "wasm32")]
 pub mod widgets;
 
 pub const DB_NAME: &str = "nostr_db";
@@ -11,6 +16,7 @@ pub const RELAY_KEY: &str = "url";
 pub const IDENTITY_STORE: &str = "user_identities";
 pub const IDENTITY_KEY: &str = "pubkey";
 
+#[cfg(target_arch = "wasm32")]
 use browser_api::IdbStoreManager;
 use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
 
@@ -44,9 +50,11 @@ fn upgrade_nostr_db(event: web_sys::Event) -> Result<(), JsValue> {
         .dyn_into::<web_sys::IdbDatabase>()?;
     let db_store_names = db.object_store_names();
     if !db_store_names.contains(IDENTITY_STORE) {
+        #[cfg(target_arch = "wasm32")]
         key_manager::UserIdentity::create_data_store(&db)?;
     }
     if !db_store_names.contains(RELAY_STORE) {
+        #[cfg(target_arch = "wasm32")]
         relay_pool::UserRelay::create_data_store(&db)?;
     }
     Ok(())

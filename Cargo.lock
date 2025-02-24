@@ -1073,9 +1073,9 @@ dependencies = [
 
 [[package]]
 name = "nostro2"
-version = "0.2.5"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba1cacf90a410274eae559943fff95b04411265a52f7ebed04fb9fd83788b29c"
+checksum = "b6ec9565f654a0c0d87cd03ca292335d6c7388f179c0a5642e03c4a23431909e"
 dependencies = [
  "anyhow",
  "base64",

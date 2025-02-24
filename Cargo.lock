@@ -1054,7 +1054,7 @@ dependencies = [
 
 [[package]]
 name = "nostr-minions"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "gloo 0.11.0",
  "gloo-timers 0.3.0",

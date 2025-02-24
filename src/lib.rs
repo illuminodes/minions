@@ -1,12 +1,7 @@
-#[cfg(target_arch = "wasm32")]
 pub mod browser_api;
-#[cfg(target_arch = "wasm32")]
 pub mod key_manager;
-#[cfg(target_arch = "wasm32")]
 pub mod relay_pool;
-#[cfg(target_arch = "wasm32")]
 pub mod router;
-#[cfg(target_arch = "wasm32")]
 pub mod widgets;
 
 pub const DB_NAME: &str = "nostr_db";

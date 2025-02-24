@@ -1,19 +1,25 @@
+#[cfg(target_arch = "wasm32")]
 use nostro2::keypair::NostrKeypair;
+#[cfg(target_arch = "wasm32")]
 use nostro2::notes::NostrNote;
 use web_sys::wasm_bindgen::{JsCast, JsValue};
+#[cfg(target_arch = "wasm32")]
 use web_sys::CryptoKey;
 
+#[cfg(target_arch = "wasm32")]
 use crate::{
     browser_api::{BrowserCrypto, IdbStoreConfig, IdbStoreManager},
     DB_NAME, DB_VERSION, IDENTITY_KEY, IDENTITY_STORE,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg(target_arch = "wasm32")]
 pub enum NostrIdType {
     Local(CryptoKey),
     Extension,
     Bunker(String),
 }
+#[cfg(target_arch = "wasm32")]
 impl Into<JsValue> for NostrIdType {
     fn into(self) -> JsValue {
         match self {
@@ -23,11 +29,13 @@ impl Into<JsValue> for NostrIdType {
         }
     }
 }
+#[cfg(target_arch = "wasm32")]
 impl AsRef<JsValue> for NostrIdType {
     fn as_ref(&self) -> &JsValue {
         self.unchecked_ref()
     }
 }
+#[cfg(target_arch = "wasm32")]
 impl TryFrom<JsValue> for NostrIdType {
     type Error = JsValue;
     fn try_from(value: JsValue) -> Result<Self, Self::Error> {
@@ -43,6 +51,7 @@ impl TryFrom<JsValue> for NostrIdType {
         }
     }
 }
+#[cfg(target_arch = "wasm32")]
 impl wasm_bindgen::JsCast for NostrIdType {
     fn instanceof(val: &JsValue) -> bool {
         val.is_instance_of::<CryptoKey>()
@@ -136,6 +145,7 @@ impl NostrSignerExtension {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UserIdentity {
     pubkey: String,
@@ -144,6 +154,7 @@ pub struct UserIdentity {
     signer: NostrIdType,
 }
 
+#[cfg(target_arch = "wasm32")]
 impl UserIdentity {
     pub async fn find_identity() -> Result<Self, JsValue>
     where
@@ -331,6 +342,7 @@ impl UserIdentity {
         }
     }
 }
+#[cfg(target_arch = "wasm32")]
 impl Into<JsValue> for UserIdentity {
     fn into(self) -> JsValue {
         let obj = web_sys::js_sys::Object::new();
@@ -345,6 +357,7 @@ impl Into<JsValue> for UserIdentity {
         obj.into()
     }
 }
+#[cfg(target_arch = "wasm32")]
 impl TryFrom<JsValue> for UserIdentity {
     type Error = JsValue;
     fn try_from(value: JsValue) -> Result<Self, Self::Error> {
@@ -369,6 +382,7 @@ impl TryFrom<JsValue> for UserIdentity {
         })
     }
 }
+#[cfg(target_arch = "wasm32")]
 impl IdbStoreManager for UserIdentity {
     fn config() -> IdbStoreConfig {
         IdbStoreConfig {

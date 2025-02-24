@@ -1,15 +1,12 @@
 [package]
 name = "nostr-minions"
-version = "0.1.8"
+version = "0.1.9"
 edition = "2021"
 license = "BSD-3-Clause"
 description = "A Yew-based framework for client side Nostr apps"
 repository = "https://github.com/illuminodes/minions"
 readme = "README.md"
 homepage = "https://github.com/illuminodes/minions"
-
-[lib]
-crate-type = ["cdylib"]
 
 [dependencies]
 # Nostr Stack

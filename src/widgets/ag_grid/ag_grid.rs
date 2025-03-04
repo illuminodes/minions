@@ -1,8 +1,27 @@
 use gloo::utils::format::JsValueSerdeExt;
 use serde::{Deserialize, Serialize};
+use wasm_bindgen::prelude::*;
 use web_sys::wasm_bindgen::JsValue;
 use web_sys::Element;
-use wasm_bindgen::prelude::*;
+
+#[derive(Debug, Clone, PartialEq, Copy, Default, Serialize)]
+pub enum AgGridTheme {
+    #[default]
+    Quartz,
+    Material,
+    Balham,
+    Alpine,
+}
+impl Into<&'static str> for AgGridTheme {
+    fn into(self) -> &'static str {
+        match self {
+            AgGridTheme::Quartz => "ag-theme-quartz",
+            AgGridTheme::Material => "ag-theme-material",
+            AgGridTheme::Balham => "ag-theme-balham",
+            AgGridTheme::Alpine => "ag-theme-alpine",
+        }
+    }
+}
 
 #[wasm_bindgen]
 extern "C" {
@@ -73,6 +92,7 @@ where
     #[serde(rename = "rowSelection")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub row_selection: Option<String>,
+    pub theme: AgGridTheme,
 }
 impl<T> AgGridOptions<T>
 where
@@ -92,6 +112,7 @@ where
             pagination: Some(true),
             pagination_page_size: Some(10),
             row_selection: Some("single".to_string()),
+            theme: AgGridTheme::Quartz,
         }
     }
 
@@ -113,6 +134,10 @@ where
 
     pub fn with_row_selection(mut self, selection_type: &str) -> Self {
         self.row_selection = Some(selection_type.to_string());
+        self
+    }
+    pub fn with_theme(mut self, theme: AgGridTheme) -> Self {
+        self.theme = theme;
         self
     }
 }

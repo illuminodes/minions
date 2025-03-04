@@ -3,7 +3,5 @@ mod nostr_id;
 pub use key_manager::*;
 pub use nostr_id::*;
 
-#[cfg(test)]
 mod tests;
-#[cfg(test)]
 pub use tests::*;

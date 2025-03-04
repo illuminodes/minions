@@ -4,17 +4,6 @@ use yew::prelude::*;
 use crate::browser_api::IdbStoreManager;
 
 use super::*;
-//wasm_bindgen_test_configure!(run_in_browser);
-//#[wasm_bindgen_test]
-// async fn _user_identity_fb() -> Result<(), web_sys::wasm_bindgen::JsValue> {
-//     init_nostr_db().unwrap();
-//     let user_identity = UserIdentity::new_local_identity().await?;
-//     let user_keys = user_identity.get_user_keys().await?;
-//     let user_identity = UserIdentity::find_local_identity().await?;
-//     let user_keys2 = user_identity.get_user_keys().await?;
-//     assert_eq!(user_keys, user_keys2);
-//     Ok(())
-// }
 #[function_component(NostrIdLoginTest)]
 pub fn nostr_id_login_test() -> Html {
     let ctx = use_context::<crate::key_manager::NostrIdStore>().expect("NostrIdStore not found");

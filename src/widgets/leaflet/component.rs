@@ -115,11 +115,12 @@ pub fn leaflet_component(props: &Props) -> Html {
     }
 
     html! {
-        <div class={props.class.clone()}>
+        <div style="position: relative;" 
+            class={props.class.clone()}>
             <div
                 id={props.map_id.clone()}
-                style={props.style.clone().unwrap_or(AttrValue::from(""))}
-                class="w-full h-full"
+                style={format!("position: absolute: top: 0; bottom: 0; width: 100%; {}", props.style.clone().unwrap_or_default())}
+                class={props.class.clone()}
             />
         </div>
     }

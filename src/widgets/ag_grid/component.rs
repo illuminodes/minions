@@ -1,8 +1,8 @@
-use super::{AgGrid, AgGridOptions, ColumnDefinition};
+use super::{AgGrid, AgGridOptions, AgGridTheme, ColumnDefinition};
+use gloo::console;
 use serde::Serialize;
 use web_sys::HtmlElement;
 use yew::prelude::*;
-use gloo::console; 
 
 #[derive(Properties, Clone, PartialEq)]
 pub struct AgGridProps<T>
@@ -10,6 +10,7 @@ where
     T: Serialize + Clone + PartialEq,
 {
     pub data: Vec<T>,
+    pub theme: AgGridTheme,
     pub columns: Vec<ColumnDefinition>,
     #[prop_or_default]
     pub class: Classes,
@@ -40,57 +41,59 @@ where
         let pagination = props.pagination;
         let page_size = props.page_size;
         let auto_size = props.auto_size;
+        let theme = props.theme;
 
-        use_effect_with(
-            (),
-            move |_| {
-                if let Some(element) = grid_ref.cast::<HtmlElement>() {
-                    let options = AgGridOptions::new(data)
-                        .with_columns(columns)
-                        .with_pagination(pagination, Some(page_size))
-                        .with_row_selection("single");
+        use_effect_with((), move |_| {
+            if let Some(element) = grid_ref.cast::<HtmlElement>() {
+                let options = AgGridOptions::new(data)
+                    .with_theme(theme)
+                    .with_columns(columns)
+                    .with_pagination(pagination, Some(page_size))
+                    .with_row_selection("single");
 
-                    let ag_grid = AgGrid::create_grid(&element, options.into());
-                    
-                    if auto_size {
-                        ag_grid.size_columns_to_fit();
-                    }
-                    
-                    grid.set(Some(ag_grid));
+                let ag_grid = AgGrid::create_grid(&element, options.into());
+
+                if auto_size {
+                    ag_grid.size_columns_to_fit();
                 }
-                || ()
-            },
-        );
+
+                grid.set(Some(ag_grid));
+            }
+            || ()
+        });
     }
 
     // Update data when props change
     {
         let grid = grid.clone();
         let data = props.data.clone();
-        use_effect_with(
-            data.clone(),
-            move |_| {
-                if let Some(grid) = (*grid).clone() {
-                    match serde_wasm_bindgen::to_value(&data) {
-                        Ok(data_js) => {
-                            grid.set_grid_option("rowData", data_js);
-                            grid.refresh_cells();
-                        },
-                        Err(e) => {
-                            console::error!("Failed to serialize grid data:", e.to_string());
-                        }
+        use_effect_with(data.clone(), move |_| {
+            if let Some(grid) = (*grid).clone() {
+                match serde_wasm_bindgen::to_value(&data) {
+                    Ok(data_js) => {
+                        grid.set_grid_option("rowData", data_js);
+                        grid.refresh_cells();
+                    }
+                    Err(e) => {
+                        console::error!("Failed to serialize grid data:", e.to_string());
                     }
                 }
-                || ()
-            },
-        );
+            }
+            || ()
+        });
     }
 
+    let theme_str: &'static str = props.theme.into();
     html! {
-        <div 
-            ref={grid_ref} 
-            class={classes!("ag-theme-alpine", props.class.clone())} 
-            style="width: 100%; height: 500px;"
+        <div  
+            style={"position: relative;"}
+            class={props.class.clone()}>
+        <div
+            ref={grid_ref}
+            class={theme_str}
+            style="width: 100%; position: absolute; top: 0; bottom: 0;"
         />
+        </div>
     }
 }
+

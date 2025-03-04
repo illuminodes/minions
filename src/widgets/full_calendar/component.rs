@@ -109,10 +109,13 @@ pub fn calendar_component(props: &Props) -> Html {
     }
 
     html! {
-        <div
-            ref={calendar_ref}
-            class={classes!("full-calendar-container", props.class.clone())}
-            style="height: 600px;"
-        />
+        <div style="position: relative;" 
+            class={props.class.clone()} >
+            <div
+                ref={calendar_ref}
+                class={classes!("full-calendar-container")}
+                style="position: absolute; top: 0; bottom: 0; width: 100%;"
+            />
+        </div>
     }
 }

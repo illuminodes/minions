@@ -180,7 +180,7 @@ pub fn calendar_test() -> Html {
                 on_event_click={handle_event_click}
                 on_date_select={handle_date_select}
                 {on_calendar_created}
-                class={classes!("rounded-lg", "shadow-lg", "bg-white")}
+                class={classes!("rounded-lg", "shadow-lg", "bg-white", "h-32", "h-32")}
         />
         </div>
     }

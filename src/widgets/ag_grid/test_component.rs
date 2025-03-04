@@ -1,5 +1,5 @@
 use crate::relay_pool::NostrProps;
-use crate::widgets::ag_grid::{create_column, AgGridComponent};
+use crate::widgets::ag_grid::{create_column, AgGridComponent, AgGridTheme};
 use nostro2::notes::NostrNote;
 use serde::Serialize;
 use yew::prelude::*;
@@ -28,6 +28,16 @@ impl From<&NostrNote> for NostrNoteRow {
 #[function_component(NostrNotesGrid)]
 pub fn nostr_notes_grid() -> Html {
     let relay_ctx = use_context::<NostrProps>().expect("No relay context found");
+    let subscriber = relay_ctx.subscribe.clone();
+    use_effect_with((), move |_| {
+        let filter = nostro2::relays::NostrSubscription {
+            kinds: Some(vec![1]),
+            limit: Some(10),
+            ..Default::default()
+        };
+        subscriber.emit(filter.into());
+        || ()
+    });
     let rows = use_state(Vec::new);
     {
         let rows = rows.clone();
@@ -57,11 +67,12 @@ pub fn nostr_notes_grid() -> Html {
     ];
 
     html! {
-        <div class="w-full h-full">
+        <div class="w-full h-fit p-4 m-4">
             <h2 class="text-xl mb-4">{"Nostr Text Notes (Kind 1)"}</h2>
             <AgGridComponent<NostrNoteRow>
                 data={(*rows).clone()}
                 columns={columns}
+                theme={AgGridTheme::Quartz}
                 class={classes!("h-[500px]")}
             />
         </div>

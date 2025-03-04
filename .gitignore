@@ -3,6 +3,8 @@
 **/node_modules/
 /test
 
+**/package.json
+**/package-lock.json
 # Ignore output.css files
 **/output*.css
 

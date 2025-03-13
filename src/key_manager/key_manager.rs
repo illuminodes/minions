@@ -19,23 +19,23 @@ impl NostrId {
     pub fn get_pubkey(&self) -> Option<String> {
         self.pubkey.clone()
     }
-    pub async fn sign_note(&self, event: NostrNote) -> Result<NostrNote, JsValue> {
+    pub async fn sign_note(&self, note: &mut NostrNote) -> Result<(), JsValue> {
         let id = self
             .identity
             .as_ref()
             .ok_or(JsValue::from_str("No identity"))?;
-        id.sign_nostr_note(event).await
+        id.sign_nostr_note(note).await
     }
     pub async fn sign_encrypted_note(
         &self,
-        event: NostrNote,
+        note: &mut NostrNote,
         pubkey: String,
-    ) -> Result<NostrNote, JsValue> {
+    ) -> Result<(), JsValue> {
         let id = self
             .identity
             .as_ref()
             .ok_or(JsValue::from_str("No identity"))?;
-        id.sign_nip44(event, pubkey).await
+        id.sign_nip44(note, pubkey).await
     }
     pub async fn decrypt_note(&self, event: &NostrNote) -> Result<String, JsValue> {
         let id = self
@@ -47,6 +47,26 @@ impl NostrId {
     pub async fn get_nostr_key(&self) -> Option<nostro2::keypair::NostrKeypair> {
         let id = self.identity.as_ref()?;
         id.get_user_keys().await.ok()
+    }
+    pub async fn create_giftwrap(
+        &self,
+        inner_note: NostrNote,
+        recipient_pubkey: String,
+        kind: u32,
+    ) -> Result<NostrNote, JsValue> {
+        let id = self
+            .identity
+            .as_ref()
+            .ok_or(JsValue::from_str("No identity"))?;
+        id.create_giftwrap(inner_note, recipient_pubkey, kind).await
+    }
+
+    pub async fn unwrap_giftwrap(&self, giftwrap: &NostrNote) -> Result<NostrNote, JsValue> {
+        let id = self
+            .identity
+            .as_ref()
+            .ok_or(JsValue::from_str("No identity"))?;
+        id.unwrap_giftwrap(giftwrap).await
     }
 }
 
@@ -101,7 +121,7 @@ pub fn key_handler(props: &yew::html::ChildrenProps) -> Html {
                     gloo::console::error!("Error loading identity: ", e);
                     ctx_clone.dispatch(NostrIdAction::FinishedLoadingKey);
                 }
-            } 
+            }
         });
         || {}
     });

@@ -197,20 +197,22 @@ impl UserIdentity {
         user_identity.clone().save_to_store().await?;
         Ok(user_identity)
     }
-    pub async fn sign_nostr_note(&self, mut note: NostrNote) -> Result<NostrNote, JsValue> {
+    pub async fn sign_nostr_note(&self, note: &mut NostrNote) -> Result<(), JsValue> {
         match self.signer {
             NostrIdType::Local(ref key) => {
                 let nostr_key: NostrKeypair = NostrKeypair::try_from(
                     BrowserCrypto::default().export_raw_key(key.clone()).await?,
                 )
                 .unwrap();
-                nostr_key.sign_nostr_event(&mut note);
-                Ok(note.clone())
+                nostr_key.sign_nostr_event(note);
+                Ok(())
             }
             NostrIdType::Extension => {
                 let nostr_signer = NostrSignerExtension::new().await?;
-                let signed_note = nostr_signer.sign_event((note.to_owned()).into()).await?;
-                Ok(signed_note.try_into().unwrap())
+                let signed_note_js = nostr_signer.sign_event(note.clone().into()).await?;
+                let signed_note: NostrNote = signed_note_js.try_into()?;
+                *note = signed_note;
+                Ok(())
             }
             NostrIdType::Bunker(_) => Err(JsValue::from_str("No Bunker support yet")),
         }
@@ -262,11 +264,7 @@ impl UserIdentity {
             NostrIdType::Bunker(_) => Err(JsValue::from_str("No Bunker support yet")),
         }
     }
-    pub async fn sign_nip04(
-        &self,
-        mut note: NostrNote,
-        pubkey: String,
-    ) -> Result<NostrNote, JsValue> {
+    pub async fn sign_nip04(&self, note: &mut NostrNote, pubkey: String) -> Result<(), JsValue> {
         match &self.signer {
             NostrIdType::Local(key) => {
                 let key = key.clone();
@@ -274,27 +272,30 @@ impl UserIdentity {
                 let keypair = NostrKeypair::try_from(keypair)
                     .map_err(|e| JsValue::from_str(&e.to_string()))?;
                 keypair
-                    .sign_nip_04_encrypted(&mut note, pubkey)
+                    .sign_nip_04_encrypted(note, pubkey)
                     .map_err(|e| JsValue::from_str(&e.to_string()))?;
-                Ok(note)
+                Ok(())
             }
             NostrIdType::Extension => {
                 let signer = NostrSignerExtension::new().await?;
-                let new_note = signer
+                let encrypted_note_js = signer
                     .nip04()
                     .await?
-                    .encrypt(pubkey.into(), note.into())
+                    .encrypt(pubkey.into(), note.content.clone().into())
                     .await?;
-                Ok(new_note.try_into()?)
+
+                note.content = encrypted_note_js.try_into()?;
+
+                // Sign the note with updated content
+                let signed_note_js = signer.sign_event(note.clone().into()).await?;
+                let signed_note: NostrNote = signed_note_js.try_into()?;
+                *note = signed_note;
+                Ok(())
             }
             NostrIdType::Bunker(_) => Err(JsValue::from_str("No Bunker support yet")),
         }
     }
-    pub async fn sign_nip44(
-        &self,
-        mut note: NostrNote,
-        pubkey: String,
-    ) -> Result<NostrNote, JsValue> {
+    pub async fn sign_nip44(&self, note: &mut NostrNote, pubkey: String) -> Result<(), JsValue> {
         match &self.signer {
             NostrIdType::Local(key) => {
                 let key = key.clone();
@@ -302,9 +303,9 @@ impl UserIdentity {
                 let keypair = NostrKeypair::try_from(keypair)
                     .map_err(|e| JsValue::from_str(&e.to_string()))?;
                 keypair
-                    .sign_nip_44_encrypted(&mut note, pubkey)
+                    .sign_nip_44_encrypted(note, pubkey)
                     .map_err(|e| JsValue::from_str(&e.to_string()))?;
-                Ok(note)
+                Ok(())
             }
             NostrIdType::Extension => {
                 let signer = NostrSignerExtension::new().await?;
@@ -314,8 +315,12 @@ impl UserIdentity {
                     .encrypt(pubkey.into(), note.content.clone().into())
                     .await?;
                 note.content = new_content.try_into()?;
-                let signed_new_note = signer.sign_event(note.into()).await?;
-                Ok(signed_new_note.try_into()?)
+
+                // Sign the note with updated content
+                let signed_note_js = signer.sign_event(note.clone().into()).await?;
+                let signed_note: NostrNote = signed_note_js.try_into()?;
+                *note = signed_note;
+                Ok(())
             }
             NostrIdType::Bunker(_) => Err(JsValue::from_str("No Bunker support yet")),
         }
@@ -329,6 +334,36 @@ impl UserIdentity {
         } else {
             Err(JsValue::from_str("No local key"))
         }
+    }
+    pub async fn create_giftwrap(
+        &self,
+        inner_note: NostrNote,
+        recipient_pubkey: String,
+        kind: u32,
+    ) -> Result<NostrNote, JsValue> {
+        // Serialize the inner note to string without signing
+        let inner_content = serde_json::to_string(&inner_note)
+            .map_err(|e| JsValue::from_str(&format!("Failed to serialize inner note: {}", e)))?;
+
+        // Create the outer wrapper note (unsigned)
+        let giftwrap = NostrNote {
+            content: inner_content,
+            pubkey: self
+                .get_pubkey()
+                .await
+                .ok_or(JsValue::from_str("Failed to get pubkey"))?,
+            kind,
+            ..Default::default()
+        };
+
+        // Return the unsigned giftwrap
+        Ok(giftwrap)
+    }
+
+    pub async fn unwrap_giftwrap(&self, giftwrap: &NostrNote) -> Result<NostrNote, JsValue> {
+        let decrypted_content = self.decrypt_nip44(giftwrap).await?;
+        serde_json::from_str::<NostrNote>(&decrypted_content)
+            .map_err(|e| JsValue::from_str(&format!("Failed to parse unwrapped note: {}", e)))
     }
 }
 impl Into<JsValue> for UserIdentity {

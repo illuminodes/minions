@@ -11,6 +11,9 @@ homepage = "https://github.com/illuminodes/minions"
 [dependencies]
 # Nostr Stack
 nostro2 = "0.2.7"
+upload-things = "0.1.2"
+lucide-yew = "1.1.0"
+uuid = { version = "1.15", features = ["v4", "js"] }
 
 # JSON manipulation
 serde = { version = "1", features = ["derive"] }

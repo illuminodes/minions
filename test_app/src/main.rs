@@ -4,6 +4,7 @@ use nostr_minions::{
 };
 use html::ChildrenProps;
 use yew::prelude::*;
+use nostr_minions::widgets::forms::ImageUploadTestComponent;
 
 #[wasm_bindgen_test::wasm_bindgen_test]
 pub fn main() {
@@ -21,7 +22,8 @@ fn app() -> Html {
                 // <nostr_minions::widgets::leaflet::LeafletTest />
                 // <nostr_minions::widgets::full_calendar::FullCalendarTest/>
                 // <nostr_minions::key_manager::NostrIdLoginTest />
-                <nostr_minions::widgets::bitcoin_qr::BitcoinQrTest />
+                // <nostr_minions::widgets::bitcoin_qr::BitcoinQrTest />
+                <ImageUploadTestComponent/>
 
             </div>
         </AppContextProviders>

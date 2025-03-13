@@ -2,6 +2,7 @@ pub mod browser_api;
 pub mod key_manager;
 pub mod relay_pool;
 pub mod widgets;
+pub mod constants;
 
 pub const DB_NAME: &str = "nostr_db";
 pub const DB_VERSION: u32 = 2;

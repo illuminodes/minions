@@ -15,9 +15,9 @@ impl TryFrom<JsValue> for UserRelay {
         value.into_serde().map_err(|e| JsValue::from_str(&e.to_string()))
     }
 }
-impl Into<JsValue> for UserRelay {
-    fn into(self) -> JsValue {
-        JsValue::from_serde(&self).unwrap()
+impl From<UserRelay> for JsValue {
+    fn from(val: UserRelay) -> Self {
+        JsValue::from_serde(&val).unwrap()
     }
 }
 impl IdbStoreManager for UserRelay {

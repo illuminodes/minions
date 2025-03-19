@@ -34,7 +34,7 @@ pub struct Props {
 
 #[function_component(LeafletComponent)]
 pub fn leaflet_component(props: &Props) -> Html {
-    let markers = use_state(|| Vec::<Marker>::new());
+    let markers = use_state(Vec::<Marker>::new);
 
     // Initial map setup
     {

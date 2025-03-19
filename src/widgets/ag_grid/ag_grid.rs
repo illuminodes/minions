@@ -12,9 +12,9 @@ pub enum AgGridTheme {
     Balham,
     Alpine,
 }
-impl Into<&'static str> for AgGridTheme {
-    fn into(self) -> &'static str {
-        match self {
+impl From<AgGridTheme> for &'static str {
+    fn from(val: AgGridTheme) -> Self {
+        match val {
             AgGridTheme::Quartz => "ag-theme-quartz",
             AgGridTheme::Material => "ag-theme-material",
             AgGridTheme::Balham => "ag-theme-balham",

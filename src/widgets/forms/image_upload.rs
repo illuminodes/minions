@@ -3,10 +3,10 @@ use crate::constants::{
     NOSTR_KIND_PRESIGNED_URL_REQ, NOSTR_KIND_PRESIGNED_URL_RESP, NOSTR_KIND_SERVER_REQUEST,
     TEST_PUB_KEY,
 };
-use crate::key_manager::{NostrIdStore, UserIdentity};
-use crate::relay_pool::NostrProps;
+use crate::key_manager::UserIdentity;
+use crate::relay_pool::NostrPoolStore;
 use lucide_yew::Plus;
-use nostro2::notes::NostrNote;
+use nostro2_signer::nostro2::note::NostrNote;
 use upload_things::{UtPreSignedUrl, UtUpload};
 use web_sys::wasm_bindgen::JsCast;
 use web_sys::{FileReader, FormData, HtmlInputElement};
@@ -28,7 +28,7 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
         classes,
         input_id,
     } = props.clone();
-    let relay_pool = use_context::<NostrProps>().expect("No RelayPool Context found");
+    let relay_pool = use_context::<NostrPoolStore>().expect("No RelayPool Context found");
     let user_keys = nostr_keys.clone();
     let url_clone = url_handle.clone();
     let is_loading_new = use_state(|| false);
@@ -36,10 +36,10 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
 
     // Add subscription for presigned URL responses
     {
-        let relay_ctx = relay_pool.clone();
+        let relay_ctx = relay_pool.subscribe.clone();
         use_effect_with((), move |_| {
             // Create subscription for presigned URL responses
-            let filter = nostro2::relays::NostrSubscription {
+            let filter = nostro2_web_relay::nostro2::subscriptions::NostrSubscription {
                 kinds: Some(vec![NOSTR_KIND_PRESIGNED_URL_RESP]),
                 limit: Some(20),
                 ..Default::default()
@@ -47,39 +47,18 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
 
             // Send subscription to relay
             gloo::console::log!("Subscribing to presigned URL responses (kind 20421)");
-            relay_ctx.subscribe.emit(filter.into());
+            relay_ctx.emit(filter.into());
 
             || {}
         });
     }
-    // Add this separate effect to log ALL notes
-    use_effect_with(relay_pool.unique_notes.clone(), move |notes| {
-        for note in notes.iter() {
-            gloo::console::log!(
-                "RECEIVED ANY NOTE - kind:",
-                note.kind,
-                "id:",
-                note.id.as_ref().unwrap_or(&"none".to_string()),
-                "from pubkey:",
-                &note.pubkey
-            );
-        }
-        || {}
-    });
     // Clone input_id for use in the effect
     let input_id_for_effect = input_id.clone();
 
     use_effect_with(relay_pool.unique_notes.clone(), move |notes| {
         if let Some(last_note) = notes.last().cloned() {
-            gloo::console::log!("Received note of kind:", last_note.kind);
-
             if last_note.kind == NOSTR_KIND_PRESIGNED_URL_RESP {
-                gloo::console::log!("Processing presigned URL response");
-            }
-            spawn_local(async move {
-                if last_note.kind == NOSTR_KIND_PRESIGNED_URL_RESP {
-                    gloo::console::log!("Processing presigned URL response");
-
+                spawn_local(async move {
                     let decrypted_content = match user_keys.decrypt_nip44(&last_note).await {
                         Ok(content) => {
                             gloo::console::log!("Successfully decrypted response");
@@ -211,8 +190,8 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
                         return;
                     }
                     closure.forget();
-                }
-            });
+                });
+            }
         }
     });
 
@@ -262,14 +241,14 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
             );
 
             // Create and sign the request note
-            let req_note = NostrNote {
+            let mut req_note = NostrNote {
                 content: file_req.to_string(),
                 kind: NOSTR_KIND_PRESIGNED_URL_REQ,
                 pubkey: pubkey.clone(),
                 ..Default::default()
             };
 
-            let req_note = match user_keys.sign_nostr_note(req_note).await {
+            match user_keys.sign_nostr_note(&mut req_note).await {
                 Ok(note) => note,
                 Err(e) => {
                     gloo::console::error!("Failed to sign request note:", e);
@@ -279,15 +258,15 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
             };
 
             // Create and sign the giftwrap note
-            let giftwrap = NostrNote {
+            let mut giftwrap = NostrNote {
                 content: req_note.to_string(),
                 kind: NOSTR_KIND_SERVER_REQUEST,
                 pubkey,
                 ..Default::default()
             };
 
-            let giftwrap = match user_keys
-                .sign_nip44(giftwrap, TEST_PUB_KEY.to_string())
+            match user_keys
+                .sign_nip44(&mut giftwrap, TEST_PUB_KEY.to_string())
                 .await
             {
                 Ok(note) => note,

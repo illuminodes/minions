@@ -1,8 +1,8 @@
-use super::{FullCalendarComponent, FullCalendarEvent, Calendar};
-use crate::relay_pool::NostrProps;
+use super::{Calendar, FullCalendarComponent, FullCalendarEvent};
+use crate::relay_pool::NostrPoolStore;
 use crate::widgets::toastify::ToastifyOptions;
-use nostro2::notes::NostrNote;
-use nostro2::relays::NostrSubscription;
+use nostro2_web_relay::nostro2::note::NostrNote;
+use nostro2_web_relay::nostro2::subscriptions::NostrSubscription;
 use serde_json::json;
 use wasm_bindgen::JsValue;
 use web_sys::js_sys::Date;
@@ -10,12 +10,11 @@ use yew::prelude::*;
 
 #[function_component(FullCalendarTest)]
 pub fn calendar_test() -> Html {
-    let relay_ctx = use_context::<NostrProps>().expect("No relay context found");
+    let relay_ctx = use_context::<NostrPoolStore>().expect("No relay context found");
     let events = use_state(Vec::new);
     // Set up subscription for calendar events
     {
-        let relay_ctx = relay_ctx.clone();
-        use_effect_with((), move |_| {
+        use_effect_with(relay_ctx.clone(), move |ctx| {
             // Create and configure filter for calendar events
             let filter = NostrSubscription {
                 kinds: Some(vec![31924]),
@@ -25,7 +24,7 @@ pub fn calendar_test() -> Html {
             .into();
 
             // Create and send subscription
-            relay_ctx.subscribe.emit(filter);
+            ctx.subscribe.emit(filter);
             || ()
         });
     }
@@ -85,7 +84,7 @@ pub fn calendar_test() -> Html {
 
     // Handle date selection for new events
     let handle_date_select = {
-        let relay_ctx = relay_ctx.clone();
+        let relay_ctx = relay_ctx.send_note.clone();
         Callback::from(move |(start, end): (Date, Date)| {
             // Convert JsString to String
             let start_time = start
@@ -111,7 +110,7 @@ pub fn calendar_test() -> Html {
 
             gloo::console::log!("Event content:", content.to_string());
 
-            let new_keys = nostro2::keypair::NostrKeypair::generate(false);
+            let new_keys = nostro2_signer::keypair::NostrKeypair::generate(false);
             let mut new_note = NostrNote {
                 pubkey: new_keys.public_key(),
                 kind: 31924,
@@ -125,7 +124,7 @@ pub fn calendar_test() -> Html {
                 new_note.id.as_ref().unwrap().as_str()
             );
 
-            relay_ctx.send_note.emit(new_note);
+            relay_ctx.emit(new_note);
 
             ToastifyOptions::new_success("Created new calendar event").show();
         })
@@ -134,25 +133,17 @@ pub fn calendar_test() -> Html {
     // Update events when notes change
     {
         let events = events.clone();
-        let notes = relay_ctx.unique_notes.clone();
 
-        use_effect_with(notes, move |notes| {
-            gloo::console::log!("Received notes update, total notes:", notes.len());
-            let calendar_events: Vec<FullCalendarEvent> = notes
-                .iter()
-                .filter_map(|note| {
-                    if note.kind == 31924 {
-                        gloo::console::log!(
-                            "Processing calendar note:",
-                            note.id.as_ref().unwrap().as_str()
-                        );
+        use_effect_with(relay_ctx.unique_notes.clone(), move |notes| {
+            if let Some(last_note) = notes.last() {
+                let mut new_events = (*events).clone();
+                if let Some(event) = convert_note_to_event(last_note) {
+                    if last_note.kind == 31924 {
+                        new_events.push(event);
+                        events.set(new_events);
                     }
-                    convert_note_to_event(note)
-                })
-                .collect();
-
-            gloo::console::log!("Created calendar events:", calendar_events.len());
-            events.set(calendar_events);
+                }
+            }
             || ()
         });
     }

@@ -1,4 +1,4 @@
-use nostro2::notes::NostrNote;
+use nostro2_signer::nostro2::note::NostrNote;
 use std::rc::Rc;
 use wasm_bindgen::JsValue;
 use yew::{platform::spawn_local, prelude::*};
@@ -44,21 +44,20 @@ impl NostrId {
             .ok_or(JsValue::from_str("No identity"))?;
         id.decrypt_nip44(event).await
     }
-    pub async fn get_nostr_key(&self) -> Option<nostro2::keypair::NostrKeypair> {
+    pub async fn get_nostr_key(&self) -> Option<nostro2_signer::keypair::NostrKeypair> {
         let id = self.identity.as_ref()?;
         id.get_user_keys().await.ok()
     }
     pub async fn create_giftwrap(
         &self,
         inner_note: NostrNote,
-        recipient_pubkey: String,
         kind: u32,
     ) -> Result<NostrNote, JsValue> {
         let id = self
             .identity
             .as_ref()
             .ok_or(JsValue::from_str("No identity"))?;
-        id.create_giftwrap(inner_note, recipient_pubkey, kind).await
+        id.create_giftwrap(inner_note, kind).await
     }
 
     pub async fn unwrap_giftwrap(&self, giftwrap: &NostrNote) -> Result<NostrNote, JsValue> {
@@ -107,14 +106,19 @@ pub fn key_handler(props: &yew::html::ChildrenProps) -> Html {
         pubkey: None,
         identity: None,
     });
-
     let ctx_clone = ctx.clone();
-    use_effect_with((), |_| {
+    use_memo((), move |_| {
         spawn_local(async move {
             match super::nostr_id::UserIdentity::find_identity().await {
                 Ok(id) => {
-                    let pubkey = id.get_pubkey().await.expect("No pubkey");
-                    ctx_clone.dispatch(NostrIdAction::LoadIdentity(pubkey, id));
+                    match id.get_pubkey().await {
+                        Some(pubkey) => {
+                            ctx_clone.dispatch(NostrIdAction::LoadIdentity(pubkey, id));
+                        }
+                        None => {
+                            gloo::console::error!("No pubkey found for identity");
+                        }
+                    }
                     ctx_clone.dispatch(NostrIdAction::FinishedLoadingKey);
                 }
                 Err(e) => {
@@ -123,8 +127,9 @@ pub fn key_handler(props: &yew::html::ChildrenProps) -> Html {
                 }
             }
         });
-        || {}
     });
+
+    // use_effect_with((), |_| || {});
 
     html! {
         <ContextProvider<NostrIdStore> context={ctx}>

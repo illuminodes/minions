@@ -292,9 +292,9 @@ impl Default for FullCalendarHeaderOptions {
     }
 }
 
-impl Into<JsValue> for FullCalendarOptions {
-    fn into(self) -> JsValue {
-        self.to_js_value().unwrap_or_else(|e| {
+impl From<FullCalendarOptions> for JsValue {
+    fn from(val: FullCalendarOptions) -> Self {
+        val.to_js_value().unwrap_or_else(|e| {
             gloo::console::error!("Failed to convert calendar options:", e);
             JsValue::NULL
         })
@@ -373,7 +373,7 @@ impl FullCalendarEvent {
 
     pub fn quick_event(id: &str, title: &str, start: Date, duration_mins: i32) -> Self {
         let end = Date::new(&start.clone().into());
-        let current_minutes = end.get_minutes() as u32;
+        let current_minutes = end.get_minutes();
         let total_minutes = current_minutes + duration_mins as u32;
         end.set_minutes(total_minutes);
         Self::new(
@@ -456,9 +456,9 @@ impl FullCalendarEvent {
         &self.extended_props
     }
 }
-impl Into<JsValue> for FullCalendarEvent {
-    fn into(self) -> JsValue {
-        serde_wasm_bindgen::to_value(&self).unwrap()
+impl From<FullCalendarEvent> for JsValue {
+    fn from(val: FullCalendarEvent) -> Self {
+        serde_wasm_bindgen::to_value(&val).unwrap()
     }
 }
 // Add TryFrom for better error handling
@@ -483,9 +483,9 @@ impl FullCalendarDateClickInfo {
     }
 }
 
-impl Into<JsValue> for FullCalendarDateClickInfo {
-    fn into(self) -> JsValue {
-        serde_wasm_bindgen::to_value(&self)
+impl From<FullCalendarDateClickInfo> for JsValue {
+    fn from(val: FullCalendarDateClickInfo) -> Self {
+        serde_wasm_bindgen::to_value(&val)
             .expect("Failed to convert FullCalendarDateClickInfo to JsValue")
     }
 }

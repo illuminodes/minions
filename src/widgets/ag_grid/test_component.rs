@@ -1,6 +1,6 @@
-use crate::relay_pool::NostrProps;
+use crate::relay_pool::NostrPoolStore;
 use crate::widgets::ag_grid::{create_column, AgGridComponent, AgGridTheme};
-use nostro2::notes::NostrNote;
+use nostro2_web_relay::nostro2::note::NostrNote;
 use serde::Serialize;
 use yew::prelude::*;
 
@@ -27,31 +27,27 @@ impl From<&NostrNote> for NostrNoteRow {
 
 #[function_component(NostrNotesGrid)]
 pub fn nostr_notes_grid() -> Html {
-    let relay_ctx = use_context::<NostrProps>().expect("No relay context found");
-    let subscriber = relay_ctx.subscribe.clone();
-    use_effect_with((), move |_| {
-        let filter = nostro2::relays::NostrSubscription {
+    let relay_ctx = use_context::<NostrPoolStore>().expect("No relay context found");
+    use_effect_with(relay_ctx.subscribe.clone(), move |relay_clone| {
+        let filter = nostro2_web_relay::nostro2::subscriptions::NostrSubscription {
             kinds: Some(vec![1]),
             limit: Some(10),
             ..Default::default()
         };
-        subscriber.emit(filter.into());
+        relay_clone.emit(filter.into());
         || ()
     });
     let rows = use_state(Vec::new);
     {
         let rows = rows.clone();
-        let notes = relay_ctx.unique_notes.clone();
 
-        use_effect_with(notes, move |notes| {
-            // Convert notes to row data
-            let new_rows: Vec<NostrNoteRow> = notes
-                .iter()
-                .filter(|note| note.kind == 1)
-                .map(NostrNoteRow::from)
-                .collect();
-
-            rows.set(new_rows);
+        use_effect_with(relay_ctx.unique_notes.clone(), move |notes| {
+            gloo::console::log!("Unique notes:", notes.len());
+            if let Some(note) = notes.last() {
+                let mut new_rows = (*rows).clone();
+                new_rows.push(NostrNoteRow::from(note));
+                rows.set(new_rows.to_vec());
+            }
             || ()
         });
     }

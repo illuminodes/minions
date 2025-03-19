@@ -1,4 +1,4 @@
-use nostro2::notes::NostrNote;
+use nostro2_signer::nostro2::note::NostrNote;
 use yew::prelude::*;
 
 use crate::browser_api::IdbStoreManager;
@@ -7,7 +7,7 @@ use super::*;
 #[function_component(NostrIdLoginTest)]
 pub fn nostr_id_login_test() -> Html {
     let ctx = use_context::<crate::key_manager::NostrIdStore>().expect("NostrIdStore not found");
-    let relay_ctx = use_context::<crate::relay_pool::NostrProps>().expect("No relay ctx found");
+    let relay_ctx = use_context::<crate::relay_pool::NostrPoolStore>().expect("No relay ctx found");
     let is_loading = ctx.loaded();
     if !is_loading {
         return html! {
@@ -19,13 +19,13 @@ pub fn nostr_id_login_test() -> Html {
 
     let sign_onclick = {
         let ctx = ctx.clone();
-        let relay_ctx = relay_ctx.clone();
+        let relay_ctx = relay_ctx.send_note.clone();
         Callback::from(move |_| {
             let ctx = ctx.clone();
             let relay_ctx = relay_ctx.clone();
             yew::platform::spawn_local(async move {
                 let pubkey = ctx.get_pubkey().expect("No pubkey");
-                let mut note = NostrNote {
+                let mut note = nostro2_web_relay::nostro2::note::NostrNote {
                     content: "Test Note".to_string(),
                     pubkey,
                     ..Default::default()
@@ -33,7 +33,7 @@ pub fn nostr_id_login_test() -> Html {
                 match ctx.sign_note(&mut note).await {
                     Ok(_) => {
                         gloo::console::log!(format!("Signed note: {:?}", note));
-                        relay_ctx.send_note.emit(note);
+                        relay_ctx.emit(note.clone());
                     }
                     Err(e) => gloo::console::error!(e),
                 }
@@ -43,7 +43,7 @@ pub fn nostr_id_login_test() -> Html {
 
     let sign_encrypted = {
         let ctx = ctx.clone();
-        let relay_ctx = relay_ctx.clone();
+        let relay_ctx = relay_ctx.send_note.clone();
         Callback::from(move |_| {
             let ctx = ctx.clone();
             let relay_ctx = relay_ctx.clone();
@@ -57,7 +57,7 @@ pub fn nostr_id_login_test() -> Html {
                 match ctx.sign_encrypted_note(&mut note, pubkey).await {
                     Ok(_) => {
                         gloo::console::log!(format!("Signed encrypted note: {:?}", note));
-                        relay_ctx.send_note.emit(note.clone());
+                        relay_ctx.emit(note.clone());
                         let decrypted = ctx.decrypt_note(&note).await.expect("Decryption failed");
                         gloo::console::log!(format!("Decrypted note: {}", decrypted));
                     }
@@ -70,7 +70,7 @@ pub fn nostr_id_login_test() -> Html {
     // onclick handler for testing giftwrapping
     let test_giftwrap = {
         let ctx = ctx.clone();
-        let relay_ctx = relay_ctx.clone();
+        let relay_ctx = relay_ctx.send_note.clone();
         Callback::from(move |_| {
             let ctx = ctx.clone();
             let relay_ctx = relay_ctx.clone();
@@ -95,10 +95,7 @@ pub fn nostr_id_login_test() -> Html {
 
                 // Create the giftwrapped note (unsigned)
                 let kind = 20001; // Example custom kind for giftwraps
-                match ctx
-                    .create_giftwrap(inner_note.clone(), pubkey.clone(), kind)
-                    .await
-                {
+                match ctx.create_giftwrap(inner_note.clone(), kind).await {
                     Ok(mut giftwrapped_note) => {
                         gloo::console::log!("Successfully created unsigned giftwrapped note");
 
@@ -138,7 +135,7 @@ pub fn nostr_id_login_test() -> Html {
                                         }
 
                                         // Optionally send the giftwrapped note to demonstrate it in relay
-                                        relay_ctx.send_note.emit(giftwrapped_note);
+                                        relay_ctx.emit(giftwrapped_note);
                                     }
                                     Err(e) => gloo::console::error!("Failed to unwrap note:", e),
                                 }

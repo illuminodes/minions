@@ -20,9 +20,9 @@ all-widgets = ["ag-grid", "bitcoin-qr", "full-calendar", "leaflet", "toastify"]
 [dependencies]
 # Nostr Stack
 # nostro2 = "0.2.7" 
-nostro2-web-relay = "0.1.4"
+nostro2-web-relay = "0.1.5"
 # nostro2-web-relay = { path = "../NostrO2/nostro2-web-relay" }
-nostro2-signer =  "0.1.1"
+nostro2-signer =  "0.1.2"
 # nostro2-signer =  { path = "../NostrO2/nostro2-signer" }
 upload-things = "0.1.2"
 lucide-yew = "1.1.0"

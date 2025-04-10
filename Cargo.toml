@@ -22,7 +22,7 @@ all-widgets = ["ag-grid", "bitcoin-qr", "full-calendar", "leaflet", "toastify"]
 # nostro2 = "0.2.7" 
 nostro2-web-relay = "0.1.4"
 # nostro2-web-relay = { path = "../NostrO2/nostro2-web-relay" }
-nostro2-signer =  "0.1.0"
+nostro2-signer =  "0.1.1"
 # nostro2-signer =  { path = "../NostrO2/nostro2-signer" }
 upload-things = "0.1.2"
 lucide-yew = "1.1.0"

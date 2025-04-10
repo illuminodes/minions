@@ -1292,9 +1292,9 @@ dependencies = [
 
 [[package]]
 name = "nostro2-web-relay"
-version = "0.1.3"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "006e5bdb41a3a454f90c649f76f8b1efd13d51aa6f0a8e4821106f7facf69e76"
+checksum = "946ce11f976ddd03d62233aefb6f67fc8038e996b1ec74bc2a11e10c7a2b1742"
 dependencies = [
  "futures-util",
  "nostro2",
@@ -1811,9 +1811,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.43.0"
+version = "1.44.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d61fa4ffa3de412bfea335c6ecff681de2b609ba3c77ef3e00e521813a9ed9e"
+checksum = "e6b88822cbe49de4185e3a4cbf8321dd487cf5fe0c5c65695fef6346371e9c48"
 dependencies = [
  "backtrace",
  "pin-project-lite",

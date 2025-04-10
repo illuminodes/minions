@@ -1,6 +1,6 @@
 use super::component::LeafletComponent;
 use crate::browser_api::GeolocationCoordinates;
-use crate::relay_pool::NostrPoolStore;
+use crate::relay_pool::NostrRelayPoolStore;
 use crate::widgets::leaflet::{
     nominatim::NominatimLookup, IconOptions, LatLng, LeafletLocateOptions, LeafletMap,
     LeafletMapOptions,
@@ -12,13 +12,13 @@ use yew::prelude::*;
 
 #[function_component(LeafletTest)]
 pub fn leaflet_test() -> Html {
-    let relay_ctx = use_context::<NostrPoolStore>().expect("No relay context found");
+    let relay_ctx = use_context::<NostrRelayPoolStore>().expect("No relay context found");
     let map = use_state(|| None::<LeafletMap>);
     let markers = use_state(Vec::<(f64, f64)>::new);
     let location_name = use_state(String::new);
 
     let send_test_event = {
-        let note_sender = relay_ctx.send_note.clone();
+        let note_sender = relay_ctx.clone();
         let markers = markers.clone();
         let map = map.clone();
 
@@ -80,7 +80,7 @@ pub fn leaflet_test() -> Html {
                     ..Default::default()
                 };
                 new_keys.sign_nostr_event(&mut new_note);
-                note_sender.emit(new_note);
+                note_sender.send(new_note);
             }
 
             crate::widgets::toastify::ToastifyOptions::new_event_received(
@@ -160,7 +160,7 @@ pub fn leaflet_test() -> Html {
                         if let Ok(js_coords) = lat_lng.try_into() {
                             map_for_closure.set_view(&js_coords, 13);
 
-                            if let Ok(_) = map_for_closure.add_leaflet_marker(&geo_coords) {
+                            if map_for_closure.add_leaflet_marker(&geo_coords).is_ok() {
                                 let mut current_markers = (*markers).clone();
                                 current_markers.push((geo_coords.latitude, geo_coords.longitude));
                                 markers.set(current_markers);
@@ -206,7 +206,7 @@ pub fn leaflet_test() -> Html {
                                 if let Ok(js_coords) = lat_lng.try_into() {
                                     map_for_closure.set_view(&js_coords, 13);
 
-                                    if let Ok(_) = map_for_closure.add_leaflet_marker(&geo_coords) {
+                                    if map_for_closure.add_leaflet_marker(&geo_coords).is_ok() {
                                         let mut current_markers = (*markers).clone();
                                         current_markers
                                             .push((geo_coords.latitude, geo_coords.longitude));

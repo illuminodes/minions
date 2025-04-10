@@ -1,8 +1,12 @@
 
+// #[cfg(feature = "ag-grid")]
 pub mod ag_grid;
-// pub mod draggable;
-pub mod forms;
-pub mod full_calendar;
-pub mod leaflet;
-pub mod toastify;
+// #[cfg(feature = "bitcoin-qr")]
 pub mod bitcoin_qr;
+pub mod forms;
+// #[cfg(feature = "full-calendar")]
+pub mod full_calendar;
+//#[cfg(feature = "leaflet")]
+pub mod leaflet;
+// #[cfg(feature = "leaflet")]
+pub mod toastify;

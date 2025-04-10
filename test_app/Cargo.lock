@@ -1234,7 +1234,7 @@ dependencies = [
 
 [[package]]
 name = "nostr-minions"
-version = "0.1.11"
+version = "0.1.13"
 dependencies = [
  "gloo 0.11.0",
  "lucide-yew",
@@ -1290,9 +1290,9 @@ dependencies = [
 
 [[package]]
 name = "nostro2-web-relay"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e4775a6689c6ab3dd89461995d8af42b855fdaf624d32b057d720cb807e043e"
+checksum = "006e5bdb41a3a454f90c649f76f8b1efd13d51aa6f0a8e4821106f7facf69e76"
 dependencies = [
  "futures-util",
  "nostro2",

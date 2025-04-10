@@ -1,6 +1,6 @@
 [package]
 name = "nostr-minions"
-version = "0.1.12"
+version = "0.1.13"
 edition = "2021"
 license = "BSD-3-Clause"
 description = "A Yew-based framework for client side Nostr apps"
@@ -8,10 +8,19 @@ repository = "https://github.com/illuminodes/minions"
 readme = "README.md"
 homepage = "https://github.com/illuminodes/minions"
 
+[features]
+default = []
+ag-grid = []
+bitcoin-qr = []
+full-calendar = []
+leaflet = []
+toastify = []
+all-widgets = ["ag-grid", "bitcoin-qr", "full-calendar", "leaflet", "toastify"]
+
 [dependencies]
 # Nostr Stack
 # nostro2 = "0.2.7" 
-nostro2-web-relay = "0.1.2"
+nostro2-web-relay = "0.1.3"
 # nostro2-web-relay = { path = "../NostrO2/nostro2-web-relay" }
 nostro2-signer =  "0.1.0"
 # nostro2-signer =  { path = "../NostrO2/nostro2-signer" }

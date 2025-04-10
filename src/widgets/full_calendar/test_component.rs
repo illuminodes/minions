@@ -1,5 +1,5 @@
 use super::{Calendar, FullCalendarComponent, FullCalendarEvent};
-use crate::relay_pool::NostrPoolStore;
+use crate::relay_pool::NostrRelayPoolStore;
 use crate::widgets::toastify::ToastifyOptions;
 use nostro2_web_relay::nostro2::note::NostrNote;
 use nostro2_web_relay::nostro2::subscriptions::NostrSubscription;
@@ -10,21 +10,21 @@ use yew::prelude::*;
 
 #[function_component(FullCalendarTest)]
 pub fn calendar_test() -> Html {
-    let relay_ctx = use_context::<NostrPoolStore>().expect("No relay context found");
+    let relay_ctx = use_context::<NostrRelayPoolStore>().expect("No relay context found");
     let events = use_state(Vec::new);
     // Set up subscription for calendar events
     {
-        use_effect_with(relay_ctx.clone(), move |ctx| {
+        let ctx = relay_ctx.clone();
+        use_effect_with((), move |()| {
             // Create and configure filter for calendar events
             let filter = NostrSubscription {
                 kinds: Some(vec![31924]),
                 limit: Some(50),
                 ..Default::default()
-            }
-            .into();
+            };
 
             // Create and send subscription
-            ctx.subscribe.emit(filter);
+            ctx.send(filter);
             || ()
         });
     }
@@ -84,7 +84,7 @@ pub fn calendar_test() -> Html {
 
     // Handle date selection for new events
     let handle_date_select = {
-        let relay_ctx = relay_ctx.send_note.clone();
+        let relay_ctx = relay_ctx.clone();
         Callback::from(move |(start, end): (Date, Date)| {
             // Convert JsString to String
             let start_time = start
@@ -124,7 +124,7 @@ pub fn calendar_test() -> Html {
                 new_note.id.as_ref().unwrap().as_str()
             );
 
-            relay_ctx.emit(new_note);
+            relay_ctx.send(new_note);
 
             ToastifyOptions::new_success("Created new calendar event").show();
         })

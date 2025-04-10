@@ -1,4 +1,4 @@
-use super::leaflet::{LeafletMap, Marker, L};
+use super::bindings::{LeafletMap, Marker, L};
 use super::nominatim::NominatimLookup;
 use super::{IconOptions, LeafletMapOptions};
 use crate::browser_api::{GeolocationCoordinates, GeolocationPosition};

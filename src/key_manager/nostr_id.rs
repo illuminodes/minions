@@ -47,7 +47,7 @@ impl wasm_bindgen::JsCast for NostrIdType {
     fn instanceof(val: &JsValue) -> bool {
         val.is_instance_of::<CryptoKey>()
             || val.is_string()
-            || val.as_string().map_or(false, |s| s == "Extension")
+            || val.as_string().is_some_and(|s| s == "Extension")
     }
     fn unchecked_from_js(val: JsValue) -> Self {
         if let Some(key) = val.dyn_ref::<CryptoKey>() {
@@ -213,10 +213,13 @@ impl UserIdentity {
                 Ok(())
             }
             NostrIdType::Extension => {
-                let nostr_signer = NostrSignerExtension::new().await?;
-                let signed_note_js = nostr_signer.sign_event(note.clone().into()).await?;
-                let signed_note: NostrNote = signed_note_js.try_into()?;
-                *note = signed_note;
+                #[cfg(target_arch = "wasm32")]
+                {
+                    let nostr_signer = NostrSignerExtension::new().await?;
+                    let signed_note_js = nostr_signer.sign_event(note.clone().into()).await?;
+                    let signed_note: NostrNote = signed_note_js.try_into()?;
+                    *note = signed_note;
+                }
                 Ok(())
             }
             NostrIdType::Bunker(_) => Err(JsValue::from_str("No Bunker support yet")),
@@ -271,6 +274,35 @@ impl UserIdentity {
             NostrIdType::Bunker(_) => Err(JsValue::from_str("No Bunker support yet")),
         }
     }
+    pub async fn encrypt_nip44(
+        &self,
+        cleartext: String,
+        pubkey: String,
+    ) -> Result<String, JsValue> {
+        match &self.signer {
+            NostrIdType::Local(key) => {
+                let key = key.clone();
+                let keypair = BrowserCrypto::default().export_raw_key(key).await?;
+                let slice = web_sys::js_sys::Uint8Array::new(&keypair);
+                let keypair = NostrKeypair::try_from(slice.to_vec().as_slice())
+                    .map_err(|e| JsValue::from_str(&e.to_string()))?;
+                let encrypted = keypair
+                    .encrypt_nip_44_plaintext(&cleartext, pubkey)
+                    .map_err(|e| JsValue::from_str(&e.to_string()))?;
+                Ok(encrypted)
+            }
+            NostrIdType::Extension => {
+                let signer = NostrSignerExtension::new().await?;
+                let encrypted = signer
+                    .nip44()
+                    .await?
+                    .encrypt(pubkey.into(), cleartext.into())
+                    .await?;
+                Ok(encrypted.try_into()?)
+            }
+            NostrIdType::Bunker(_) => Err(JsValue::from_str("No Bunker support yet")),
+        }
+    }
     pub async fn sign_nip04(&self, note: &mut NostrNote, pubkey: String) -> Result<(), JsValue> {
         match &self.signer {
             NostrIdType::Local(key) => {
@@ -295,9 +327,12 @@ impl UserIdentity {
                 note.content = encrypted_note_js.try_into()?;
 
                 // Sign the note with updated content
-                let signed_note_js = signer.sign_event(note.clone().into()).await?;
-                let signed_note: NostrNote = signed_note_js.try_into()?;
-                *note = signed_note;
+                #[cfg(target_arch = "wasm32")]
+                {
+                    let signed_note_js = signer.sign_event(note.clone().into()).await?;
+                    let signed_note: NostrNote = signed_note_js.try_into()?;
+                    *note = signed_note;
+                }
                 Ok(())
             }
             NostrIdType::Bunker(_) => Err(JsValue::from_str("No Bunker support yet")),
@@ -326,9 +361,12 @@ impl UserIdentity {
                 note.content = new_content.try_into()?;
 
                 // Sign the note with updated content
-                let signed_note_js = signer.sign_event(note.clone().into()).await?;
-                let signed_note: NostrNote = signed_note_js.try_into()?;
-                *note = signed_note;
+                #[cfg(target_arch = "wasm32")]
+                {
+                    let signed_note_js = signer.sign_event(note.clone().into()).await?;
+                    let signed_note: NostrNote = signed_note_js.try_into()?;
+                    *note = signed_note;
+                }
                 Ok(())
             }
             NostrIdType::Bunker(_) => Err(JsValue::from_str("No Bunker support yet")),

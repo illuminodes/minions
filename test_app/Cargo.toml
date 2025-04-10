@@ -7,4 +7,4 @@ edition = "2021"
 gloo-timers = "0.3.0"
 wasm-bindgen-test = "0.3"
 yew = { version = "0.21.0",  features = ["csr"] }
-nostr-minions = { path = "../" }
+nostr-minions = { path = "../", features = ["all-widgets"] }

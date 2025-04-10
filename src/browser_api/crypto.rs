@@ -13,50 +13,67 @@ impl Default for BrowserCrypto {
         }
     }
 }
+pub enum KeyGenParams {
+    AesKeyGenParams,
+}
+impl From<KeyGenParams> for AesKeyGenParams {
+    fn from(val: KeyGenParams) -> Self {
+        match val {
+            KeyGenParams::AesKeyGenParams => AesKeyGenParams::new("AES-GCM", 256),
+        }
+    }
+}
+impl From<KeyGenParams> for web_sys::js_sys::Object {
+    fn from(val: KeyGenParams) -> Self {
+        let key_params: web_sys::AesKeyGenParams = val.into();
+        key_params.into()
+    }
+}
 impl BrowserCrypto {
-    pub async fn crypto_key_from_bytes(&self, p_key: &[u8; 32]) -> Result<CryptoKey, JsValue> {
-        let array = web_sys::js_sys::Uint8Array::from(&p_key[..]);
-        let key_object: web_sys::js_sys::Object = array.buffer().into();
-        let algo = AesKeyGenParams::new("AES-GCM", 256);
+    pub async fn import_key_array(
+        &self,
+        p_key: web_sys::js_sys::Object,
+    ) -> Result<CryptoKey, JsValue> {
         let usage_tags: web_sys::js_sys::Array =
-            vec![JsValue::from_str("encrypt"), JsValue::from_str("decrypt")]
+            [JsValue::from_str("encrypt"), JsValue::from_str("decrypt")]
                 .iter()
                 .collect();
-        let key =
-            self.crypto
-                .import_key_with_object("raw", &key_object, &algo, true, &usage_tags)?;
+        let key = self.crypto.import_key_with_object(
+            "raw",
+            &p_key,
+            &KeyGenParams::AesKeyGenParams.into(),
+            true,
+            &usage_tags,
+        )?;
         let key: JsValue = wasm_bindgen_futures::JsFuture::from(key).await?;
-        Ok(key.dyn_into()?)
+        key.dyn_into()
     }
-    pub async fn crypto_key_to_hex(&self, js_value: CryptoKey) -> Result<String, JsValue> {
+    pub async fn export_raw_key(
+        &self,
+        js_value: CryptoKey,
+    ) -> Result<web_sys::js_sys::ArrayBuffer, JsValue> {
         let key =
             wasm_bindgen_futures::JsFuture::from(self.crypto.export_key("raw", &js_value)?).await?;
-        let key_array: web_sys::js_sys::ArrayBuffer = key.into();
-        let key_array = web_sys::js_sys::Uint8Array::new(&key_array);
-        let key_array = key_array.to_vec();
-        Ok(key_array
-            .iter()
-            .map(|x| format!("{:02x}", x))
-            .collect::<String>())
+        Ok(key.into())
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use wasm_bindgen_test::*;
-    wasm_bindgen_test_configure!(run_in_browser);
-    #[wasm_bindgen_test]
-    async fn _test_crypto_key_from_bytes() {
-        let crypto = BrowserCrypto::default();
-        let key = crypto.crypto_key_from_bytes(&[0; 32]).await.unwrap();
-        assert_eq!(key.type_(), "secret");
-    }
-    #[wasm_bindgen_test]
-    async fn _test_crypto_key_to_hex() {
-        let crypto = BrowserCrypto::default();
-        let key = crypto.crypto_key_from_bytes(&[0; 32]).await.unwrap();
-        let hex = crypto.crypto_key_to_hex(key).await.unwrap();
-        assert_eq!(hex.len(), 64);
-    }
-}
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use wasm_bindgen_test::*;
+//     wasm_bindgen_test_configure!(run_in_browser);
+//     #[wasm_bindgen_test]
+//     async fn _test_crypto_key_from_bytes() {
+//         let crypto = BrowserCrypto::default();
+//         let key = crypto.crypto_key_from_bytes(&[0; 32]).await.unwrap();
+//         assert_eq!(key.type_(), "secret");
+//     }
+//     #[wasm_bindgen_test]
+//     async fn _test_crypto_key_to_hex() {
+//         let crypto = BrowserCrypto::default();
+//         let key = crypto.crypto_key_from_bytes(&[0; 32]).await.unwrap();
+//         let hex = crypto.crypto_key_to_hex(key).await.unwrap();
+//         assert_eq!(hex.len(), 64);
+//     }
+// }

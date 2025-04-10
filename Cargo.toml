@@ -1,6 +1,6 @@
 [package]
 name = "nostr-minions"
-version = "0.1.6"
+version = "0.1.13"
 edition = "2021"
 license = "BSD-3-Clause"
 description = "A Yew-based framework for client side Nostr apps"
@@ -8,33 +8,49 @@ repository = "https://github.com/illuminodes/minions"
 readme = "README.md"
 homepage = "https://github.com/illuminodes/minions"
 
+[features]
+default = []
+ag-grid = []
+bitcoin-qr = []
+full-calendar = []
+leaflet = []
+toastify = []
+all-widgets = ["ag-grid", "bitcoin-qr", "full-calendar", "leaflet", "toastify"]
+
 [dependencies]
 # Nostr Stack
-nostro2 = "0.2.4"
+# nostro2 = "0.2.7" 
+nostro2-web-relay = "0.1.4"
+# nostro2-web-relay = { path = "../NostrO2/nostro2-web-relay" }
+nostro2-signer =  "0.1.0"
+# nostro2-signer =  { path = "../NostrO2/nostro2-signer" }
+upload-things = "0.1.2"
+lucide-yew = "1.1.0"
+uuid = { version = "1.15", features = ["v4", "js"] }
 
 # JSON manipulation
-serde = { version = "1.0.215", features = ["derive"] }
-serde_json = "1.0.133"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 serde-wasm-bindgen = "0.6.5"
 
 # DOM and Browser Bindings
-gloo = "0.11.0"
-web-sys = { version = "0.3.76", features = ["HtmlInputElement", "HtmlFormElement", "SubtleCrypto", "CryptoKey", 
+gloo = "0.11"
+web-sys = { version = "0.3", features = ["HtmlInputElement", "HtmlFormElement", "SubtleCrypto", "CryptoKey", 
 "Window", "Crypto", "AesKeyGenParams", "AesGcmParams", "IdbFactory", "IdbOpenDbOptions", "HtmlSelectElement", 
 "Clipboard", "IdbOpenDbRequest", "IdbTransaction", "IdbRequest", "IdbDatabase", "IdbObjectStore", "IdbRequestReadyState", 
 "Navigator", "HtmlAudioElement", "HtmlMediaElement", "Geolocation", "Response", "ReadableStream", "IdbTransactionMode", 
 "IdbObjectStoreParameters", "Navigator", "ServiceWorkerContainer", "ServiceWorkerGlobalScope", "FetchEvent", "CustomEvent", "DomStringList"] }
 
 # I/O
-tokio = { version = "1.42.0", features = ["macros", "sync"] }
-wasm-bindgen-futures = "0.4.45"
+tokio = { version = "1", features = ["macros", "sync"] }
+wasm-bindgen-futures = "0.4"
 
 # PWA stack
 yew = { version = "0.21.0" }
 yew-router = "0.18.0"
-wasm-bindgen = "0.2.99"
+wasm-bindgen = "0.2"
 
 [dev-dependencies]
 gloo-timers = "0.3.0"
-wasm-bindgen-test = "0.3.42"
+wasm-bindgen-test = "0.3"
 yew = { version = "0.21.0",  features = ["csr"] }

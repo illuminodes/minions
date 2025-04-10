@@ -1,23 +1,24 @@
 use super::component::LeafletComponent;
 use crate::browser_api::GeolocationCoordinates;
-use crate::relay_pool::NostrProps;
-use crate::widgets::leaflet::nominatim::NominatimLookup;
-use crate::widgets::leaflet::IconOptions;
-use crate::widgets::leaflet::{LatLng, LeafletLocateOptions, LeafletMap};
-use nostro2::notes::NostrNote;
+use crate::relay_pool::NostrRelayPoolStore;
+use crate::widgets::leaflet::{
+    nominatim::NominatimLookup, IconOptions, LatLng, LeafletLocateOptions, LeafletMap,
+    LeafletMapOptions,
+};
+use nostro2_web_relay::nostro2::note::NostrNote;
 use wasm_bindgen::JsValue;
 use web_sys::MouseEvent;
 use yew::prelude::*;
 
 #[function_component(LeafletTest)]
 pub fn leaflet_test() -> Html {
-    let relay_ctx = use_context::<NostrProps>().expect("No relay context found");
+    let relay_ctx = use_context::<NostrRelayPoolStore>().expect("No relay context found");
     let map = use_state(|| None::<LeafletMap>);
-    let markers = use_state(|| Vec::<(f64, f64)>::new());
-    let location_name = use_state(|| String::new());
+    let markers = use_state(Vec::<(f64, f64)>::new);
+    let location_name = use_state(String::new);
 
     let send_test_event = {
-        let note_sender = relay_ctx.send_note.clone();
+        let note_sender = relay_ctx.clone();
         let markers = markers.clone();
         let map = map.clone();
 
@@ -71,7 +72,7 @@ pub fn leaflet_test() -> Html {
 
                 // Send Nostr event
                 let content = serde_json::to_string(&coords).unwrap();
-                let new_keys = nostro2::keypair::NostrKeypair::generate(false);
+                let new_keys = nostro2_signer::keypair::NostrKeypair::generate(false);
                 let mut new_note = NostrNote {
                     pubkey: new_keys.public_key(),
                     kind: 27235,
@@ -79,7 +80,7 @@ pub fn leaflet_test() -> Html {
                     ..Default::default()
                 };
                 new_keys.sign_nostr_event(&mut new_note);
-                note_sender.emit(new_note);
+                note_sender.send(new_note);
             }
 
             crate::widgets::toastify::ToastifyOptions::new_event_received(
@@ -132,10 +133,10 @@ pub fn leaflet_test() -> Html {
                     web_sys::console::log_1(&event);
 
                     // Try to get latitude and longitude directly from the event
-                    let latitude = web_sys::js_sys::Reflect::get(&event, &JsValue::from_str("latitude"))
-                        .and_then(|v| Ok(v.as_f64().unwrap_or(0.0)));
-                    let longitude = web_sys::js_sys::Reflect::get(&event, &JsValue::from_str("longitude"))
-                        .and_then(|v| Ok(v.as_f64().unwrap_or(0.0)));
+                    let latitude =
+                        web_sys::js_sys::Reflect::get(&event, &JsValue::from_str("latitude")).map(|v| v.as_f64().unwrap_or(0.0));
+                    let longitude =
+                        web_sys::js_sys::Reflect::get(&event, &JsValue::from_str("longitude")).map(|v| v.as_f64().unwrap_or(0.0));
 
                     if let (Ok(lat), Ok(lng)) = (latitude, longitude) {
                         web_sys::console::log_1(
@@ -159,7 +160,7 @@ pub fn leaflet_test() -> Html {
                         if let Ok(js_coords) = lat_lng.try_into() {
                             map_for_closure.set_view(&js_coords, 13);
 
-                            if let Ok(_) = map_for_closure.add_leaflet_marker(&geo_coords) {
+                            if map_for_closure.add_leaflet_marker(&geo_coords).is_ok() {
                                 let mut current_markers = (*markers).clone();
                                 current_markers.push((geo_coords.latitude, geo_coords.longitude));
                                 markers.set(current_markers);
@@ -174,10 +175,10 @@ pub fn leaflet_test() -> Html {
                         if let Ok(latlng) =
                             web_sys::js_sys::Reflect::get(&event, &JsValue::from_str("latlng"))
                         {
-                            let lat = web_sys::js_sys::Reflect::get(&latlng, &JsValue::from_str("lat"))
-                                .and_then(|v| Ok(v.as_f64().unwrap_or(0.0)));
-                            let lng = web_sys::js_sys::Reflect::get(&latlng, &JsValue::from_str("lng"))
-                                .and_then(|v| Ok(v.as_f64().unwrap_or(0.0)));
+                            let lat =
+                                web_sys::js_sys::Reflect::get(&latlng, &JsValue::from_str("lat")).map(|v| v.as_f64().unwrap_or(0.0));
+                            let lng =
+                                web_sys::js_sys::Reflect::get(&latlng, &JsValue::from_str("lng")).map(|v| v.as_f64().unwrap_or(0.0));
 
                             if let (Ok(lat), Ok(lng)) = (lat, lng) {
                                 web_sys::console::log_1(
@@ -205,7 +206,7 @@ pub fn leaflet_test() -> Html {
                                 if let Ok(js_coords) = lat_lng.try_into() {
                                     map_for_closure.set_view(&js_coords, 13);
 
-                                    if let Ok(_) = map_for_closure.add_leaflet_marker(&geo_coords) {
+                                    if map_for_closure.add_leaflet_marker(&geo_coords).is_ok() {
                                         let mut current_markers = (*markers).clone();
                                         current_markers
                                             .push((geo_coords.latitude, geo_coords.longitude));
@@ -252,13 +253,22 @@ pub fn leaflet_test() -> Html {
         })
     };
 
+    let map_options = LeafletMapOptions {
+        min_zoom: Some(1),
+        max_zoom: Some(18),
+        zoom: 13,
+        ..Default::default()
+    };
+
     html! {
-        <div class="flex flex-col gap-4 p-4">
+        <div class="flex flex-col gap-8 items-center justify-center">
             <h1 class="text-2xl font-bold">{"Leaflet Map Test"}</h1>
             <LeafletComponent
                 map={map.clone()}
                 map_id="leaflet-map"
                 markers={(*markers).clone()}
+                {map_options}
+                class="relative rounded shadow-md w-64 h-64"
                 on_map_created={Callback::from({
                     let map = map.clone();
                     move |map_instance: LeafletMap| map.set(Some(map_instance))

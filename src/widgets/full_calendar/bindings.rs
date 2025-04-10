@@ -1,9 +1,9 @@
-use web_sys::js_sys::{Function, Object, Reflect};
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsValue;
+use web_sys::js_sys::{Function, Object, Reflect};
 use web_sys::Element;
 
 use web_sys::js_sys::Date;
@@ -34,7 +34,8 @@ extern "C" {
 }
 impl Calendar {
     pub fn add_calendar_event(&self, event: FullCalendarEvent) -> Result<(), JsValue> {
-        let js_value = JsValue::from_serde(&event).map_err(|e| JsValue::from_str(&format!("Failed to convert event: {}", e)))?;
+        let js_value = serde_wasm_bindgen::to_value(&event)
+            .map_err(|e| JsValue::from_str(&format!("Failed to convert event: {}", e)))?;
         self.add_event(js_value);
         Ok(())
     }
@@ -155,7 +156,10 @@ impl Default for FullCalendarOptions {
     fn default() -> Self {
         Self {
             initial_view: "dayGridMonth",
-            initial_date: web_sys::js_sys::Date::new_0().to_iso_string().as_string().unwrap(),
+            initial_date: web_sys::js_sys::Date::new_0()
+                .to_iso_string()
+                .as_string()
+                .unwrap(),
             locale: "es-SV",
             expand_rows: true,
             all_day_slot: false,
@@ -200,7 +204,7 @@ impl FullCalendarOptions {
         Self::default()
     }
 
-    pub fn with_event_click<F>(mut self, f: F) -> Self 
+    pub fn with_event_click<F>(mut self, f: F) -> Self
     where
         F: Fn(JsValue) + 'static,
     {
@@ -288,9 +292,9 @@ impl Default for FullCalendarHeaderOptions {
     }
 }
 
-impl Into<JsValue> for FullCalendarOptions {
-    fn into(self) -> JsValue {
-        self.to_js_value().unwrap_or_else(|e| {
+impl From<FullCalendarOptions> for JsValue {
+    fn from(val: FullCalendarOptions) -> Self {
+        val.to_js_value().unwrap_or_else(|e| {
             gloo::console::error!("Failed to convert calendar options:", e);
             JsValue::NULL
         })
@@ -369,7 +373,7 @@ impl FullCalendarEvent {
 
     pub fn quick_event(id: &str, title: &str, start: Date, duration_mins: i32) -> Self {
         let end = Date::new(&start.clone().into());
-        let current_minutes = end.get_minutes() as u32;
+        let current_minutes = end.get_minutes();
         let total_minutes = current_minutes + duration_mins as u32;
         end.set_minutes(total_minutes);
         Self::new(
@@ -452,9 +456,9 @@ impl FullCalendarEvent {
         &self.extended_props
     }
 }
-impl Into<JsValue> for FullCalendarEvent {
-    fn into(self) -> JsValue {
-        JsValue::from_serde(&self).unwrap()
+impl From<FullCalendarEvent> for JsValue {
+    fn from(val: FullCalendarEvent) -> Self {
+        serde_wasm_bindgen::to_value(&val).unwrap()
     }
 }
 // Add TryFrom for better error handling
@@ -479,9 +483,9 @@ impl FullCalendarDateClickInfo {
     }
 }
 
-impl Into<JsValue> for FullCalendarDateClickInfo {
-    fn into(self) -> JsValue {
-        serde_wasm_bindgen::to_value(&self)
+impl From<FullCalendarDateClickInfo> for JsValue {
+    fn from(val: FullCalendarDateClickInfo) -> Self {
+        serde_wasm_bindgen::to_value(&val)
             .expect("Failed to convert FullCalendarDateClickInfo to JsValue")
     }
 }
@@ -493,4 +497,3 @@ impl TryFrom<JsValue> for FullCalendarDateClickInfo {
             .map_err(|e| JsValue::from_str(&format!("Failed to convert date click info: {}", e)))
     }
 }
-

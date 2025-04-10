@@ -1,5 +1,5 @@
-mod full_calendar;
-pub use full_calendar::*;
+mod bindings;
+pub use bindings::*;
 mod component;
 pub use component::*;
 mod test_component;

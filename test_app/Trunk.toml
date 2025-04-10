@@ -1,0 +1,18 @@
+[watch]
+# Paths to watch. The `build.target`'s parent folder is watched by default.
+watch = ["src", "index.html", "public"]
+
+[serve]
+port = 2100
+open = false
+
+[[hooks]]
+stage = "pre_build"
+command = "bash"
+command_arguments = [
+    "-c",
+    "tailwindcss4 -i public/styles/input.css -o public/styles/output.css"
+]
+
+
+

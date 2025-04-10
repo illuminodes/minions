@@ -1,8 +1,11 @@
 pub mod browser_api;
 pub mod key_manager;
 pub mod relay_pool;
-pub mod router;
 pub mod widgets;
+pub mod constants;
+pub mod nostro2 {
+    pub use nostro2_signer::nostro2::*;
+}
 
 pub const DB_NAME: &str = "nostr_db";
 pub const DB_VERSION: u32 = 2;
@@ -51,6 +54,3 @@ fn upgrade_nostr_db(event: web_sys::Event) -> Result<(), JsValue> {
     }
     Ok(())
 }
-
-#[cfg(test)]
-mod test_app;

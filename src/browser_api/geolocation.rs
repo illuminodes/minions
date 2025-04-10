@@ -1,6 +1,6 @@
 use gloo::utils::format::JsValueSerdeExt;
 
-use crate::widgets::leaflet::LatLng;
+// use crate::widgets::leaflet::LatLng;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct GeolocationCoordinates {
@@ -12,31 +12,31 @@ pub struct GeolocationCoordinates {
     pub longitude: f64,
     pub speed: Option<f64>,
 }
-impl Into<web_sys::wasm_bindgen::JsValue> for GeolocationCoordinates {
-    fn into(self) -> web_sys::wasm_bindgen::JsValue {
-        web_sys::wasm_bindgen::JsValue::from_serde(&self).unwrap()
+impl From<GeolocationCoordinates> for web_sys::wasm_bindgen::JsValue {
+    fn from(val: GeolocationCoordinates) -> Self {
+        web_sys::wasm_bindgen::JsValue::from_serde(&val).unwrap()
     }
 }
-impl TryFrom<web_sys::wasm_bindgen::JsValue> for GeolocationCoordinates {
-    type Error = web_sys::wasm_bindgen::JsValue;
-    fn try_from(value: web_sys::wasm_bindgen::JsValue) -> Result<Self, Self::Error> {
-        value
-            .into_serde()
-            .map_err(|e| web_sys::wasm_bindgen::JsValue::from_str(&e.to_string()))
-    }
-}
-impl From<LatLng> for GeolocationCoordinates {
-    fn from(value: LatLng) -> Self {
-        Self {
-            accuracy: 0.0,
-            altitude: None,
-            altitude_accuracy: None,
-            latitude: value.lat,
-            longitude: value.lng,
-            speed: None,
-        }
-    }
-}
+//impl TryFrom<web_sys::wasm_bindgen::JsValue> for GeolocationCoordinates {
+//    type Error = web_sys::wasm_bindgen::JsValue;
+//    fn try_from(value: web_sys::wasm_bindgen::JsValue) -> Result<Self, Self::Error> {
+//        value
+//            .into_serde()
+//            .map_err(|e| web_sys::wasm_bindgen::JsValue::from_str(&e.to_string()))
+//    }
+//}
+//impl From<LatLng> for GeolocationCoordinates {
+//    fn from(value: LatLng) -> Self {
+//        Self {
+//            accuracy: 0.0,
+//            altitude: None,
+//            altitude_accuracy: None,
+//            latitude: value.lat,
+//            longitude: value.lng,
+//            speed: None,
+//        }
+//    }
+//}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GeolocationPosition {

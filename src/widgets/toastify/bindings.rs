@@ -133,9 +133,9 @@ impl ToastifyOptions {
     }
 }
 
-impl Into<JsValue> for ToastifyOptions {
-    fn into(self) -> JsValue {
-        serde_wasm_bindgen::to_value(&self).expect("Failed to serialize Toast")
+impl From<ToastifyOptions> for JsValue {
+    fn from(val: ToastifyOptions) -> Self {
+        serde_wasm_bindgen::to_value(&val).expect("Failed to serialize Toast")
     }
 }
 

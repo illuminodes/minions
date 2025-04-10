@@ -1,5 +1,5 @@
-mod toastify;
-pub use toastify::ToastifyOptions;
+mod bindings;
+pub use bindings::ToastifyOptions;
 
 #[cfg(test)]
 mod toastify_test;

@@ -24,6 +24,9 @@ impl NostrRelayPool {
         });
         msg.into()
     }
+    pub async fn relay_pool_status(&self) -> Vec<crate::nostro2::relay_events::RelayStatus> {
+        self.pool.status().await
+    }
 }
 
 pub enum NostrRelayPoolAction {

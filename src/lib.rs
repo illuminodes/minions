@@ -1,3 +1,12 @@
+#![warn(
+    clippy::all,
+    clippy::missing_errors_doc,
+    clippy::style,
+    clippy::unseparated_literal_suffix,
+    clippy::pedantic,
+    clippy::nursery
+)]
+
 pub mod browser_api;
 pub mod key_manager;
 pub mod relay_pool;
@@ -6,9 +15,14 @@ pub mod constants;
 pub mod nostro2 {
     pub use nostro2_signer::nostro2::*;
 }
+pub mod nostro2_signer {
+    pub use nostro2_signer::keypair::*;
+    pub use nostro2_signer::nip_04::*;
+    pub use nostro2_signer::nip_44::*;
+}
 
 pub const DB_NAME: &str = "nostr_db";
-pub const DB_VERSION: u32 = 2;
+pub const DB_VERSION: u32 = 3;
 pub const RELAY_STORE: &str = "user_relays";
 pub const RELAY_KEY: &str = "url";
 pub const IDENTITY_STORE: &str = "user_identities";

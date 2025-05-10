@@ -20,69 +20,60 @@ pub trait IdbStoreManager {
         Self: Into<web_sys::wasm_bindgen::JsValue> + Sized,
     {
         async {
-            let object_store_request = Self::request_store_open().await?;
-            let request = object_store_request.put(self.into().as_ref())?;
-            let req_clone = request.clone();
+            let object_store = Self::request_store_open().await?;
+            let request = object_store.put(self.into().as_ref())?;
             let (sender, receiver) = oneshot::channel();
-            let on_success =
-                Closure::once_into_js(move |_: web_sys::Event| match req_clone.result() {
-                    Ok(_) => {
-                        let _ = sender.send(());
-                    }
-                    Err(e) => {
-                        error!(&e);
-                    }
-                });
-            let on_error = Closure::once_into_js(move |event: web_sys::Event| {
-                error!(&event);
-            });
-            request.set_onsuccess(Some(on_success.dyn_ref().unwrap()));
-            request.set_onerror(Some(on_error.dyn_ref().unwrap()));
+            Self::handle_request(
+                &request,
+                move |_| {
+                    let _ = sender.send(());
+                },
+                move |e| {
+                    error!(&e);
+                },
+            );
             receiver
                 .await
                 .map_err(|e| JsValue::from_str(&e.to_string()))
         }
     }
+
+    #[must_use]
     fn retrieve_from_store<T>(key: &JsValue) -> impl Future<Output = Result<T, JsValue>>
     where
-        T: TryFrom<web_sys::wasm_bindgen::JsValue> + 'static,
+        T: TryFrom<JsValue> + 'static,
     {
         async move {
             let object_store = Self::request_store_open().await?;
-            let (success_sender, success_receiver) = oneshot::channel::<T>();
             let request = object_store.get(key)?;
-            let req_clone = request.clone();
-            let on_success =
-                Closure::once_into_js(move |_event: web_sys::Event| match req_clone.result() {
-                    Ok(result) => {
-                        if result.is_null() || result.is_undefined() {
-                            error!("Result is null or undefined");
-                            return;
+            let (sender, receiver) = oneshot::channel();
+            Self::handle_request(
+                &request,
+                move |result| {
+                    if result.is_null() || result.is_undefined() {
+                        error!("Result is null or undefined");
+                        return;
+                    }
+                    match result.try_into() {
+                        Ok(value) => {
+                            let _ = sender.send(value);
                         }
-                        match result.try_into() {
-                            Ok(value) => {
-                                let _ = success_sender.send(value);
-                            }
-                            Err(_) => {
-                                error!("Error converting to T");
-                            }
+                        Err(_) => {
+                            error!("Error converting to T");
                         }
                     }
-                    Err(e) => {
-                        error!(&e);
-                    }
-                });
-            let on_error = Closure::once_into_js(move |event: web_sys::Event| {
-                gloo::console::log!("Error retrieving from store");
-                error!(&event);
-            });
-            request.set_onsuccess(Some(on_success.as_ref().unchecked_ref()));
-            request.set_onerror(Some(on_error.as_ref().unchecked_ref()));
-            success_receiver
+                },
+                move |e| {
+                    error!("Error retrieving from store: {:?}", e);
+                },
+            );
+
+            receiver
                 .await
                 .map_err(|e| JsValue::from_str(&e.to_string()))
         }
     }
+    #[must_use]
     fn retrieve_all_from_store() -> impl Future<Output = Result<Vec<Self>, JsValue>>
     where
         Self: TryFrom<JsValue, Error = JsValue> + 'static + serde::de::DeserializeOwned,
@@ -90,21 +81,27 @@ pub trait IdbStoreManager {
         async {
             let object_store = Self::request_store_open().await?;
             let request = object_store.get_all()?;
-            let req_clone = request.clone();
             let (sender, receiver) = oneshot::channel();
-            let on_success = Closure::once_into_js(move |_event: web_sys::Event| {
-                let result: JsValue = req_clone.result().unwrap();
-                let js_array: web_sys::js_sys::Array = result.dyn_into().unwrap();
-                let result: Vec<Self> = js_array
-                    .iter()
-                    .map(|value| {
-                        let value: JsValue = value;
-                        value.try_into().unwrap()
-                    })
-                    .collect();
-                let _ = sender.send(result);
-            });
-            request.set_onsuccess(Some(on_success.dyn_ref().unwrap()));
+            Self::handle_request(
+                &request,
+                move |result| {
+                    let Ok(js_array) = result
+                        .dyn_into::<web_sys::js_sys::Array>()
+                        .map_err(|_| JsValue::from_str("Expected an array"))
+                    else {
+                        error!("Error converting to array");
+                        return;
+                    };
+                    let result: Vec<Self> = js_array
+                        .iter()
+                        .filter_map(|value| value.try_into().ok())
+                        .collect();
+                    let _ = sender.send(result);
+                },
+                move |e| {
+                    error!("Error retrieving all from store: {:?}", e);
+                },
+            );
             receiver
                 .await
                 .map_err(|e| JsValue::from_str(&e.to_string()))
@@ -112,80 +109,56 @@ pub trait IdbStoreManager {
     }
     fn delete_from_store(&self) -> impl Future<Output = Result<(), JsValue>> {
         async {
-            let object_store_request = Self::request_store_open().await?;
-            let request = object_store_request.delete(&self.key())?;
-            let req_clone = request.clone();
+            let object_store = Self::request_store_open().await?;
+            let request = object_store.delete(&self.key())?;
             let (sender, receiver) = oneshot::channel();
-            let on_success = Closure::once_into_js(move |_event: web_sys::Event| {
-                let _result: JsValue = req_clone.result().unwrap();
-                let _ = sender.send(());
-            });
-            request.set_onsuccess(Some(on_success.dyn_ref().unwrap()));
+
+            Self::handle_request(
+                &request,
+                move |_| {
+                    let _ = sender.send(());
+                },
+                move |e| {
+                    error!("Error deleting from store: {:?}", e);
+                },
+            );
+
             receiver
                 .await
                 .map_err(|e| JsValue::from_str(&e.to_string()))
         }
     }
+    #[must_use]
+    fn clear_store() -> impl Future<Output = Result<(), JsValue>> {
+        async {
+            let object_store = Self::request_store_open().await?;
+            let request = object_store.clear()?;
+            let (sender, receiver) = oneshot::channel();
+            Self::handle_request(
+                &request,
+                move |_| {
+                    let _ = sender.send(());
+                },
+                move |e| error!(e),
+            );
+            receiver
+                .await
+                .map_err(|e| JsValue::from_str(&e.to_string()))
+        }
+    }
+
+    #[must_use]
     fn request_store_open() -> impl Future<Output = Result<IdbObjectStore, JsValue>> {
         async {
-            let db = Self::request_db_open().await?;
+            let db = Self::request_db_open().await.ok_or_else(|| {
+                error!("Failed to open database");
+                JsValue::from_str("Failed to open database")
+            })?;
             let store_name_str = Self::config().store_name;
             let transaction =
                 db.transaction_with_str_and_mode(store_name_str, IdbTransactionMode::Readwrite)?;
             let object_store = transaction.object_store(store_name_str)?;
             Ok(object_store)
-        }
-    }
-    fn request_db_open() -> impl Future<Output = Result<web_sys::IdbDatabase, JsValue>> {
-        async {
-            let window = web_sys::window().ok_or(JsValue::from_str("No window available."))?;
-            let idb_factory = window
-                .indexed_db()?
-                .ok_or(JsValue::from_str("No IndexedDB"))?;
-            let idb_open_request =
-                idb_factory.open_with_u32(Self::config().db_name, Self::config().db_version)?;
-            let on_upgrade_needed = Closure::once_into_js(move |event: web_sys::Event| {
-                let target = event
-                    .target()
-                    .ok_or(JsValue::from_str("Error upgrading database"))?;
-                let db = target
-                    .dyn_into::<web_sys::IdbOpenDbRequest>()?
-                    .result()?
-                    .dyn_into::<web_sys::IdbDatabase>()?;
-                if let Err(e) = Self::create_data_store(&db) {
-                    error!(&e);
-                }
-                Ok::<(), JsValue>(())
-            });
-            let on_error = Closure::once_into_js(move |event: web_sys::Event| {
-                error!(&event);
-            });
-
-            let db_handle = idb_open_request.clone();
-            let (sender, receiver) = oneshot::channel();
-            let on_success = Closure::once_into_js(move |_: web_sys::Event| {
-                match db_handle.result() {
-                    Ok(result) => {
-                        if result.is_null() || result.is_undefined() {
-                            return Err(JsValue::from_str("Result is null or undefined"));
-                        }
-                        let db: web_sys::IdbDatabase = result.dyn_into()?;
-                        sender.send(db)?;
-                    }
-                    Err(e) => {
-                        error!(&e);
-                        drop(sender);
-                    }
-                }
-                Ok::<(), JsValue>(())
-            });
-            idb_open_request.set_onerror(Some(on_error.as_ref().unchecked_ref()));
-            idb_open_request.set_onupgradeneeded(Some(on_upgrade_needed.as_ref().unchecked_ref()));
-            idb_open_request.set_onsuccess(Some(on_success.as_ref().unchecked_ref()));
-            let db = receiver
-                .await
-                .map_err(|e| JsValue::from_str(&e.to_string()))?;
-            Ok(db)
         }
     }
     fn create_data_store(db: &web_sys::IdbDatabase) -> Result<(), JsValue> {
@@ -196,5 +169,111 @@ pub trait IdbStoreManager {
             &user_relay_params,
         )?;
         Ok(())
+    }
+    fn handle_request(
+        request: &web_sys::IdbRequest,
+        on_success: impl FnOnce(JsValue) + 'static,
+        on_error: impl FnOnce(JsValue) + 'static,
+    ) {
+        let error = request.clone();
+        let result = request.clone();
+        let success_closure = Closure::once(move |_: web_sys::Event| {
+            let Ok(result) = result.result() else {
+                error!("Error retrieving from store");
+                return;
+            };
+            on_success(result);
+        });
+        let error_closure = Closure::once(move |_: web_sys::Event| {
+            let Ok(Some(error)) = error.error() else {
+                on_error(JsValue::from_str("Unknown error"));
+                return;
+            };
+            on_error(error.into());
+        });
+        request.set_onsuccess(Some(success_closure.as_ref().unchecked_ref()));
+        request.set_onerror(Some(error_closure.as_ref().unchecked_ref()));
+        success_closure.forget();
+        error_closure.forget();
+    }
+    #[must_use]
+    fn request_db_open() -> impl Future<Output = Option<web_sys::IdbDatabase>> {
+        async {
+            let window = web_sys::window()?;
+            let idb_factory = window.indexed_db().ok()??;
+
+            let config = Self::config();
+            let request = idb_factory
+                .open_with_u32(config.db_name, config.db_version)
+                .ok()?;
+
+            let (sender, receiver) = oneshot::channel();
+
+            // Handle upgrade: create store only if it doesn't exist
+            let on_upgrade_needed = Closure::wrap(Box::new(move |event: web_sys::Event| {
+                let Some(target) = event.target() else {
+                    error!("Upgrade event target missing");
+                    return;
+                };
+                let Ok(request) = target.dyn_into::<web_sys::IdbOpenDbRequest>() else {
+                    error!("Failed to cast to IdbOpenDbRequest");
+                    return;
+                };
+                let Ok(db) = request
+                    .result()
+                    .and_then(web_sys::wasm_bindgen::JsCast::dyn_into::<web_sys::IdbDatabase>)
+                else {
+                    error!("Failed to get DB result");
+                    return;
+                };
+
+                if !db
+                    .object_store_names()
+                    .unchecked_into::<web_sys::js_sys::Array>()
+                    .iter()
+                    .any(|s| s == *config.store_name)
+                {
+                    let store_params = web_sys::IdbObjectStoreParameters::new();
+                    store_params.set_key_path(&JsValue::from_str(config.document_key));
+                    if let Err(e) = db.create_object_store_with_optional_parameters(
+                        config.store_name,
+                        &store_params,
+                    ) {
+                        error!("Error creating store: {:?}", e);
+                    }
+                }
+            }) as Box<dyn FnMut(_)>);
+
+            // Handle success
+            let request_clone = request.clone();
+            let on_success =
+                Closure::once_into_js(move |_event: web_sys::Event| match request_clone.result() {
+                    Ok(db_value) if !db_value.is_null() && !db_value.is_undefined() => {
+                        if let Ok(db) = db_value.dyn_into::<web_sys::IdbDatabase>() {
+                            let _ = sender.send(db);
+                        } else {
+                            error!("Failed to cast result into IdbDatabase");
+                        }
+                    }
+                    _ => {
+                        error!("DB open success, but result is null/undefined");
+                    }
+                });
+
+            let on_error = Closure::wrap(Box::new(move |event: web_sys::Event| {
+                error!("Database open error: {:?}", event);
+            }) as Box<dyn FnMut(_)>);
+
+            // Set handlers
+            request.set_onupgradeneeded(Some(on_upgrade_needed.as_ref().unchecked_ref()));
+            request.set_onsuccess(Some(on_success.as_ref().unchecked_ref()));
+            request.set_onerror(Some(on_error.as_ref().unchecked_ref()));
+
+            // Forget to leak closures
+            on_upgrade_needed.forget();
+            on_error.forget();
+
+            receiver.await.ok()
+        }
     }
 }

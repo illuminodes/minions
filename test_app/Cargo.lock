@@ -376,6 +376,7 @@ checksum = "65bc07b1a8bc7c85c5f2e110c476c7389b4554ba72af57d8445ea63a576b0876"
 dependencies = [
  "futures-channel",
  "futures-core",
+ "futures-executor",
  "futures-io",
  "futures-sink",
  "futures-task",
@@ -397,6 +398,17 @@ name = "futures-core"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05f29059c0c2090612e8d742178b0580d2dc940c837851ad723096f87af6663e"
+
+[[package]]
+name = "futures-executor"
+version = "0.3.31"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e28d1d997f585e54aebc3f97d39e72338912123a67330d723fdbb564d646c9f"
+dependencies = [
+ "futures-core",
+ "futures-task",
+ "futures-util",
+]
 
 [[package]]
 name = "futures-io"
@@ -908,6 +920,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d231dfb89cfffdbc30e7fc41579ed6066ad03abda9e567ccafae602b97ec5024"
 
 [[package]]
+name = "hex"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+
+[[package]]
 name = "hex-conservative"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1234,12 +1252,13 @@ dependencies = [
 
 [[package]]
 name = "nostr-minions"
-version = "0.1.13"
+version = "0.1.15"
 dependencies = [
  "gloo 0.11.0",
  "lucide-yew",
  "nostro2-signer",
  "nostro2-web-relay",
+ "nostro2-web-signer",
  "serde",
  "serde-wasm-bindgen 0.6.5",
  "serde_json",
@@ -1255,9 +1274,7 @@ dependencies = [
 
 [[package]]
 name = "nostro2"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e729915e709b26cb6a177c05ef8ecc6dec54486037d84e5b994247ee36dc997"
+version = "0.3.3"
 dependencies = [
  "bech32",
  "chrono",
@@ -1271,33 +1288,76 @@ dependencies = [
 ]
 
 [[package]]
-name = "nostro2-signer"
-version = "0.1.0"
+name = "nostro2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c1bbcd485de760dc56fe6f0d220915e8f0d4e6365a86ddca07aefe4dbac19d0"
+checksum = "26e26199bbe4a31af256b0e6293d9952707617c437fa4e629f5bddbcb9bf6e6d"
+dependencies = [
+ "bech32",
+ "chrono",
+ "ring",
+ "secp256k1",
+ "serde",
+ "serde-wasm-bindgen 0.6.5",
+ "serde_json",
+ "sha2",
+ "web-sys",
+]
+
+[[package]]
+name = "nostro2-nips"
+version = "0.1.1"
+dependencies = [
+ "base64",
+ "chacha20",
+ "hex",
+ "hkdf",
+ "hmac",
+ "libaes",
+ "nostro2 0.3.3",
+ "secp256k1",
+ "serde",
+ "serde_json",
+ "sha2",
+ "zeroize",
+]
+
+[[package]]
+name = "nostro2-signer"
+version = "0.1.4"
 dependencies = [
  "base64",
  "bech32",
  "bip39",
- "chacha20",
- "hkdf",
- "hmac",
- "libaes",
- "nostro2",
+ "hex",
+ "nostro2 0.3.3",
+ "nostro2-nips",
  "secp256k1",
- "sha2",
+ "zeroize",
 ]
 
 [[package]]
 name = "nostro2-web-relay"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "006e5bdb41a3a454f90c649f76f8b1efd13d51aa6f0a8e4821106f7facf69e76"
+version = "0.1.6"
 dependencies = [
  "futures-util",
- "nostro2",
+ "nostro2 0.3.3",
  "tokio",
  "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
+name = "nostro2-web-signer"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "402ec206398a73fd1c16bc9e403f45bc1c9ae46cf8ed99926b03bdb70032f4e2"
+dependencies = [
+ "futures",
+ "nostro2 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm-bindgen-test",
  "web-sys",
 ]
 
@@ -1504,9 +1564,9 @@ dependencies = [
 
 [[package]]
 name = "ring"
-version = "0.17.11"
+version = "0.17.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da5349ae27d3887ca812fb375b45a4fbb36d8d12d2df394968cd86e35683fe73"
+checksum = "a4689e6c2294d81e88dc6261c768b63bc4fcdb852be6d1352498b114f61383b7"
 dependencies = [
  "cc",
  "cfg-if",
@@ -1806,9 +1866,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.43.0"
+version = "1.44.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d61fa4ffa3de412bfea335c6ecff681de2b609ba3c77ef3e00e521813a9ed9e"
+checksum = "e6b88822cbe49de4185e3a4cbf8321dd487cf5fe0c5c65695fef6346371e9c48"
 dependencies = [
  "backtrace",
  "pin-project-lite",
@@ -2377,6 +2437,12 @@ dependencies = [
  "syn 2.0.99",
  "synstructure",
 ]
+
+[[package]]
+name = "zeroize"
+version = "1.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ced3678a2879b30306d323f4542626697a464a97c0a07c9aebf7ebca65cd4dde"
 
 [[package]]
 name = "zerovec"

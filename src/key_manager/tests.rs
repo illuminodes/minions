@@ -3,7 +3,7 @@ use yew::prelude::*;
 
 use crate::browser_api::IdbStoreManager;
 
-use super::*;
+use super::{NostrIdAction, UserIdentity};
 #[function_component(NostrIdLoginTest)]
 pub fn nostr_id_login_test() -> Html {
     let ctx = use_context::<crate::key_manager::NostrIdStore>().expect("NostrIdStore not found");
@@ -31,7 +31,7 @@ pub fn nostr_id_login_test() -> Html {
                     ..Default::default()
                 };
                 match ctx.sign_note(&mut note).await {
-                    Ok(_) => {
+                    Ok(()) => {
                         gloo::console::log!(format!("Signed note: {:?}", note));
                         relay_ctx.send(note.clone());
                     }
@@ -55,7 +55,7 @@ pub fn nostr_id_login_test() -> Html {
                     ..Default::default()
                 };
                 match ctx.sign_encrypted_note(&mut note, pubkey).await {
-                    Ok(_) => {
+                    Ok(()) => {
                         gloo::console::log!(format!("Signed encrypted note: {:?}", note));
                         relay_ctx.send(note.clone());
                         let decrypted = ctx.decrypt_note(&note).await.expect("Decryption failed");
@@ -70,7 +70,7 @@ pub fn nostr_id_login_test() -> Html {
     // onclick handler for testing giftwrapping
     let test_giftwrap = {
         let ctx = ctx.clone();
-        let relay_ctx = relay_ctx.clone();
+        let relay_ctx = relay_ctx;
         Callback::from(move |_| {
             let ctx = ctx.clone();
             let relay_ctx = relay_ctx.clone();
@@ -104,7 +104,7 @@ pub fn nostr_id_login_test() -> Html {
                             .sign_encrypted_note(&mut giftwrapped_note, pubkey.clone())
                             .await
                         {
-                            Ok(_) => {
+                            Ok(()) => {
                                 gloo::console::log!(
                                     "Successfully signed and encrypted giftwrapped note:"
                                 );
@@ -178,7 +178,7 @@ pub fn nostr_id_login_test() -> Html {
                             Ok(id) => {
                                 let pubkey = id.get_pubkey().await.unwrap();
                                 id.clone().save_to_store().await.unwrap();
-                                ctx.dispatch(NostrIdAction::LoadIdentity(pubkey ,id.clone()))},
+                                ctx.dispatch(NostrIdAction::LoadIdentity(pubkey ,id.clone()));},
                             Err(e) => gloo::console::error!(&e),
                         }
                     });
@@ -195,7 +195,7 @@ pub fn nostr_id_login_test() -> Html {
                             Ok(id) => {
                                 let pubkey = id.get_pubkey().await.unwrap();
                                 id.clone().save_to_store().await.unwrap();
-                                ctx.dispatch(NostrIdAction::LoadIdentity(pubkey,id))},
+                                ctx.dispatch(NostrIdAction::LoadIdentity(pubkey,id));},
                             Err(e) => gloo::console::error!(&e),
                         }
                     });

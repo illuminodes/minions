@@ -15,7 +15,7 @@ struct NostrNoteRow {
 
 impl From<&NostrNote> for NostrNoteRow {
     fn from(note: &NostrNote) -> Self {
-        NostrNoteRow {
+        Self {
             id: note.id.clone().unwrap_or_default(),
             pubkey: note.pubkey.clone(),
             content: note.content.clone(),
@@ -47,7 +47,7 @@ pub fn nostr_notes_grid() -> Html {
             if let Some(note) = notes.last() {
                 let mut new_rows = (*rows).clone();
                 new_rows.push(NostrNoteRow::from(note));
-                rows.set(new_rows.to_vec());
+                rows.set(new_rows.clone());
             }
             || ()
         });

@@ -39,7 +39,7 @@ pub fn leaflet_component(props: &Props) -> Html {
     // Initial map setup
     {
         let map = props.map.clone();
-        let markers = markers.clone();
+        let markers = markers;
         let map_id = props.map_id.clone();
         let on_map_created = props.on_map_created.clone();
         let on_location_changed = props.on_location_changed.clone();
@@ -49,7 +49,7 @@ pub fn leaflet_component(props: &Props) -> Html {
         let icon_options = props.location_icon_options.clone();
         let map_options = props.map_options.clone();
 
-        use_effect_with(map.clone(), move |map| {
+        use_effect_with(map, move |map| {
             if map.is_none() {
                 let map = map.clone();
                 spawn_local(async move {

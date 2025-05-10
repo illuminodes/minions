@@ -1,6 +1,7 @@
 use super::{Calendar, FullCalendarComponent, FullCalendarEvent};
 use crate::relay_pool::NostrRelayPoolStore;
 use crate::widgets::toastify::ToastifyOptions;
+use nostro2_signer::nostro2::NostrSigner;
 use nostro2_web_relay::nostro2::note::NostrNote;
 use nostro2_web_relay::nostro2::subscriptions::NostrSubscription;
 use serde_json::json;
@@ -48,8 +49,8 @@ pub fn calendar_test() -> Html {
                 let event = FullCalendarEvent::new(
                     note.id.as_ref().unwrap().as_str(),
                     title,
-                    start,
-                    end,
+                    &start,
+                    &end,
                     FullCalendarEvent::COLOR_BLUE,
                     json!({
                         "noteId": note.id.as_ref().unwrap(),
@@ -92,7 +93,7 @@ pub fn calendar_test() -> Html {
                 .as_string()
                 .unwrap_or_default();
 
-            let event_title = format!("Event at {}", start_time);
+            let event_title = format!("Event at {start_time}");
 
             let start_str = start.to_iso_string().as_string().unwrap_or_default();
             let end_str = end.to_iso_string().as_string().unwrap_or_default();
@@ -117,16 +118,19 @@ pub fn calendar_test() -> Html {
                 content: content.to_string(),
                 ..Default::default()
             };
-            new_keys.sign_nostr_event(&mut new_note);
+            if new_keys.sign_nostr_note(&mut new_note).is_ok() {
+                gloo::console::log!(
+                    "Sending note to relay:",
+                    new_note.id.as_ref().unwrap().as_str()
+                );
 
-            gloo::console::log!(
-                "Sending note to relay:",
-                new_note.id.as_ref().unwrap().as_str()
-            );
+                relay_ctx.send(new_note);
 
-            relay_ctx.send(new_note);
-
-            ToastifyOptions::new_success("Created new calendar event").show();
+                ToastifyOptions::new_success("Created new calendar event").show();
+            } else {
+                gloo::console::log!("Failed to sign note");
+                ToastifyOptions::new_relay_error("Failed to create event").show();
+            }
         })
     };
 
@@ -147,11 +151,11 @@ pub fn calendar_test() -> Html {
             || ()
         });
     }
-    let events_debug = events.clone();
+    let events_debug = events;
     gloo::console::log!("Rendering with events:", events_debug.len());
     let calendar_state = use_state(|| None);
     let on_calendar_created = {
-        let calendar_state = calendar_state.clone();
+        let calendar_state = calendar_state;
         Callback::from(move |calendar: Calendar| {
             calendar_state.set(Some(calendar));
         })
@@ -171,7 +175,7 @@ pub fn calendar_test() -> Html {
                 on_event_click={handle_event_click}
                 on_date_select={handle_date_select}
                 {on_calendar_created}
-                class={classes!("rounded-lg", "shadow-lg", "bg-white", "h-32", "h-32")}
+                class={classes!("rounded-lg", "shadow-lg", "bg-white", "h-32", "h-96")}
         />
         </div>
     }

@@ -1,6 +1,6 @@
 [package]
 name = "nostr-minions"
-version = "0.1.14"
+version = "0.1.15"
 edition = "2021"
 license = "BSD-3-Clause"
 description = "A Yew-based framework for client side Nostr apps"
@@ -12,18 +12,19 @@ homepage = "https://github.com/illuminodes/minions"
 default = []
 ag-grid = []
 bitcoin-qr = []
-full-calendar = []
+full-calendar = ["toastify"]
 leaflet = []
 toastify = []
 all-widgets = ["ag-grid", "bitcoin-qr", "full-calendar", "leaflet", "toastify"]
 
 [dependencies]
 # Nostr Stack
-# nostro2 = "0.2.7" 
-nostro2-web-relay = "0.1.5"
-# nostro2-web-relay = { path = "../NostrO2/nostro2-web-relay" }
-nostro2-signer =  "0.1.2"
-# nostro2-signer =  { path = "../NostrO2/nostro2-signer" }
+# nostro2-web-relay = "0.1.6"
+nostro2-web-relay = { path = "../NostrO2/nostro2-web-relay" }
+# nostro2-signer =  "0.1.4"
+nostro2-signer =  { path = "../NostrO2/nostro2-signer" }
+nostro2-web-signer =  "0.1.0"
+# nostro2-web-signer =  { path = "../NostrO2/nostro2-web-signer" }
 upload-things = "0.1.2"
 lucide-yew = "1.1.0"
 uuid = { version = "1.15", features = ["v4", "js"] }

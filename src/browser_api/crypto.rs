@@ -19,7 +19,7 @@ pub enum KeyGenParams {
 impl From<KeyGenParams> for AesKeyGenParams {
     fn from(val: KeyGenParams) -> Self {
         match val {
-            KeyGenParams::AesKeyGenParams => AesKeyGenParams::new("AES-GCM", 256),
+            KeyGenParams::AesKeyGenParams => Self::new("AES-GCM", 256),
         }
     }
 }

@@ -17,12 +17,13 @@ impl NostrRelayPool {
             + Clone
             + std::fmt::Debug,
     {
-        let msg_res = msg.clone();
+        let msg_res: nostro2_signer::nostro2::relay_events::NostrClientEvent = msg.into();
         let pool_clone = self.pool.clone();
+        let sent_msg = msg_res.clone();
         yew::platform::spawn_local(async move {
-            pool_clone.send(msg_res).await;
+            pool_clone.send(sent_msg).await;
         });
-        msg.into()
+        msg_res
     }
     pub async fn relay_pool_status(&self) -> Vec<crate::nostro2::relay_events::RelayStatus> {
         self.pool.status().await
@@ -39,12 +40,12 @@ impl Reducible for NostrRelayPool {
     fn reduce(self: Rc<Self>, action: Self::Action) -> Rc<Self> {
         match action {
             NostrRelayPoolAction::NewNote(note) => {
-                let mut relay_pool: NostrRelayPool = (*self.clone()).clone();
+                let mut relay_pool: Self = (*self).clone();
                 relay_pool.unique_notes.push(note);
                 relay_pool.into()
             }
             NostrRelayPoolAction::NewRelayEvent(event) => {
-                let mut relay_pool: NostrRelayPool = (*self.clone()).clone();
+                let mut relay_pool: Self = (*self).clone();
                 relay_pool.relay_events.push(event);
                 relay_pool.into()
             }
@@ -74,7 +75,7 @@ pub fn key_handler(props: &RelayContextProps) -> Html {
         relay_events: vec![],
     });
     let ctx_clone = ctx.clone();
-    use_memo((), move |_| {
+    use_memo((), move |()| {
         spawn_local(async move {
             while let Some(msg) = ctx_clone.pool.read().await {
                 match msg {

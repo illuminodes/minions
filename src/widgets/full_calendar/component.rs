@@ -1,10 +1,7 @@
-use crate::widgets::toastify::ToastifyOptions;
 use web_sys::HtmlElement;
 use yew::prelude::*;
 
-use super::bindings::{
-    Calendar, FullCalendarEvent, FullCalendarOptions, FullCalendarSelectEvent,
-};
+use super::bindings::{Calendar, FullCalendarEvent, FullCalendarOptions, FullCalendarSelectEvent};
 use wasm_bindgen::JsValue;
 use web_sys::js_sys::Date;
 
@@ -39,7 +36,7 @@ pub fn calendar_component(props: &Props) -> Html {
         let on_date_select = props.on_date_select.clone();
         let options = props.calendar_options.clone();
 
-        use_effect_with((), move |_| {
+        use_effect_with((), move |()| {
             if let Some(element) = calendar_ref.cast::<HtmlElement>() {
                 // Create options and add handlers
                 let options = {
@@ -74,17 +71,14 @@ pub fn calendar_component(props: &Props) -> Html {
                 calendar.set(Some(calendar_instance.clone()));
                 // Add initial events
                 for event in &*events {
-                    if let Err(e) = calendar_instance.add_or_replace_event(event.clone()) {
-                        ToastifyOptions::new_relay_error(&e.as_string().unwrap()).show();
-                    }
+                    if let Err(e) = calendar_instance.add_or_replace_event(event) {}
                 }
 
                 calendar_instance.render();
 
                 if let Some(cb) = on_calendar_created {
-                    cb.emit(calendar_instance.clone());
+                    cb.emit(calendar_instance);
                 }
-
             }
             || ()
         });
@@ -92,14 +86,14 @@ pub fn calendar_component(props: &Props) -> Html {
 
     // Update events when props change
     {
-        let calendar = calendar_state.clone();
+        let calendar = calendar_state;
         let events = props.events.clone();
 
         use_effect_with(events, move |events| {
             if let Some(calendar_instance) = (*calendar).clone() {
                 calendar_instance.clear_events();
                 for event in &**events {
-                    if let Err(e) = calendar_instance.add_or_replace_event(event.clone()) {
+                    if let Err(e) = calendar_instance.add_or_replace_event(event) {
                         gloo::console::error!("Failed to add/replace event:", e);
                     }
                 }
@@ -109,7 +103,7 @@ pub fn calendar_component(props: &Props) -> Html {
     }
 
     html! {
-        <div style="position: relative;" 
+        <div style="position: relative;"
             class={props.class.clone()} >
             <div
                 ref={calendar_ref}

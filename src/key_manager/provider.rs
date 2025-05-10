@@ -1,7 +1,7 @@
 use nostro2_signer::nostro2::note::NostrNote;
 use std::rc::Rc;
 use wasm_bindgen::JsValue;
-use yew::{platform::spawn_local, prelude::*};
+use yew::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NostrId {
@@ -10,12 +10,15 @@ pub struct NostrId {
     pubkey: Option<String>,
 }
 impl NostrId {
-    pub fn loaded(&self) -> bool {
+    #[must_use]
+    pub const fn loaded(&self) -> bool {
         self.loaded
     }
-    pub fn get_identity(&self) -> Option<&super::nostr_id::UserIdentity> {
+    #[must_use]
+    pub const fn get_identity(&self) -> Option<&super::nostr_id::UserIdentity> {
         self.identity.as_ref()
     }
+    #[must_use]
     pub fn get_pubkey(&self) -> Option<String> {
         self.pubkey.clone()
     }
@@ -23,7 +26,7 @@ impl NostrId {
         let id = self
             .identity
             .as_ref()
-            .ok_or(JsValue::from_str("No identity"))?;
+            .ok_or_else(|| JsValue::from_str("No identity"))?;
         id.sign_nostr_note(note).await
     }
     pub async fn sign_encrypted_note(
@@ -34,14 +37,14 @@ impl NostrId {
         let id = self
             .identity
             .as_ref()
-            .ok_or(JsValue::from_str("No identity"))?;
+            .ok_or_else(|| JsValue::from_str("No identity"))?;
         id.sign_nip44(note, pubkey).await
     }
     pub async fn decrypt_note(&self, event: &NostrNote) -> Result<String, JsValue> {
         let id = self
             .identity
             .as_ref()
-            .ok_or(JsValue::from_str("No identity"))?;
+            .ok_or_else(|| JsValue::from_str("No identity"))?;
         id.decrypt_nip44(event).await
     }
     pub async fn get_nostr_key(&self) -> Option<nostro2_signer::keypair::NostrKeypair> {
@@ -56,7 +59,7 @@ impl NostrId {
         let id = self
             .identity
             .as_ref()
-            .ok_or(JsValue::from_str("No identity"))?;
+            .ok_or_else(|| JsValue::from_str("No identity"))?;
         id.create_giftwrap(inner_note, kind).await
     }
 
@@ -64,7 +67,7 @@ impl NostrId {
         let id = self
             .identity
             .as_ref()
-            .ok_or(JsValue::from_str("No identity"))?;
+            .ok_or_else(|| JsValue::from_str("No identity"))?;
         id.unwrap_giftwrap(giftwrap).await
     }
 }
@@ -79,17 +82,17 @@ impl Reducible for NostrId {
 
     fn reduce(self: Rc<Self>, action: Self::Action) -> Rc<Self> {
         match action {
-            NostrIdAction::LoadIdentity(pubkey, id) => Rc::new(NostrId {
+            NostrIdAction::LoadIdentity(pubkey, id) => Rc::new(Self {
                 loaded: true,
                 pubkey: Some(pubkey),
                 identity: Some(id),
             }),
-            NostrIdAction::FinishedLoadingKey => Rc::new(NostrId {
+            NostrIdAction::FinishedLoadingKey => Rc::new(Self {
                 loaded: true,
                 pubkey: self.pubkey.clone(),
                 identity: self.identity.clone(),
             }),
-            NostrIdAction::DeleteIdentity => Rc::new(NostrId {
+            NostrIdAction::DeleteIdentity => Rc::new(Self {
                 loaded: self.loaded,
                 pubkey: None,
                 identity: None,
@@ -106,34 +109,25 @@ pub fn key_handler(props: &yew::html::ChildrenProps) -> Html {
         pubkey: None,
         identity: None,
     });
-    let ctx_clone = ctx.clone();
-    use_memo((), move |_| {
-        spawn_local(async move {
-            match super::nostr_id::UserIdentity::find_identity().await {
-                Ok(id) => {
-                    match id.get_pubkey().await {
-                        Some(pubkey) => {
-                            ctx_clone.dispatch(NostrIdAction::LoadIdentity(pubkey, id));
-                        }
-                        None => {
-                            gloo::console::error!("No pubkey found for identity");
-                        }
-                    }
-                    ctx_clone.dispatch(NostrIdAction::FinishedLoadingKey);
-                }
-                Err(e) => {
-                    gloo::console::error!("Error loading identity: ", e);
-                    ctx_clone.dispatch(NostrIdAction::FinishedLoadingKey);
-                }
+
+    let ctx_clone = ctx.dispatcher();
+    use_memo((), move |()| {
+        yew::platform::spawn_local(async move {
+            let id = super::nostr_id::UserIdentity::find_identity().await;
+            if let Ok(user_id) = id {
+                ctx_clone.dispatch(NostrIdAction::LoadIdentity(
+                    user_id.get_pubkey().await.unwrap_or_default(),
+                    user_id.clone(),
+                ));
+                return;
             }
+            ctx_clone.dispatch(NostrIdAction::FinishedLoadingKey);
         });
     });
 
-    // use_effect_with((), |_| || {});
-
     html! {
-        <ContextProvider<NostrIdStore> context={ctx}>
-            {props.children.clone()}
-        </ContextProvider<NostrIdStore>>
+       <ContextProvider<NostrIdStore> context={ctx}>
+           {props.children.clone()}
+       </ContextProvider<NostrIdStore>>
     }
 }

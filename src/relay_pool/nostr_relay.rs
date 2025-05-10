@@ -12,12 +12,14 @@ pub struct UserRelay {
 impl TryFrom<JsValue> for UserRelay {
     type Error = JsValue;
     fn try_from(value: JsValue) -> Result<Self, Self::Error> {
-        value.into_serde().map_err(|e| JsValue::from_str(&e.to_string()))
+        value
+            .into_serde()
+            .map_err(|e| JsValue::from_str(&e.to_string()))
     }
 }
 impl From<UserRelay> for JsValue {
     fn from(val: UserRelay) -> Self {
-        JsValue::from_serde(&val).unwrap()
+        serde_wasm_bindgen::to_value(&val).unwrap_or_default()
     }
 }
 impl IdbStoreManager for UserRelay {
@@ -53,7 +55,8 @@ mod tests {
         };
         user_relay
             .save_to_store()
-            .await.expect("Error saving to store");
+            .await
+            .expect("Error saving to store");
         let retrieved: UserRelay =
             UserRelay::retrieve_from_store(&JsValue::from_str("wss://example.com"))
                 .await

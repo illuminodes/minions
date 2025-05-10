@@ -1,6 +1,7 @@
 mod nostr_relay;
 mod provider;
 pub use nostr_relay::*;
+use nostro2_signer::nostro2::NostrSigner;
 use nostro2_web_relay::nostro2::{note::NostrNote, relay_events::NostrClientEvent};
 pub use provider::*;
 
@@ -56,16 +57,18 @@ pub fn relay_pool_test() -> yew::Html {
         let mut new_note = NostrNote {
             content: "Minion Note".to_string(),
             kind: 20001,
-            pubkey: new_keys.public_key().to_string(),
+            pubkey: new_keys.public_key(),
             ..Default::default()
         };
-        new_keys.sign_nostr_event(&mut new_note);
-        note_sender.send(new_note);
+        if new_keys.sign_nostr_note(&mut new_note).is_ok() {
+            note_sender.send(new_note);
+        }
     });
 
-    match subscription_id.as_ref() {
-        Some(id) => {
-            let unsubscriber = relay_ctx.clone();
+    subscription_id.as_ref().map_or_else(
+        || yew::html! { <div>{"Loading Relay Pool..."}</div> },
+        |id| {
+            let unsubscriber = relay_ctx;
             let sub_id = crate::nostro2::relay_events::NostrClientEvent::CloseSubscriptionEvent(
                 crate::nostro2::relay_events::RelayEventTag::CLOSE,
                 id.to_string(),
@@ -88,20 +91,18 @@ pub fn relay_pool_test() -> yew::Html {
                         <h3>{"Kind 1 Count"}</h3>
                         <p>{*note_counter}</p>
                     </div>
-                    {{
-                        match latest_note.as_ref() {
-                            Some(note) => yew::html! {
-                                <div>
-                                    <h3>{"My Latest Note"}</h3>
-                                    <p>{note.content.as_str()}</p>
-                                </div>
-                            },
-                            None => yew::html! { <div>{"Send a note!"}</div> },
-                        }
-                    }}
+                    {latest_note.as_ref().map_or_else(
+                        ||
+                        yew::html! { <div>{"Send a note!"}</div> },
+                        |note|
+                        yew::html! {
+                            <div>
+                                <h3>{"My Latest Note"}</h3>
+                                <p>{note.content.as_str()}</p>
+                            </div>
+                    })}
                 </div>
             }
-        }
-        None => yew::html! { <div>{"Loading Relay Pool..."}</div> },
-    }
+        },
+    )
 }

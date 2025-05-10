@@ -22,6 +22,8 @@ where
     pub auto_size: bool,
     #[prop_or_default]
     pub on_row_selected: Option<Callback<T>>,
+    #[prop_or_default]
+    pub on_row_clicked: Option<web_sys::wasm_bindgen::JsValue>,
 }
 
 #[function_component(AgGridComponent)]
@@ -42,16 +44,26 @@ where
         let page_size = props.page_size;
         let auto_size = props.auto_size;
         let theme = props.theme;
+        let row_selection = props.on_row_clicked.clone();
 
-        use_effect_with((), move |_| {
+        use_effect_with((), move |()| {
             if let Some(element) = grid_ref.cast::<HtmlElement>() {
                 let options = AgGridOptions::new(data)
                     .with_theme(theme)
                     .with_columns(columns)
                     .with_pagination(pagination, Some(page_size))
-                    .with_row_selection("single");
+                    .with_row_selection("singleRow");
 
-                let ag_grid = AgGrid::create_grid(&element, options.into());
+                let options: web_sys::wasm_bindgen::JsValue = options.into();
+                if let Some(on_row_selected) = row_selection {
+                    web_sys::js_sys::Reflect::set(
+                        &options,
+                        &web_sys::wasm_bindgen::JsValue::from_str("onRowClicked"),
+                        &on_row_selected,
+                    )
+                    .unwrap();
+                }
+                let ag_grid = AgGrid::create_grid(&element, options);
 
                 if auto_size {
                     ag_grid.size_columns_to_fit();
@@ -65,7 +77,7 @@ where
 
     // Update data when props change
     {
-        let grid = grid.clone();
+        let grid = grid;
         let data = props.data.clone();
         use_effect_with(data.clone(), move |_| {
             if let Some(grid) = (*grid).clone() {
@@ -85,7 +97,7 @@ where
 
     let theme_str: &'static str = props.theme.into();
     html! {
-        <div  
+        <div
             style={"position: relative;"}
             class={props.class.clone()}>
         <div
@@ -96,4 +108,3 @@ where
         </div>
     }
 }
-

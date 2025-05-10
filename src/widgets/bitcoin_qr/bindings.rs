@@ -1,7 +1,7 @@
 use yew::prelude::*;
 
 // QR Type
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum QrType {
     Canvas,
     Svg,
@@ -17,7 +17,7 @@ impl From<QrType> for &'static str {
 }
 
 // QR Dots Type
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum QrDotsType {
     Square,
     Dots,
@@ -41,7 +41,7 @@ impl From<QrDotsType> for &'static str {
 }
 
 // QR Corners Square Type
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum QrCornersSquareType {
     Square,
     ExtraRounded,
@@ -59,7 +59,7 @@ impl From<QrCornersSquareType> for &'static str {
 }
 
 // QR Corners Dot Type
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum QrCornersDotType {
     Square,
     Dot,
@@ -75,7 +75,7 @@ impl From<QrCornersDotType> for &'static str {
 }
 
 // QR Error Correction Level
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum QrErrorCorrectionLevel {
     L,
     M,
@@ -95,7 +95,7 @@ impl From<QrErrorCorrectionLevel> for &'static str {
 }
 
 // QR Mode
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum QrMode {
     Numeric,
     Alphanumeric,
@@ -115,7 +115,7 @@ impl From<QrMode> for &'static str {
 }
 
 // QR Shape
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum QrShape {
     Square,
     Circle,

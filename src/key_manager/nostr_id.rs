@@ -1,5 +1,6 @@
 use nostro2_signer::keypair::NostrKeypair;
 use nostro2_signer::nostro2::note::NostrNote;
+use nostro2_signer::nostro2::NostrSigner;
 use web_sys::wasm_bindgen::{JsCast, JsValue};
 use web_sys::CryptoKey;
 
@@ -18,8 +19,8 @@ impl From<NostrIdType> for JsValue {
     fn from(val: NostrIdType) -> Self {
         match val {
             NostrIdType::Local(key) => key.into(),
-            NostrIdType::Extension => JsValue::from_str("Extension"),
-            NostrIdType::Bunker(url) => JsValue::from_str(&url),
+            NostrIdType::Extension => Self::from_str("Extension"),
+            NostrIdType::Bunker(url) => Self::from_str(&url),
         }
     }
 }
@@ -32,12 +33,12 @@ impl TryFrom<JsValue> for NostrIdType {
     type Error = JsValue;
     fn try_from(value: JsValue) -> Result<Self, Self::Error> {
         if let Some(key) = value.dyn_ref::<CryptoKey>() {
-            Ok(NostrIdType::Local(key.clone()))
+            Ok(Self::Local(key.clone()))
         } else if let Some(url) = value.as_string() {
             if url.contains("Extension") {
-                return Ok(NostrIdType::Extension);
+                return Ok(Self::Extension);
             }
-            Ok(NostrIdType::Bunker(url))
+            Ok(Self::Bunker(url))
         } else {
             Err(JsValue::from_str("Not a valid NostrIdType"))
         }
@@ -51,88 +52,18 @@ impl wasm_bindgen::JsCast for NostrIdType {
     }
     fn unchecked_from_js(val: JsValue) -> Self {
         if let Some(key) = val.dyn_ref::<CryptoKey>() {
-            return NostrIdType::Local(key.clone());
+            return Self::Local(key.clone());
         }
         if let Some(url) = val.as_string() {
             if url.contains("Extension") {
-                return NostrIdType::Extension;
+                return Self::Extension;
             }
-            return NostrIdType::Bunker(url);
+            return Self::Bunker(url);
         }
         panic!("Not a valid NostrIdType");
     }
     fn unchecked_from_js_ref(val: &JsValue) -> &Self {
         val.unchecked_ref()
-    }
-}
-use wasm_bindgen::prelude::*;
-
-#[wasm_bindgen]
-extern "C" {
-    #[derive(Debug)]
-    pub type NostrSignerExtension;
-
-    #[wasm_bindgen(method, catch, js_name = getPublicKey)]
-    pub async fn get_public_key(this: &NostrSignerExtension) -> Result<JsValue, JsValue>;
-
-    #[wasm_bindgen(method, catch, js_name = signEvent)]
-    pub async fn sign_event(
-        this: &NostrSignerExtension,
-        event: JsValue,
-    ) -> Result<JsValue, JsValue>;
-
-    #[wasm_bindgen(method, catch)]
-    pub async fn get_relays(this: &NostrSignerExtension) -> Result<JsValue, JsValue>;
-
-    pub type Nip04Crypto;
-
-    #[wasm_bindgen(method, catch)]
-    pub async fn encrypt(
-        this: &Nip04Crypto,
-        pubkey: JsValue,
-        data: JsValue,
-    ) -> Result<JsValue, JsValue>;
-
-    #[wasm_bindgen(method, catch)]
-    pub async fn decrypt(
-        this: &Nip04Crypto,
-        pubkey: JsValue,
-        ciphertext: JsValue,
-    ) -> Result<JsValue, JsValue>;
-
-    pub type Nip44Crypto;
-
-    #[wasm_bindgen(method, catch)]
-    pub async fn encrypt(
-        this: &Nip44Crypto,
-        pubkey: JsValue,
-        data: JsValue,
-    ) -> Result<JsValue, JsValue>;
-
-    #[wasm_bindgen(method, catch)]
-    pub async fn decrypt(
-        this: &Nip44Crypto,
-        pubkey: JsValue,
-        ciphertext: JsValue,
-    ) -> Result<JsValue, JsValue>;
-}
-impl NostrSignerExtension {
-    pub async fn new() -> Result<Self, JsValue> {
-        let window = web_sys::window().ok_or(JsValue::from_str("No window"))?;
-        let window_nostr = window.get("nostr").ok_or(JsValue::from_str("No nostr"))?;
-        Ok(window_nostr.unchecked_into())
-    }
-    pub async fn nip04(&self) -> Result<Nip04Crypto, JsValue> {
-        Ok(
-            web_sys::js_sys::Reflect::get(self, &JsValue::from_str("nip04"))?
-                .unchecked_into::<Nip04Crypto>(),
-        )
-    }
-    pub async fn nip44(&self) -> Result<Nip44Crypto, JsValue> {
-        Ok(
-            web_sys::js_sys::Reflect::get(self, &JsValue::from_str("nip44"))?
-                .unchecked_into::<Nip44Crypto>(),
-        )
     }
 }
 
@@ -163,8 +94,8 @@ impl UserIdentity {
                 Some(pubkey)
             }
             NostrIdType::Extension => {
-                let signer = NostrSignerExtension::new().await.ok()?;
-                let pubkey = signer.get_public_key().await.ok()?.as_string()?;
+                let signer = nostro2_web_signer::NostrWindowObject::new().await?;
+                let pubkey = signer.public_key().await.ok()?;
                 Some(pubkey)
             }
             NostrIdType::Bunker(url) => {
@@ -178,8 +109,13 @@ impl UserIdentity {
         Self::from_new_keys(user_key.clone()).await
     }
     pub async fn new_extension_identity() -> Result<Self, JsValue> {
-        NostrSignerExtension::new().await?.get_public_key().await?;
-        let new_identity = UserIdentity {
+        nostro2_web_signer::NostrWindowObject::new()
+            .await
+            .ok_or_else(|| JsValue::from_str("Failed to create NostrWindowObject"))?
+            .public_key()
+            .await
+            .map_err(|e| JsValue::from_str(&format!("Failed to get public key: {e}")))?;
+        let new_identity = Self {
             pubkey: "privateKey".to_string(),
             default: true,
             tag: String::new(),
@@ -188,12 +124,12 @@ impl UserIdentity {
         Ok(new_identity)
     }
     pub async fn from_new_keys(keys: NostrKeypair) -> Result<Self, JsValue> {
-        let array = keys.get_secret_key();
+        let array = keys.secret_key();
         let js_array = web_sys::js_sys::Uint8Array::from(array.as_slice());
         let crypto_key: CryptoKey = BrowserCrypto::default()
             .import_key_array(js_array.into())
             .await?;
-        let user_identity = UserIdentity {
+        let user_identity = Self {
             pubkey: "privateKey".to_string(),
             default: true,
             tag: String::new(),
@@ -207,19 +143,21 @@ impl UserIdentity {
             NostrIdType::Local(ref key) => {
                 let slice = BrowserCrypto::default().export_raw_key(key.clone()).await?;
                 let vec_bytes = web_sys::js_sys::Uint8Array::new(&slice);
-                let nostr_key: NostrKeypair =
-                    NostrKeypair::try_from(vec_bytes.to_vec().as_slice()).unwrap();
-                nostr_key.sign_nostr_event(note);
-                Ok(())
+                let nostr_key: NostrKeypair = NostrKeypair::try_from(vec_bytes.to_vec().as_slice())
+                    .map_err(|e| {
+                        JsValue::from_str(&format!("Failed to convert to NostrKeypair: {e}"))
+                    })?;
+                nostr_key
+                    .sign_nostr_note(note)
+                    .map_err(|e| JsValue::from_str(&format!("Failed to sign note: {e}")))
             }
             NostrIdType::Extension => {
-                #[cfg(target_arch = "wasm32")]
-                {
-                    let nostr_signer = NostrSignerExtension::new().await?;
-                    let signed_note_js = nostr_signer.sign_event(note.clone().into()).await?;
-                    let signed_note: NostrNote = signed_note_js.try_into()?;
-                    *note = signed_note;
-                }
+                let nostr_signer = nostro2_web_signer::NostrWindowObject::new()
+                    .await
+                    .ok_or_else(|| JsValue::from_str("Failed to create NostrWindowObject"))?;
+                let signed_note_js = nostr_signer.sign_event(note.clone().into()).await?;
+                let signed_note: NostrNote = signed_note_js.try_into()?;
+                *note = signed_note;
                 Ok(())
             }
             NostrIdType::Bunker(_) => Err(JsValue::from_str("No Bunker support yet")),
@@ -233,20 +171,16 @@ impl UserIdentity {
                 let slice = web_sys::js_sys::Uint8Array::new(&keypair);
                 let keypair = NostrKeypair::try_from(slice.to_vec().as_slice())
                     .map_err(|e| JsValue::from_str(&e.to_string()))?;
-                keypair
-                    .decrypt_nip_04_content(&note)
-                    .map_err(|e| JsValue::from_str(&e.to_string()))
+                Ok(keypair
+                    .decrypt_note(
+                        &note,
+                        &note.pubkey,
+                        &nostro2_signer::keypair::EncryptionScheme::Nip04,
+                    )
+                    .map_err(|e| JsValue::from_str(&e.to_string()))?
+                    .to_string())
             }
-            NostrIdType::Extension => {
-                let signer = NostrSignerExtension::new().await?;
-                let new_note = signer
-                    .nip04()
-                    .await?
-                    .decrypt(note.pubkey.clone().into(), note.content.clone().into())
-                    .await?;
-                Ok(new_note.try_into()?)
-            }
-
+            NostrIdType::Extension => Err(JsValue::from_str("Deprected")),
             NostrIdType::Bunker(_) => Err(JsValue::from_str("No Bunker support yet")),
         }
     }
@@ -258,47 +192,24 @@ impl UserIdentity {
                 let slice = web_sys::js_sys::Uint8Array::new(&keypair);
                 let keypair = NostrKeypair::try_from(slice.to_vec().as_slice())
                     .map_err(|e| JsValue::from_str(&e.to_string()))?;
-                keypair
-                    .decrypt_nip_44_content(note)
-                    .map_err(|e| JsValue::from_str(&e.to_string()))
+                Ok(keypair
+                    .decrypt_note(
+                        note,
+                        &note.pubkey,
+                        &nostro2_signer::keypair::EncryptionScheme::Nip44,
+                    )
+                    .map_err(|e| JsValue::from_str(&e.to_string()))?
+                    .to_string())
             }
             NostrIdType::Extension => {
-                let signer = NostrSignerExtension::new().await?;
+                let signer = nostro2_web_signer::NostrWindowObject::new()
+                    .await
+                    .ok_or_else(|| JsValue::from_str("Failed to create NostrWindowObject"))?;
                 let new_note = signer
-                    .nip44()
-                    .await?
-                    .decrypt(note.pubkey.clone().into(), note.content.clone().into())
-                    .await?;
-                Ok(new_note.try_into()?)
-            }
-            NostrIdType::Bunker(_) => Err(JsValue::from_str("No Bunker support yet")),
-        }
-    }
-    pub async fn encrypt_nip44(
-        &self,
-        cleartext: String,
-        pubkey: String,
-    ) -> Result<String, JsValue> {
-        match &self.signer {
-            NostrIdType::Local(key) => {
-                let key = key.clone();
-                let keypair = BrowserCrypto::default().export_raw_key(key).await?;
-                let slice = web_sys::js_sys::Uint8Array::new(&keypair);
-                let keypair = NostrKeypair::try_from(slice.to_vec().as_slice())
-                    .map_err(|e| JsValue::from_str(&e.to_string()))?;
-                let encrypted = keypair
-                    .encrypt_nip_44_plaintext(&cleartext, pubkey)
-                    .map_err(|e| JsValue::from_str(&e.to_string()))?;
-                Ok(encrypted)
-            }
-            NostrIdType::Extension => {
-                let signer = NostrSignerExtension::new().await?;
-                let encrypted = signer
-                    .nip44()
-                    .await?
-                    .encrypt(pubkey.into(), cleartext.into())
-                    .await?;
-                Ok(encrypted.try_into()?)
+                    .decrypt(&note.pubkey, &note.content)
+                    .await
+                    .map_err(|e| JsValue::from_str(&format!("Failed to decrypt content: {e}")))?;
+                Ok(new_note)
             }
             NostrIdType::Bunker(_) => Err(JsValue::from_str("No Bunker support yet")),
         }
@@ -312,29 +223,15 @@ impl UserIdentity {
                 let keypair = NostrKeypair::try_from(slice.to_vec().as_slice())
                     .map_err(|e| JsValue::from_str(&e.to_string()))?;
                 keypair
-                    .sign_nip_04_encrypted(note, pubkey)
+                    .sign_encrypted_note(
+                        note,
+                        &pubkey,
+                        &nostro2_signer::keypair::EncryptionScheme::Nip04,
+                    )
                     .map_err(|e| JsValue::from_str(&e.to_string()))?;
                 Ok(())
             }
-            NostrIdType::Extension => {
-                let signer = NostrSignerExtension::new().await?;
-                let encrypted_note_js = signer
-                    .nip04()
-                    .await?
-                    .encrypt(pubkey.into(), note.content.clone().into())
-                    .await?;
-
-                note.content = encrypted_note_js.try_into()?;
-
-                // Sign the note with updated content
-                #[cfg(target_arch = "wasm32")]
-                {
-                    let signed_note_js = signer.sign_event(note.clone().into()).await?;
-                    let signed_note: NostrNote = signed_note_js.try_into()?;
-                    *note = signed_note;
-                }
-                Ok(())
-            }
+            NostrIdType::Extension => Err(JsValue::from_str("Deprected")),
             NostrIdType::Bunker(_) => Err(JsValue::from_str("No Bunker support yet")),
         }
     }
@@ -347,26 +244,28 @@ impl UserIdentity {
                 let keypair = NostrKeypair::try_from(slice.to_vec().as_slice())
                     .map_err(|e| JsValue::from_str(&e.to_string()))?;
                 keypair
-                    .sign_nip_44_encrypted(note, pubkey)
+                    .sign_encrypted_note(
+                        note,
+                        &pubkey,
+                        &nostro2_signer::keypair::EncryptionScheme::Nip44,
+                    )
                     .map_err(|e| JsValue::from_str(&e.to_string()))?;
                 Ok(())
             }
             NostrIdType::Extension => {
-                let signer = NostrSignerExtension::new().await?;
+                let signer = nostro2_web_signer::NostrWindowObject::new()
+                    .await
+                    .ok_or_else(|| JsValue::from_str("Failed to create NostrWindowObject"))?;
                 let new_content = signer
-                    .nip44()
-                    .await?
-                    .encrypt(pubkey.into(), note.content.clone().into())
-                    .await?;
-                note.content = new_content.try_into()?;
+                    .encrypt(&pubkey, &note.content)
+                    .await
+                    .map_err(|e| JsValue::from_str(&format!("Failed to encrypt content: {e}")))?;
+                note.content = new_content;
 
                 // Sign the note with updated content
-                #[cfg(target_arch = "wasm32")]
-                {
-                    let signed_note_js = signer.sign_event(note.clone().into()).await?;
-                    let signed_note: NostrNote = signed_note_js.try_into()?;
-                    *note = signed_note;
-                }
+                let signed_note_js = signer.sign_event(note.clone().into()).await?;
+                let signed_note: NostrNote = signed_note_js.try_into()?;
+                *note = signed_note;
                 Ok(())
             }
             NostrIdType::Bunker(_) => Err(JsValue::from_str("No Bunker support yet")),
@@ -378,7 +277,11 @@ impl UserIdentity {
                 .export_raw_key(signer.clone())
                 .await?;
             let slice = web_sys::js_sys::Uint8Array::new(&key_bytes);
-            Ok(NostrKeypair::try_from(slice.to_vec().as_slice()).unwrap())
+            Ok(
+                NostrKeypair::try_from(slice.to_vec().as_slice()).map_err(|e| {
+                    JsValue::from_str(&format!("Failed to convert to NostrKeypair: {e}"))
+                })?,
+            )
         } else {
             Err(JsValue::from_str("No local key"))
         }
@@ -390,7 +293,7 @@ impl UserIdentity {
     ) -> Result<NostrNote, JsValue> {
         // Serialize the inner note to string without signing
         let inner_content = serde_json::to_string(&inner_note)
-            .map_err(|e| JsValue::from_str(&format!("Failed to serialize inner note: {}", e)))?;
+            .map_err(|e| JsValue::from_str(&format!("Failed to serialize inner note: {e}")))?;
 
         // Create the outer wrapper note (unsigned)
         let giftwrap = NostrNote {
@@ -398,7 +301,7 @@ impl UserIdentity {
             pubkey: self
                 .get_pubkey()
                 .await
-                .ok_or(JsValue::from_str("Failed to get pubkey"))?,
+                .ok_or_else(|| JsValue::from_str("Failed to get pubkey"))?,
             kind,
             ..Default::default()
         };
@@ -410,31 +313,30 @@ impl UserIdentity {
     pub async fn unwrap_giftwrap(&self, giftwrap: &NostrNote) -> Result<NostrNote, JsValue> {
         let decrypted_content = self.decrypt_nip44(giftwrap).await?;
         serde_json::from_str::<NostrNote>(&decrypted_content)
-            .map_err(|e| JsValue::from_str(&format!("Failed to parse unwrapped note: {}", e)))
+            .map_err(|e| JsValue::from_str(&format!("Failed to parse unwrapped note: {e}")))
     }
 }
 impl From<UserIdentity> for JsValue {
     fn from(val: UserIdentity) -> Self {
         let obj = web_sys::js_sys::Object::new();
-        web_sys::js_sys::Reflect::set(
+        let _ = web_sys::js_sys::Reflect::set(
             &obj,
-            &JsValue::from_str("pubkey"),
-            &JsValue::from_str(&val.pubkey),
-        )
-        .unwrap();
-        web_sys::js_sys::Reflect::set(&obj, &JsValue::from_str("crypto_key"), &val.signer.into())
-            .unwrap();
+            &Self::from_str("pubkey"),
+            &Self::from_str(&val.pubkey),
+        );
+        let _ =
+            web_sys::js_sys::Reflect::set(&obj, &Self::from_str("crypto_key"), &val.signer.into());
         obj.into()
     }
 }
 impl TryFrom<JsValue> for UserIdentity {
     type Error = JsValue;
     fn try_from(value: JsValue) -> Result<Self, Self::Error> {
-        let obj =
-            web_sys::js_sys::Object::try_from(&value).ok_or(JsValue::from_str("Not an object"))?;
+        let obj = web_sys::js_sys::Object::try_from(&value)
+            .ok_or_else(|| JsValue::from_str("Not an object"))?;
         let pubkey = web_sys::js_sys::Reflect::get(obj, &JsValue::from_str("pubkey"))?
             .as_string()
-            .ok_or(JsValue::from_str("id not found"))?;
+            .ok_or_else(|| JsValue::from_str("id not found"))?;
         let crypto_key = web_sys::js_sys::Reflect::get(obj, &JsValue::from_str("crypto_key"))?;
         let signer = crypto_key.dyn_into::<NostrIdType>()?;
         let default = web_sys::js_sys::Reflect::get(obj, &JsValue::from_str("default"))?
@@ -442,12 +344,12 @@ impl TryFrom<JsValue> for UserIdentity {
             .unwrap_or(false);
         let tag = web_sys::js_sys::Reflect::get(obj, &JsValue::from_str("tag"))?
             .as_string()
-            .unwrap_or_else(|| "".to_string());
-        Ok(UserIdentity {
+            .unwrap_or_else(String::new);
+        Ok(Self {
             pubkey,
-            signer,
             default,
             tag,
+            signer,
         })
     }
 }

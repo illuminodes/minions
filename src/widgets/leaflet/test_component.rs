@@ -5,6 +5,7 @@ use crate::widgets::leaflet::{
     nominatim::NominatimLookup, IconOptions, LatLng, LeafletLocateOptions, LeafletMap,
     LeafletMapOptions,
 };
+use nostro2_signer::nostro2::NostrSigner;
 use nostro2_web_relay::nostro2::note::NostrNote;
 use wasm_bindgen::JsValue;
 use web_sys::MouseEvent;
@@ -18,7 +19,7 @@ pub fn leaflet_test() -> Html {
     let location_name = use_state(String::new);
 
     let send_test_event = {
-        let note_sender = relay_ctx.clone();
+        let note_sender = relay_ctx;
         let markers = markers.clone();
         let map = map.clone();
 
@@ -43,7 +44,7 @@ pub fn leaflet_test() -> Html {
 
                 if let Some(map_instance) = &*map {
                     let icon_options = IconOptions {
-                        icon_url: format!("https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-{}.png", color),
+                        icon_url: format!("https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-{color}.png"),
                         icon_size: Some(vec![25, 41]),
                         icon_anchor: Some(vec![12, 41]),
                     };
@@ -55,7 +56,7 @@ pub fn leaflet_test() -> Html {
                         markers.set(new_markers);
 
                         web_sys::console::log_1(
-                            &format!("Added {} marker for {}", color, location_name).into(),
+                            &format!("Added {color} marker for {location_name}").into(),
                         );
                     }
 
@@ -79,8 +80,9 @@ pub fn leaflet_test() -> Html {
                     content,
                     ..Default::default()
                 };
-                new_keys.sign_nostr_event(&mut new_note);
-                note_sender.send(new_note);
+                if new_keys.sign_nostr_note(&mut new_note).is_ok() {
+                    note_sender.send(new_note);
+                }
             }
 
             crate::widgets::toastify::ToastifyOptions::new_event_received(
@@ -134,13 +136,15 @@ pub fn leaflet_test() -> Html {
 
                     // Try to get latitude and longitude directly from the event
                     let latitude =
-                        web_sys::js_sys::Reflect::get(&event, &JsValue::from_str("latitude")).map(|v| v.as_f64().unwrap_or(0.0));
+                        web_sys::js_sys::Reflect::get(&event, &JsValue::from_str("latitude"))
+                            .map(|v| v.as_f64().unwrap_or(0.0));
                     let longitude =
-                        web_sys::js_sys::Reflect::get(&event, &JsValue::from_str("longitude")).map(|v| v.as_f64().unwrap_or(0.0));
+                        web_sys::js_sys::Reflect::get(&event, &JsValue::from_str("longitude"))
+                            .map(|v| v.as_f64().unwrap_or(0.0));
 
                     if let (Ok(lat), Ok(lng)) = (latitude, longitude) {
                         web_sys::console::log_1(
-                            &format!("Got coordinates: Lat: {}, Lng: {}", lat, lng).into(),
+                            &format!("Got coordinates: Lat: {lat}, Lng: {lng}").into(),
                         );
 
                         let geo_coords = GeolocationCoordinates {
@@ -176,17 +180,16 @@ pub fn leaflet_test() -> Html {
                             web_sys::js_sys::Reflect::get(&event, &JsValue::from_str("latlng"))
                         {
                             let lat =
-                                web_sys::js_sys::Reflect::get(&latlng, &JsValue::from_str("lat")).map(|v| v.as_f64().unwrap_or(0.0));
+                                web_sys::js_sys::Reflect::get(&latlng, &JsValue::from_str("lat"))
+                                    .map(|v| v.as_f64().unwrap_or(0.0));
                             let lng =
-                                web_sys::js_sys::Reflect::get(&latlng, &JsValue::from_str("lng")).map(|v| v.as_f64().unwrap_or(0.0));
+                                web_sys::js_sys::Reflect::get(&latlng, &JsValue::from_str("lng"))
+                                    .map(|v| v.as_f64().unwrap_or(0.0));
 
                             if let (Ok(lat), Ok(lng)) = (lat, lng) {
                                 web_sys::console::log_1(
-                                    &format!(
-                                        "Got coordinates from latlng: Lat: {}, Lng: {}",
-                                        lat, lng
-                                    )
-                                    .into(),
+                                    &format!("Got coordinates from latlng: Lat: {lat}, Lng: {lng}")
+                                        .into(),
                                 );
 
                                 let geo_coords = GeolocationCoordinates {

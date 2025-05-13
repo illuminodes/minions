@@ -376,7 +376,6 @@ checksum = "65bc07b1a8bc7c85c5f2e110c476c7389b4554ba72af57d8445ea63a576b0876"
 dependencies = [
  "futures-channel",
  "futures-core",
- "futures-executor",
  "futures-io",
  "futures-sink",
  "futures-task",
@@ -398,17 +397,6 @@ name = "futures-core"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05f29059c0c2090612e8d742178b0580d2dc940c837851ad723096f87af6663e"
-
-[[package]]
-name = "futures-executor"
-version = "0.3.31"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e28d1d997f585e54aebc3f97d39e72338912123a67330d723fdbb564d646c9f"
-dependencies = [
- "futures-core",
- "futures-task",
- "futures-util",
-]
 
 [[package]]
 name = "futures-io"
@@ -1256,9 +1244,8 @@ version = "0.1.15"
 dependencies = [
  "gloo 0.11.0",
  "lucide-yew",
+ "nostro2",
  "nostro2-signer",
- "nostro2-web-relay",
- "nostro2-web-signer",
  "serde",
  "serde-wasm-bindgen 0.6.5",
  "serde_json",
@@ -1274,24 +1261,9 @@ dependencies = [
 
 [[package]]
 name = "nostro2"
-version = "0.3.3"
-dependencies = [
- "bech32",
- "chrono",
- "ring",
- "secp256k1",
- "serde",
- "serde-wasm-bindgen 0.6.5",
- "serde_json",
- "sha2",
- "web-sys",
-]
-
-[[package]]
-name = "nostro2"
-version = "0.3.3"
+version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26e26199bbe4a31af256b0e6293d9952707617c437fa4e629f5bddbcb9bf6e6d"
+checksum = "2e97024507852e3b7379600859fb7c53ede23a061ba32dfe1242f7a34b0a8db6"
 dependencies = [
  "bech32",
  "chrono",
@@ -1301,12 +1273,13 @@ dependencies = [
  "serde-wasm-bindgen 0.6.5",
  "serde_json",
  "sha2",
- "web-sys",
 ]
 
 [[package]]
 name = "nostro2-nips"
-version = "0.1.1"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5666c0e26b8b5729083b7b0560d1e6252015d7e4bb080befcd4c8dc2f52723f"
 dependencies = [
  "base64",
  "chacha20",
@@ -1314,7 +1287,7 @@ dependencies = [
  "hkdf",
  "hmac",
  "libaes",
- "nostro2 0.3.3",
+ "nostro2",
  "secp256k1",
  "serde",
  "serde_json",
@@ -1324,41 +1297,18 @@ dependencies = [
 
 [[package]]
 name = "nostro2-signer"
-version = "0.1.4"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9f97f81943086f1af1d04970bb03bb8443ca0b23772c426e6f8d2e59d350a8f3"
 dependencies = [
  "base64",
  "bech32",
  "bip39",
  "hex",
- "nostro2 0.3.3",
+ "nostro2",
  "nostro2-nips",
  "secp256k1",
  "zeroize",
-]
-
-[[package]]
-name = "nostro2-web-relay"
-version = "0.1.6"
-dependencies = [
- "futures-util",
- "nostro2 0.3.3",
- "tokio",
- "wasm-bindgen-futures",
- "web-sys",
-]
-
-[[package]]
-name = "nostro2-web-signer"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "402ec206398a73fd1c16bc9e403f45bc1c9ae46cf8ed99926b03bdb70032f4e2"
-dependencies = [
- "futures",
- "nostro2 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "wasm-bindgen-test",
- "web-sys",
 ]
 
 [[package]]

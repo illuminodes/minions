@@ -18,10 +18,10 @@ fn app() -> Html {
             <div class="h-screen w-full items-center justify-center flex flex-col overflow-y-auto">
                 <h1 class="text-2xl font-bold">{"Minions App Showcase"}</h1>
                 // ADD NEW TEST COMPONENTS HERE WITH INLINES
-                // <nostr_minions::relay_pool::RelayPoolTest />
+                <nostr_minions::relay_pool::RelayPoolTest />
                 // <nostr_minions::widgets::ag_grid::NostrNotesGrid />
                 // <nostr_minions::widgets::leaflet::LeafletTest />
-                <nostr_minions::widgets::full_calendar::FullCalendarTest/>
+                // <nostr_minions::widgets::full_calendar::FullCalendarTest/>
                 // <nostr_minions::key_manager::NostrIdLoginTest />
                 // <nostr_minions::widgets::bitcoin_qr::BitcoinQrTest />
                 // <ImageUploadTestComponent/>

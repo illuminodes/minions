@@ -15,15 +15,17 @@ bitcoin-qr = []
 full-calendar = ["toastify"]
 leaflet = []
 toastify = []
-all-widgets = ["ag-grid", "bitcoin-qr", "full-calendar", "leaflet", "toastify"]
+uploads = []
+all-widgets = ["ag-grid", "bitcoin-qr", "full-calendar", "leaflet", "toastify", "uploads"]
 
 [dependencies]
 # Nostr Stack
-# nostro2-web-relay = "0.1.6"
-nostro2-web-relay = { path = "../NostrO2/nostro2-web-relay" }
-# nostro2-signer =  "0.1.4"
-nostro2-signer =  { path = "../NostrO2/nostro2-signer" }
-nostro2-web-signer =  "0.1.0"
+
+
+nostro2 = "0.3.5"
+nostro2-signer =  "0.1.8"
+# nostro2-signer =  { path = "../NostrO2/nostro2-signer" }
+# nostro2-web-signer =  "0.1.0"
 # nostro2-web-signer =  { path = "../NostrO2/nostro2-web-signer" }
 upload-things = "0.1.2"
 lucide-yew = "1.1.0"
@@ -36,13 +38,13 @@ serde-wasm-bindgen = "0.6.5"
 
 # DOM and Browser Bindings
 gloo = "0.11"
-web-sys = { version = "0.3", features = ["HtmlInputElement", "HtmlFormElement", "SubtleCrypto", "CryptoKey", 
-"Window", "Crypto", "AesKeyGenParams", "AesGcmParams", "IdbFactory", "IdbOpenDbOptions", "HtmlSelectElement", 
-"Clipboard", "IdbOpenDbRequest", "IdbTransaction", "IdbRequest", "IdbDatabase", "IdbObjectStore", "IdbRequestReadyState", 
-"Navigator", "HtmlAudioElement", "HtmlMediaElement", "Geolocation", "Response", "ReadableStream", "IdbTransactionMode", 
-"IdbObjectStoreParameters", "Navigator", "ServiceWorkerContainer", "ServiceWorkerGlobalScope", "FetchEvent", "CustomEvent", "DomStringList"] }
+web-sys = { version = "0.3", features = [ "Window", "Clipboard",  "Navigator",
+"SubtleCrypto", "CryptoKey",  "Crypto", "AesKeyGenParams", "AesGcmParams", 
+"IdbFactory", "IdbOpenDbOptions", "IdbObjectStoreParameters","IdbOpenDbRequest", "IdbTransaction", 
+"IdbRequest", "IdbDatabase", "IdbObjectStore", "IdbRequestReadyState", "IdbTransactionMode", 
+"Geolocation", "Response", "ReadableStream",  "DomStringList",
+"ServiceWorkerContainer", "ServiceWorkerGlobalScope", "FetchEvent"] }
 
-# I/O
 tokio = { version = "1", features = ["macros", "sync"] }
 wasm-bindgen-futures = "0.4"
 

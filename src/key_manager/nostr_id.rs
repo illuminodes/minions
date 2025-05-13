@@ -4,8 +4,9 @@ use nostro2_signer::nostro2::NostrSigner;
 use web_sys::wasm_bindgen::{JsCast, JsValue};
 use web_sys::CryptoKey;
 
+use crate::browser_api::BrowserCrypto;
 use crate::{
-    browser_api::{BrowserCrypto, IdbStoreConfig, IdbStoreManager},
+    browser_api::{IdbStoreConfig, IdbStoreManager},
     DB_NAME, DB_VERSION, IDENTITY_KEY, IDENTITY_STORE,
 };
 
@@ -93,11 +94,7 @@ impl UserIdentity {
                     .public_key();
                 Some(pubkey)
             }
-            NostrIdType::Extension => {
-                let signer = nostro2_web_signer::NostrWindowObject::new().await?;
-                let pubkey = signer.public_key().await.ok()?;
-                Some(pubkey)
-            }
+            NostrIdType::Extension => None,
             NostrIdType::Bunker(url) => {
                 gloo::console::log!("Bunker url: {:?}", url);
                 None
@@ -107,21 +104,6 @@ impl UserIdentity {
     pub async fn new_local_identity() -> Result<Self, JsValue> {
         let user_key = NostrKeypair::generate(true);
         Self::from_new_keys(user_key.clone()).await
-    }
-    pub async fn new_extension_identity() -> Result<Self, JsValue> {
-        nostro2_web_signer::NostrWindowObject::new()
-            .await
-            .ok_or_else(|| JsValue::from_str("Failed to create NostrWindowObject"))?
-            .public_key()
-            .await
-            .map_err(|e| JsValue::from_str(&format!("Failed to get public key: {e}")))?;
-        let new_identity = Self {
-            pubkey: "privateKey".to_string(),
-            default: true,
-            tag: String::new(),
-            signer: NostrIdType::Extension,
-        };
-        Ok(new_identity)
     }
     pub async fn from_new_keys(keys: NostrKeypair) -> Result<Self, JsValue> {
         let array = keys.secret_key();
@@ -151,15 +133,7 @@ impl UserIdentity {
                     .sign_nostr_note(note)
                     .map_err(|e| JsValue::from_str(&format!("Failed to sign note: {e}")))
             }
-            NostrIdType::Extension => {
-                let nostr_signer = nostro2_web_signer::NostrWindowObject::new()
-                    .await
-                    .ok_or_else(|| JsValue::from_str("Failed to create NostrWindowObject"))?;
-                let signed_note_js = nostr_signer.sign_event(note.clone().into()).await?;
-                let signed_note: NostrNote = signed_note_js.try_into()?;
-                *note = signed_note;
-                Ok(())
-            }
+            NostrIdType::Extension => Err(JsValue::from_str("Refactoring Support")),
             NostrIdType::Bunker(_) => Err(JsValue::from_str("No Bunker support yet")),
         }
     }
@@ -201,16 +175,7 @@ impl UserIdentity {
                     .map_err(|e| JsValue::from_str(&e.to_string()))?
                     .to_string())
             }
-            NostrIdType::Extension => {
-                let signer = nostro2_web_signer::NostrWindowObject::new()
-                    .await
-                    .ok_or_else(|| JsValue::from_str("Failed to create NostrWindowObject"))?;
-                let new_note = signer
-                    .decrypt(&note.pubkey, &note.content)
-                    .await
-                    .map_err(|e| JsValue::from_str(&format!("Failed to decrypt content: {e}")))?;
-                Ok(new_note)
-            }
+            NostrIdType::Extension => Err(JsValue::from_str("Refactoring Support")),
             NostrIdType::Bunker(_) => Err(JsValue::from_str("No Bunker support yet")),
         }
     }
@@ -252,22 +217,7 @@ impl UserIdentity {
                     .map_err(|e| JsValue::from_str(&e.to_string()))?;
                 Ok(())
             }
-            NostrIdType::Extension => {
-                let signer = nostro2_web_signer::NostrWindowObject::new()
-                    .await
-                    .ok_or_else(|| JsValue::from_str("Failed to create NostrWindowObject"))?;
-                let new_content = signer
-                    .encrypt(&pubkey, &note.content)
-                    .await
-                    .map_err(|e| JsValue::from_str(&format!("Failed to encrypt content: {e}")))?;
-                note.content = new_content;
-
-                // Sign the note with updated content
-                let signed_note_js = signer.sign_event(note.clone().into()).await?;
-                let signed_note: NostrNote = signed_note_js.try_into()?;
-                *note = signed_note;
-                Ok(())
-            }
+            NostrIdType::Extension => Err(JsValue::from_str("Refactoring Support")),
             NostrIdType::Bunker(_) => Err(JsValue::from_str("No Bunker support yet")),
         }
     }

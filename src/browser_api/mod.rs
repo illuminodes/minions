@@ -2,7 +2,7 @@ mod crypto;
 mod events;
 mod fetch;
 mod geolocation;
-mod html;
+// mod html;
 mod indexed_db;
 mod service_worker;
 
@@ -10,7 +10,7 @@ pub use crypto::BrowserCrypto;
 pub use events::BeforeInstallPromptEvent;
 pub use fetch::BrowserFetch;
 pub use geolocation::{GeolocationCoordinates, GeolocationPosition};
-pub use html::{HtmlDocument, HtmlForm};
+// pub use html::{HtmlDocument, HtmlForm};
 pub use indexed_db::*;
 pub use service_worker::AppServiceWorker;
 

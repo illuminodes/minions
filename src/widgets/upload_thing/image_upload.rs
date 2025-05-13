@@ -1,4 +1,3 @@
-use crate::browser_api::HtmlDocument;
 use crate::constants::{
     NOSTR_KIND_PRESIGNED_URL_REQ, NOSTR_KIND_PRESIGNED_URL_RESP, NOSTR_KIND_SERVER_REQUEST,
 };
@@ -41,7 +40,7 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
         let relay_ctx = relay_pool.clone();
         use_effect_with((), move |()| {
             // Create subscription for presigned URL responses
-            let filter = nostro2_web_relay::nostro2::subscriptions::NostrSubscription {
+            let filter = nostro2::subscriptions::NostrSubscription {
                 kinds: Some(vec![NOSTR_KIND_PRESIGNED_URL_RESP]),
                 limit: Some(20),
                 ..Default::default()
@@ -82,22 +81,17 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
                     };
 
                     // Get document and input safely
-                    let document = match HtmlDocument::new() {
-                        Ok(doc) => doc,
-                        Err(e) => {
-                            gloo::console::error!("Failed to get document:", e);
-                            return;
-                        }
+                    let Some(document) = web_sys::window().and_then(|w| w.document()) else {
+                        gloo::console::error!("Failed to get document");
+                        return;
                     };
 
-                    let input: HtmlInputElement =
-                        match document.find_element_by_id(&input_id_for_effect) {
-                            Ok(input) => input,
-                            Err(e) => {
-                                gloo::console::error!("Failed to find input element:", e);
-                                return;
-                            }
-                        };
+                    let Some(Ok(input)) = document
+                        .get_element_by_id(&input_id_for_effect)
+                        .map(wasm_bindgen::JsCast::dyn_into::<HtmlInputElement>) else {
+                            gloo::console::error!("Failed to get input element");
+                            return;
+                    };
 
                     let Some(files) = input.files() else {
                         gloo::console::error!("No files found");
@@ -254,7 +248,7 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
 
             // Create and sign the giftwrap note
             let mut giftwrap = NostrNote {
-                content: req_note.to_string(),
+                content: serde_json::to_string(&file_req).unwrap_or_default(),
                 kind: NOSTR_KIND_SERVER_REQUEST,
                 pubkey,
                 ..Default::default()

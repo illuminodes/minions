@@ -25,7 +25,7 @@ pub fn nostr_id_login_test() -> Html {
             let relay_ctx = relay_ctx.clone();
             yew::platform::spawn_local(async move {
                 let pubkey = ctx.get_pubkey().expect("No pubkey");
-                let mut note = nostro2_web_relay::nostro2::note::NostrNote {
+                let mut note = nostro2::note::NostrNote {
                     content: "Test Note".to_string(),
                     pubkey,
                     ..Default::default()
@@ -189,15 +189,15 @@ pub fn nostr_id_login_test() -> Html {
             <button onclick={
                 let ctx = ctx.clone();
                 Callback::from(move |_| {
-                    let ctx = ctx.clone();
+                    let _ctx = ctx.clone();
                     yew::platform::spawn_local(async move {
-                        match UserIdentity::new_extension_identity().await {
-                            Ok(id) => {
-                                let pubkey = id.get_pubkey().await.unwrap();
-                                id.clone().save_to_store().await.unwrap();
-                                ctx.dispatch(NostrIdAction::LoadIdentity(pubkey,id));},
-                            Err(e) => gloo::console::error!(&e),
-                        }
+                        // match UserIdentity::new_extension_identity().await {
+                        //     Ok(id) => {
+                        //         let pubkey = id.get_pubkey().await.unwrap();
+                        //         id.clone().save_to_store().await.unwrap();
+                        //         ctx.dispatch(NostrIdAction::LoadIdentity(pubkey,id));},
+                        //     Err(e) => gloo::console::error!(&e),
+                        // }
                     });
                 })
             }>

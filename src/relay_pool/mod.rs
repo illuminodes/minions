@@ -1,8 +1,8 @@
 mod nostr_relay;
 mod provider;
 pub use nostr_relay::*;
+use nostro2::{note::NostrNote, relay_events::NostrClientEvent};
 use nostro2_signer::nostro2::NostrSigner;
-use nostro2_web_relay::nostro2::{note::NostrNote, relay_events::NostrClientEvent};
 pub use provider::*;
 
 #[yew::function_component(RelayPoolTest)]
@@ -15,20 +15,17 @@ pub fn relay_pool_test() -> yew::Html {
     let id_handle = subscription_id.clone();
     let relay_clone = relay_ctx.clone();
     yew::use_effect_with((), move |()| {
-        let nostr_sub: NostrClientEvent =
-            nostro2_web_relay::nostro2::subscriptions::NostrSubscription {
-                kinds: Some(vec![20001]),
-                ..Default::default()
-            }
-            .into();
-        let kind_one_filter = nostro2_web_relay::nostro2::subscriptions::NostrSubscription {
+        let nostr_sub: NostrClientEvent = nostro2::subscriptions::NostrSubscription {
+            kinds: Some(vec![20001]),
+            ..Default::default()
+        }
+        .into();
+        let kind_one_filter = nostro2::subscriptions::NostrSubscription {
             kinds: Some(vec![1]),
             limit: Some(20),
             ..Default::default()
         };
-        if let nostro2_web_relay::nostro2::relay_events::NostrClientEvent::Subscribe(.., id, _sub) =
-            &nostr_sub
-        {
+        if let nostro2::relay_events::NostrClientEvent::Subscribe(.., id, _sub) = &nostr_sub {
             let sub_id = id.clone();
             id_handle.set(Some(sub_id));
             relay_clone.send(nostr_sub);
@@ -69,10 +66,7 @@ pub fn relay_pool_test() -> yew::Html {
         || yew::html! { <div>{"Loading Relay Pool..."}</div> },
         |id| {
             let unsubscriber = relay_ctx;
-            let sub_id = crate::nostro2::relay_events::NostrClientEvent::CloseSubscriptionEvent(
-                crate::nostro2::relay_events::RelayEventTag::CLOSE,
-                id.to_string(),
-            );
+            let sub_id = crate::nostro2::relay_events::NostrClientEvent::close_subscription(id);
             let unsubscribe_onclick = yew::Callback::from(move |_| {
                 unsubscriber.send(sub_id.clone());
             });

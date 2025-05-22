@@ -1,6 +1,6 @@
 [package]
 name = "nostr-minions"
-version = "0.1.10"
+version = "0.1.17"
 edition = "2021"
 license = "BSD-3-Clause"
 description = "A Yew-based framework for client side Nostr apps"
@@ -8,9 +8,22 @@ repository = "https://github.com/illuminodes/minions"
 readme = "README.md"
 homepage = "https://github.com/illuminodes/minions"
 
+[features]
+default = []
+ag-grid = []
+bitcoin-qr = []
+full-calendar = ["toastify"]
+leaflet = []
+toastify = []
+uploads = []
+all-widgets = ["ag-grid", "bitcoin-qr", "full-calendar", "leaflet", "toastify"]
+
 [dependencies]
 # Nostr Stack
-nostro2 = "0.2.7"
+#nostro2 =  { path = "../NostrO2/nostro2" }
+#nostro2-signer =  { path = "../NostrO2/nostro2-signer" }
+nostro2 = "0.3.6"
+nostro2-signer = "0.1.9"
 upload-things = "0.1.2"
 lucide-yew = "1.1.0"
 uuid = { version = "1.15", features = ["v4", "js"] }

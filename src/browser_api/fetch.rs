@@ -7,9 +7,8 @@ impl BrowserFetch {
         T: TryFrom<web_sys::wasm_bindgen::JsValue>,
         web_sys::wasm_bindgen::JsValue: From<<T as TryFrom<web_sys::wasm_bindgen::JsValue>>::Error>,
     {
-        let window = web_sys::window().ok_or(web_sys::wasm_bindgen::JsValue::from_str(
-            "No window available",
-        ))?;
+        let window = web_sys::window()
+            .ok_or_else(|| web_sys::wasm_bindgen::JsValue::from_str("No window available"))?;
         let response =
             wasm_bindgen_futures::JsFuture::from(window.fetch_with_request(request)).await?;
         let response: web_sys::Response = response.dyn_into()?;
@@ -25,9 +24,8 @@ impl BrowserFetch {
         T: TryFrom<web_sys::wasm_bindgen::JsValue>,
         web_sys::wasm_bindgen::JsValue: From<<T as TryFrom<web_sys::wasm_bindgen::JsValue>>::Error>,
     {
-        let window = web_sys::window().ok_or(web_sys::wasm_bindgen::JsValue::from_str(
-            "No window available",
-        ))?;
+        let window = web_sys::window()
+            .ok_or_else(|| web_sys::wasm_bindgen::JsValue::from_str("No window available"))?;
         let response =
             wasm_bindgen_futures::JsFuture::from(window.fetch_with_request_and_init(request, init))
                 .await?;

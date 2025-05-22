@@ -31,16 +31,18 @@ extern "C" {
     pub fn get_events(this: &Calendar) -> Vec<CalendarEvent>;
     #[wasm_bindgen(method, js_name = changeView)]
     pub fn change_view(this: &Calendar, view: &str, date: &str);
+    #[wasm_bindgen(method, js_name = updateSize)]
+    pub fn update_size(this: &Calendar);
 }
 impl Calendar {
-    pub fn add_calendar_event(&self, event: FullCalendarEvent) -> Result<(), JsValue> {
-        let js_value = serde_wasm_bindgen::to_value(&event)
-            .map_err(|e| JsValue::from_str(&format!("Failed to convert event: {}", e)))?;
+    pub fn add_calendar_event(&self, event: &FullCalendarEvent) -> Result<(), JsValue> {
+        let js_value = serde_wasm_bindgen::to_value(event)
+            .map_err(|e| JsValue::from_str(&format!("Failed to convert event: {e}")))?;
         self.add_event(js_value);
         Ok(())
     }
 
-    pub fn add_or_replace_event(&self, event: FullCalendarEvent) -> Result<(), JsValue> {
+    pub fn add_or_replace_event(&self, event: &FullCalendarEvent) -> Result<(), JsValue> {
         if let Some(old_event) = self.get_event_by_id(&event.get_id()) {
             old_event.remove();
         }
@@ -63,7 +65,7 @@ impl Calendar {
     pub fn update_events(&self, events: Vec<FullCalendarEvent>) {
         self.clear_events();
         for event in events {
-            if let Err(e) = self.add_calendar_event(event) {
+            if let Err(e) = self.add_calendar_event(&event) {
                 gloo::console::error!("Failed to add calendar event:", e);
             }
         }
@@ -94,20 +96,20 @@ impl Calendar {
         self.render();
     }
 }
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FullCalendarHeaderOptions {
     pub start: &'static str,
     pub center: &'static str,
     pub end: &'static str,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct EventTimeFormat {
     pub hour: &'static str,
     pub minute: &'static str,
     pub meridiem: &'static str,
 }
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DayHeaderFormat {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub weekday: Option<&'static str>,
@@ -119,7 +121,8 @@ pub struct DayHeaderFormat {
     pub omit_commas: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FullCalendarOptions {
     #[serde(rename = "initialView")]
     pub initial_view: &'static str,
@@ -200,10 +203,12 @@ impl Default for EventTimeFormat {
     }
 }
 impl FullCalendarOptions {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    #[must_use]
     pub fn with_event_click<F>(mut self, f: F) -> Self
     where
         F: Fn(JsValue) + 'static,
@@ -213,6 +218,7 @@ impl FullCalendarOptions {
         self
     }
 
+    #[must_use]
     pub fn with_select<F>(mut self, f: F) -> Self
     where
         F: Fn(JsValue) + 'static,
@@ -222,6 +228,7 @@ impl FullCalendarOptions {
         self
     }
 
+    #[must_use]
     pub fn with_date_click<F>(mut self, f: F) -> Self
     where
         F: Fn(JsValue) + 'static,
@@ -233,7 +240,7 @@ impl FullCalendarOptions {
     fn validate_handler(&self) -> Result<(), JsValue> {
         let validate_fn = |handler: &Function, name: &str| -> Result<(), JsValue> {
             if web_sys::js_sys::Reflect::get(handler, &"call".into())?.is_undefined() {
-                return Err(JsValue::from_str(&format!("Invalid {} handler", name)));
+                return Err(JsValue::from_str(&format!("Invalid {name} handler")));
             }
             Ok(())
         };
@@ -257,7 +264,7 @@ impl FullCalendarOptions {
 
         // Convert the basic options
         let base_options = serde_wasm_bindgen::to_value(&self)
-            .map_err(|e| JsValue::from_str(&format!("Failed to convert options: {}", e)))?;
+            .map_err(|e| JsValue::from_str(&format!("Failed to convert options: {e}")))?;
 
         // Copy properties
         let base_obj: Object = base_options.into();
@@ -292,16 +299,16 @@ impl Default for FullCalendarHeaderOptions {
     }
 }
 
-impl Into<JsValue> for FullCalendarOptions {
-    fn into(self) -> JsValue {
-        self.to_js_value().unwrap_or_else(|e| {
+impl From<FullCalendarOptions> for JsValue {
+    fn from(val: FullCalendarOptions) -> Self {
+        val.to_js_value().unwrap_or_else(|e| {
             gloo::console::error!("Failed to convert calendar options:", e);
-            JsValue::NULL
+            Self::NULL
         })
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FullCalendarSelectEvent {
     #[serde(with = "serde_wasm_bindgen::preserve")]
     pub start: Date,
@@ -317,10 +324,10 @@ impl TryFrom<JsValue> for FullCalendarSelectEvent {
     type Error = JsValue;
     fn try_from(value: JsValue) -> Result<Self, Self::Error> {
         serde_wasm_bindgen::from_value(value)
-            .map_err(|e| JsValue::from_str(&format!("Failed to convert select event: {}", e)))
+            .map_err(|e| JsValue::from_str(&format!("Failed to convert select event: {e}")))
     }
 }
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FullCalendarEvent {
     id: String,
     title: String,
@@ -348,41 +355,48 @@ impl FullCalendarEvent {
     pub const COLOR_YELLOW: &'static str = "#f1c40f";
     pub const COLOR_PURPLE: &'static str = "#9b59b6";
     // Add a builder-style method for setting color
+    #[must_use]
     pub fn with_color(mut self, color: &str) -> Self {
         self.background_color = color.to_string();
         self
     }
 
     // Add a builder-style method for setting all_day
-    pub fn with_all_day(mut self, all_day: bool) -> Self {
+    #[must_use]
+    pub const fn with_all_day(mut self, all_day: bool) -> Self {
         self.all_day = all_day;
         self
     }
 
+    #[must_use]
     pub fn get_title(&self) -> &str {
         &self.title
     }
 
+    #[must_use]
     pub fn get_start_str(&self) -> &str {
         &self.start_str
     }
 
+    #[must_use]
     pub fn get_end_str(&self) -> &str {
         &self.end_str
     }
 
-    pub fn quick_event(id: &str, title: &str, start: Date, duration_mins: i32) -> Self {
+    #[must_use]
+    pub fn quick_event(id: &str, title: &str, start: &Date, duration_mins: i32) -> Self {
         let end = Date::new(&start.clone().into());
-        let current_minutes = end.get_minutes() as u32;
-        let total_minutes = current_minutes + duration_mins as u32;
+        let current_minutes = end.get_minutes();
+        let total_minutes = current_minutes
+            .checked_add(duration_mins.try_into().unwrap_or(0))
+            .unwrap_or(0);
         end.set_minutes(total_minutes);
         Self::new(
             id,
             title,
             start,
-            end,
+            &end,
             Self::COLOR_BLUE,
-            serde_json::Value::Null,
         )
     }
 
@@ -390,7 +404,7 @@ impl FullCalendarEvent {
         let js_object: Object = value.dyn_into()?;
         let event_object = Reflect::get(&js_object, &JsValue::from_str("event"))?;
         serde_wasm_bindgen::from_value(event_object)
-            .map_err(|e| JsValue::from_str(&format!("Failed to convert event: {}", e)))
+            .map_err(|e| JsValue::from_str(&format!("Failed to convert event: {e}")))
     }
 
     pub fn from_event(event: &web_sys::Event) -> Result<Self, JsValue> {
@@ -400,17 +414,17 @@ impl FullCalendarEvent {
         Self::try_from(event_object)
     }
 
+    #[must_use]
     pub fn new(
         id: &str,
         title: &str,
-        start: Date,
-        end: Date,
+        start: &Date,
+        end: &Date,
         color: &str,
-        extended_props: Value,
     ) -> Self {
         let locale_options: JsValue = web_sys::js_sys::Object::new().into();
 
-        FullCalendarEvent {
+        Self {
             id: id.to_string(),
             title: title.to_string(),
             all_day: false,
@@ -420,20 +434,20 @@ impl FullCalendarEvent {
             start_str: start.to_locale_string("es-ES", &locale_options).into(),
             end_str: end.to_locale_string("es-ES", &locale_options).into(),
             display: "block".to_string(),
-            extended_props,
+            extended_props: serde_json::Value::Null,
         }
     }
+    #[must_use]
     pub fn new_background_event(
         id: &str,
         title: &str,
-        start: Date,
-        end: Date,
+        start: &Date,
+        end: &Date,
         color: &str,
-        extended_props: Value,
     ) -> Self {
         let locale_options: JsValue = web_sys::js_sys::Object::new().into();
 
-        FullCalendarEvent {
+        Self {
             id: id.to_string(),
             title: title.to_string(),
             all_day: false,
@@ -443,22 +457,25 @@ impl FullCalendarEvent {
             start_str: start.to_locale_string("es-ES", &locale_options).into(),
             end_str: end.to_locale_string("es-ES", &locale_options).into(),
             display: "background".to_string(),
-            extended_props,
+            extended_props: serde_json::Value::Null,
         }
     }
+    #[must_use]
     pub fn get_id(&self) -> String {
         self.id.clone()
     }
+    #[must_use]
     pub fn get_dates(&self) -> (Date, Date) {
         (self.start.clone(), self.end.clone())
     }
-    pub fn get_props(&self) -> &Value {
+    #[must_use]
+    pub const fn get_props(&self) -> &Value {
         &self.extended_props
     }
 }
-impl Into<JsValue> for FullCalendarEvent {
-    fn into(self) -> JsValue {
-        serde_wasm_bindgen::to_value(&self).unwrap()
+impl From<FullCalendarEvent> for JsValue {
+    fn from(val: FullCalendarEvent) -> Self {
+        serde_wasm_bindgen::to_value(&val).unwrap_or_default()
     }
 }
 // Add TryFrom for better error handling
@@ -466,11 +483,11 @@ impl TryFrom<JsValue> for FullCalendarEvent {
     type Error = JsValue;
     fn try_from(value: JsValue) -> Result<Self, Self::Error> {
         serde_wasm_bindgen::from_value(value)
-            .map_err(|e| JsValue::from_str(&format!("Failed to convert event: {}", e)))
+            .map_err(|e| JsValue::from_str(&format!("Failed to convert event: {e}")))
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FullCalendarDateClickInfo {
     #[serde(with = "serde_wasm_bindgen::preserve")]
     date: Date,
@@ -478,14 +495,15 @@ pub struct FullCalendarDateClickInfo {
     date_str: String,
 }
 impl FullCalendarDateClickInfo {
+    #[must_use]
     pub fn date_str(&self) -> String {
         self.date_str.clone()
     }
 }
 
-impl Into<JsValue> for FullCalendarDateClickInfo {
-    fn into(self) -> JsValue {
-        serde_wasm_bindgen::to_value(&self)
+impl From<FullCalendarDateClickInfo> for JsValue {
+    fn from(val: FullCalendarDateClickInfo) -> Self {
+        serde_wasm_bindgen::to_value(&val)
             .expect("Failed to convert FullCalendarDateClickInfo to JsValue")
     }
 }
@@ -494,6 +512,6 @@ impl TryFrom<JsValue> for FullCalendarDateClickInfo {
     type Error = JsValue;
     fn try_from(value: JsValue) -> Result<Self, Self::Error> {
         serde_wasm_bindgen::from_value(value)
-            .map_err(|e| JsValue::from_str(&format!("Failed to convert date click info: {}", e)))
+            .map_err(|e| JsValue::from_str(&format!("Failed to convert date click info: {e}")))
     }
 }

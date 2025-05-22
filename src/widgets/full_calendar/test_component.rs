@@ -1,8 +1,9 @@
-use super::{FullCalendarComponent, FullCalendarEvent, Calendar};
-use crate::relay_pool::NostrProps;
+use super::{Calendar, FullCalendarComponent, FullCalendarEvent};
+use crate::relay_pool::NostrRelayPoolStore;
 use crate::widgets::toastify::ToastifyOptions;
-use nostro2::notes::NostrNote;
-use nostro2::relays::NostrSubscription;
+use nostro2_signer::nostro2::NostrSigner;
+use nostro2::NostrNote;
+use nostro2::NostrSubscription;
 use serde_json::json;
 use wasm_bindgen::JsValue;
 use web_sys::js_sys::Date;
@@ -10,22 +11,21 @@ use yew::prelude::*;
 
 #[function_component(FullCalendarTest)]
 pub fn calendar_test() -> Html {
-    let relay_ctx = use_context::<NostrProps>().expect("No relay context found");
+    let relay_ctx = use_context::<NostrRelayPoolStore>().expect("No relay context found");
     let events = use_state(Vec::new);
     // Set up subscription for calendar events
     {
-        let relay_ctx = relay_ctx.clone();
-        use_effect_with((), move |_| {
+        let ctx = relay_ctx.clone();
+        use_effect_with((), move |()| {
             // Create and configure filter for calendar events
             let filter = NostrSubscription {
                 kinds: Some(vec![31924]),
                 limit: Some(50),
                 ..Default::default()
-            }
-            .into();
+            };
 
             // Create and send subscription
-            relay_ctx.subscribe.emit(filter);
+            ctx.send(filter);
             || ()
         });
     }
@@ -49,14 +49,9 @@ pub fn calendar_test() -> Html {
                 let event = FullCalendarEvent::new(
                     note.id.as_ref().unwrap().as_str(),
                     title,
-                    start,
-                    end,
+                    &start,
+                    &end,
                     FullCalendarEvent::COLOR_BLUE,
-                    json!({
-                        "noteId": note.id.as_ref().unwrap(),
-                        "pubkey": note.pubkey,
-                        "kind": 31924,
-                    }),
                 );
                 gloo::console::log!("Created event:", event.get_title());
                 Some(event)
@@ -93,7 +88,7 @@ pub fn calendar_test() -> Html {
                 .as_string()
                 .unwrap_or_default();
 
-            let event_title = format!("Event at {}", start_time);
+            let event_title = format!("Event at {start_time}");
 
             let start_str = start.to_iso_string().as_string().unwrap_or_default();
             let end_str = end.to_iso_string().as_string().unwrap_or_default();
@@ -111,56 +106,51 @@ pub fn calendar_test() -> Html {
 
             gloo::console::log!("Event content:", content.to_string());
 
-            let new_keys = nostro2::keypair::NostrKeypair::generate(false);
+            let new_keys = nostro2_signer::keypair::NostrKeypair::generate(false);
             let mut new_note = NostrNote {
                 pubkey: new_keys.public_key(),
                 kind: 31924,
                 content: content.to_string(),
                 ..Default::default()
             };
-            new_keys.sign_nostr_event(&mut new_note);
+            if new_keys.sign_nostr_note(&mut new_note).is_ok() {
+                gloo::console::log!(
+                    "Sending note to relay:",
+                    new_note.id.as_ref().unwrap().as_str()
+                );
 
-            gloo::console::log!(
-                "Sending note to relay:",
-                new_note.id.as_ref().unwrap().as_str()
-            );
+                relay_ctx.send(new_note);
 
-            relay_ctx.send_note.emit(new_note);
-
-            ToastifyOptions::new_success("Created new calendar event").show();
+                ToastifyOptions::new_success("Created new calendar event").show();
+            } else {
+                gloo::console::log!("Failed to sign note");
+                ToastifyOptions::new_relay_error("Failed to create event").show();
+            }
         })
     };
 
     // Update events when notes change
     {
         let events = events.clone();
-        let notes = relay_ctx.unique_notes.clone();
 
-        use_effect_with(notes, move |notes| {
-            gloo::console::log!("Received notes update, total notes:", notes.len());
-            let calendar_events: Vec<FullCalendarEvent> = notes
-                .iter()
-                .filter_map(|note| {
-                    if note.kind == 31924 {
-                        gloo::console::log!(
-                            "Processing calendar note:",
-                            note.id.as_ref().unwrap().as_str()
-                        );
+        use_effect_with(relay_ctx.unique_notes.clone(), move |notes| {
+            if let Some(last_note) = notes.last() {
+                let mut new_events = (*events).clone();
+                if let Some(event) = convert_note_to_event(last_note) {
+                    if last_note.kind == 31924 {
+                        new_events.push(event);
+                        events.set(new_events);
                     }
-                    convert_note_to_event(note)
-                })
-                .collect();
-
-            gloo::console::log!("Created calendar events:", calendar_events.len());
-            events.set(calendar_events);
+                }
+            }
             || ()
         });
     }
-    let events_debug = events.clone();
+    let events_debug = events;
     gloo::console::log!("Rendering with events:", events_debug.len());
     let calendar_state = use_state(|| None);
     let on_calendar_created = {
-        let calendar_state = calendar_state.clone();
+        let calendar_state = calendar_state;
         Callback::from(move |calendar: Calendar| {
             calendar_state.set(Some(calendar));
         })
@@ -180,7 +170,7 @@ pub fn calendar_test() -> Html {
                 on_event_click={handle_event_click}
                 on_date_select={handle_date_select}
                 {on_calendar_created}
-                class={classes!("rounded-lg", "shadow-lg", "bg-white", "h-32", "h-32")}
+                class={classes!("rounded-lg", "shadow-lg", "bg-white", "h-32", "h-96")}
         />
         </div>
     }

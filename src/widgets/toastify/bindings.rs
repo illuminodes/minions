@@ -27,9 +27,9 @@ impl ToastifyOptions {
         toasts(&options).show_toast();
     }
 
-    pub fn new_relay_connected(relay_url: &str) -> Self {
-        ToastifyOptions {
-            text: format!("Connected to relay: {}", relay_url),
+    #[must_use] pub fn new_relay_connected(relay_url: &str) -> Self {
+        Self {
+            text: format!("Connected to relay: {relay_url}"),
             duration: 3000,
             close: true,
             gravity: "top",
@@ -42,9 +42,9 @@ impl ToastifyOptions {
         }
     }
 
-    pub fn new_relay_disconnected(relay_url: &str) -> Self {
-        ToastifyOptions {
-            text: format!("Disconnected from relay: {}. Please refresh the app.", relay_url),
+    #[must_use] pub fn new_relay_disconnected(relay_url: &str) -> Self {
+        Self {
+            text: format!("Disconnected from relay: {relay_url}. Please refresh the app."),
             duration: u32::MAX,
             close: true,
             gravity: "top",
@@ -57,9 +57,9 @@ impl ToastifyOptions {
         }
     }
 
-    pub fn new_event_received(event_type: &str) -> Self {
-        ToastifyOptions {
-            text: format!("New {} event received", event_type),
+    #[must_use] pub fn new_event_received(event_type: &str) -> Self {
+        Self {
+            text: format!("New {event_type} event received"),
             duration: 2000,
             close: true,
             gravity: "top",
@@ -72,9 +72,9 @@ impl ToastifyOptions {
         }
     }
 
-    pub fn new_relay_error(error: &str) -> Self {
-        ToastifyOptions {
-            text: format!("Relay error: {}", error),
+    #[must_use] pub fn new_relay_error(error: &str) -> Self {
+        Self {
+            text: format!("Relay error: {error}"),
             duration: 4000,
             close: true,
             gravity: "top",
@@ -87,8 +87,8 @@ impl ToastifyOptions {
         }
     }
 
-    pub fn new_login(text: String) -> Self {
-        ToastifyOptions {
+    #[must_use] pub fn new_login(text: String) -> Self {
+        Self {
             text,
             duration: 21000,
             close: true,
@@ -102,8 +102,8 @@ impl ToastifyOptions {
         }
     }
 
-    pub fn new_success(text: &'static str) -> Self {
-        ToastifyOptions {
+    #[must_use] pub fn new_success(text: &'static str) -> Self {
+        Self {
             text: text.to_string(),
             duration: 2100,
             close: true,
@@ -117,8 +117,8 @@ impl ToastifyOptions {
         }
     }
 
-    pub fn new_failure(text: &'static str) -> Self {
-        ToastifyOptions {
+    #[must_use] pub fn new_failure(text: &'static str) -> Self {
+        Self {
             text: text.to_string(),
             duration: 2100,
             close: true,
@@ -133,9 +133,9 @@ impl ToastifyOptions {
     }
 }
 
-impl Into<JsValue> for ToastifyOptions {
-    fn into(self) -> JsValue {
-        serde_wasm_bindgen::to_value(&self).expect("Failed to serialize Toast")
+impl From<ToastifyOptions> for JsValue {
+    fn from(val: ToastifyOptions) -> Self {
+        serde_wasm_bindgen::to_value(&val).expect("Failed to serialize Toast")
     }
 }
 

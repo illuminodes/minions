@@ -16,16 +16,16 @@ impl Default for BrowserCrypto {
 pub enum KeyGenParams {
     AesKeyGenParams,
 }
-impl Into<AesKeyGenParams> for KeyGenParams {
-    fn into(self) -> AesKeyGenParams {
-        match self {
-            KeyGenParams::AesKeyGenParams => AesKeyGenParams::new("AES-GCM", 256),
+impl From<KeyGenParams> for AesKeyGenParams {
+    fn from(val: KeyGenParams) -> Self {
+        match val {
+            KeyGenParams::AesKeyGenParams => Self::new("AES-GCM", 256),
         }
     }
 }
-impl Into<web_sys::js_sys::Object> for KeyGenParams {
-    fn into(self) -> web_sys::js_sys::Object {
-        let key_params: web_sys::AesKeyGenParams = self.into();
+impl From<KeyGenParams> for web_sys::js_sys::Object {
+    fn from(val: KeyGenParams) -> Self {
+        let key_params: web_sys::AesKeyGenParams = val.into();
         key_params.into()
     }
 }
@@ -35,7 +35,7 @@ impl BrowserCrypto {
         p_key: web_sys::js_sys::Object,
     ) -> Result<CryptoKey, JsValue> {
         let usage_tags: web_sys::js_sys::Array =
-            vec![JsValue::from_str("encrypt"), JsValue::from_str("decrypt")]
+            [JsValue::from_str("encrypt"), JsValue::from_str("decrypt")]
                 .iter()
                 .collect();
         let key = self.crypto.import_key_with_object(
@@ -46,7 +46,7 @@ impl BrowserCrypto {
             &usage_tags,
         )?;
         let key: JsValue = wasm_bindgen_futures::JsFuture::from(key).await?;
-        Ok(key.dyn_into()?)
+        key.dyn_into()
     }
     pub async fn export_raw_key(
         &self,

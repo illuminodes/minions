@@ -49,6 +49,7 @@ impl From<GeolocationCoordinates> for LatLng {
     }
 }
 
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LeafletMapOptions {
     pub zoom: u8,
@@ -136,18 +137,14 @@ impl L {
         options: Option<LeafletMapOptions>,
     ) -> Result<LeafletMap, JsValue> {
         let lat_lng: LatLng = coords.into();
-        let mut map_options = if let Some(opts) = options {
-            opts.clone()
-        } else {
-            LeafletMapOptions::default()
-        };
-        map_options.center = Some(lat_lng.clone());
+        let mut map_options = options.unwrap_or_default();
+        map_options.center = Some(lat_lng);
         let js_options: JsValue = map_options.try_into()?;
-        let map = L::map_with_options(id, js_options);
+        let map = Self::map_with_options(id, js_options);
         let tile_options = TileLayerOptions::default();
         let js_tile_options: JsValue = tile_options.try_into()?;
 
-        L::tile_layer(
+        Self::tile_layer(
             "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
             js_tile_options,
         )
@@ -264,23 +261,23 @@ impl LeafletMap {
         self.on(event, map_function);
     }
 
-    pub fn zoom_level(&self) -> f64 {
+    #[must_use] pub fn zoom_level(&self) -> f64 {
         self.getZoom()
     }
     pub fn set_zoom_level(&self, zoom: f64) {
-        self.setZoom(zoom)
+        self.setZoom(zoom);
     }
     pub fn zoom_in(&self) {
-        self.zoomIn()
+        self.zoomIn();
     }
     pub fn zoom_out(&self) {
-        self.zoomOut()
+        self.zoomOut();
     }
 
     pub fn create_map_pane(&self, name: &str) {
-        self.create_pane(name)
+        self.create_pane(name);
     }
-    pub fn get_map_pane(&self, name: &str) -> Option<web_sys::Element> {
+    #[must_use] pub fn get_map_pane(&self, name: &str) -> Option<web_sys::Element> {
         match self.get_pane(name) {
             pane if pane.is_undefined() => None,
             pane => Some(pane),
@@ -309,17 +306,14 @@ impl LeafletMap {
 
     pub fn start_locate(&self, options: Option<LeafletLocateOptions>) {
         web_sys::console::log_1(&"Starting location tracking...".into());
-        match options {
-            Some(opts) => {
-                if let Ok(js_opts) = opts.try_into() {
-                    self.locate_with_options(js_opts);
-                    web_sys::console::log_1(&"Location tracking started with options".into());
-                }
+        if let Some(opts) = options {
+            if let Ok(js_opts) = opts.try_into() {
+                self.locate_with_options(js_opts);
+                web_sys::console::log_1(&"Location tracking started with options".into());
             }
-            None => {
-                self.locate();
-                web_sys::console::log_1(&"Location tracking started without options".into());
-            }
+        } else {
+            self.locate();
+            web_sys::console::log_1(&"Location tracking started without options".into());
         }
     }
 
@@ -348,7 +342,7 @@ impl LeafletMap {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IconOptions {
     #[serde(rename = "iconUrl")]
     pub icon_url: String,

@@ -1,6 +1,6 @@
 use gloo::utils::format::JsValueSerdeExt;
 
-use crate::widgets::leaflet::LatLng;
+// use crate::widgets::leaflet::LatLng;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct GeolocationCoordinates {
@@ -12,29 +12,9 @@ pub struct GeolocationCoordinates {
     pub longitude: f64,
     pub speed: Option<f64>,
 }
-impl Into<web_sys::wasm_bindgen::JsValue> for GeolocationCoordinates {
-    fn into(self) -> web_sys::wasm_bindgen::JsValue {
-        web_sys::wasm_bindgen::JsValue::from_serde(&self).unwrap()
-    }
-}
-impl TryFrom<web_sys::wasm_bindgen::JsValue> for GeolocationCoordinates {
-    type Error = web_sys::wasm_bindgen::JsValue;
-    fn try_from(value: web_sys::wasm_bindgen::JsValue) -> Result<Self, Self::Error> {
-        value
-            .into_serde()
-            .map_err(|e| web_sys::wasm_bindgen::JsValue::from_str(&e.to_string()))
-    }
-}
-impl From<LatLng> for GeolocationCoordinates {
-    fn from(value: LatLng) -> Self {
-        Self {
-            accuracy: 0.0,
-            altitude: None,
-            altitude_accuracy: None,
-            latitude: value.lat,
-            longitude: value.lng,
-            speed: None,
-        }
+impl From<GeolocationCoordinates> for web_sys::wasm_bindgen::JsValue {
+    fn from(val: GeolocationCoordinates) -> Self {
+        serde_wasm_bindgen::to_value(&val).unwrap_or_default()
     }
 }
 
@@ -45,15 +25,14 @@ pub struct GeolocationPosition {
 }
 impl GeolocationPosition {
     pub async fn locate() -> Result<Self, web_sys::wasm_bindgen::JsValue> {
-        let window = web_sys::window().ok_or(web_sys::wasm_bindgen::JsValue::from_str(
-            "No window available",
-        ))?;
+        let window = web_sys::window()
+            .ok_or_else(|| web_sys::wasm_bindgen::JsValue::from_str("No window available"))?;
         let geolocation = window.navigator().geolocation()?;
-        let (sender, receiver) = yew::platform::pinned::oneshot::channel::<GeolocationPosition>();
+        let (sender, receiver) = yew::platform::pinned::oneshot::channel::<Self>();
         let on_success: web_sys::js_sys::Function =
             web_sys::wasm_bindgen::closure::Closure::once_into_js(
                 move |event: web_sys::Geolocation| {
-                    if let Ok(geo) = GeolocationPosition::try_from(event) {
+                    if let Ok(geo) = Self::try_from(event) {
                         let _ = sender.send(geo);
                     }
                 },

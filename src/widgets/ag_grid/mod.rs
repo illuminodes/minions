@@ -1,7 +1,7 @@
-mod ag_grid;
+mod bindings;
 mod component;
 mod test_component;
 
-pub use ag_grid::*;
+pub use bindings::*;
 pub use component::*;
 pub use test_component::*;

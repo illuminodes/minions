@@ -1,69 +1,74 @@
 mod nostr_relay;
-mod relay_pool;
+mod provider;
 pub use nostr_relay::*;
-use nostro2::{notes::NostrNote, relays::SubscribeEvent};
-pub use relay_pool::*;
+use nostro2::{NostrClientEvent, NostrNote};
+use nostro2_signer::nostro2::NostrSigner;
+pub use provider::*;
 
 #[yew::function_component(RelayPoolTest)]
 pub fn relay_pool_test() -> yew::Html {
-    let relay_ctx = yew::use_context::<relay_pool::NostrProps>().expect("No relay context found");
+    let relay_ctx =
+        yew::use_context::<provider::NostrRelayPoolStore>().expect("No relay context found");
     let subscription_id = yew::use_state(|| None);
     let latest_note = yew::use_state(|| None);
 
-    let subscriber = relay_ctx.subscribe.clone();
     let id_handle = subscription_id.clone();
-    yew::use_effect_with((), move |_| {
-        let nostr_sub: SubscribeEvent = nostro2::relays::NostrSubscription {
+    let relay_clone = relay_ctx.clone();
+    yew::use_effect_with((), move |()| {
+        let nostr_sub: NostrClientEvent = nostro2::NostrSubscription {
             kinds: Some(vec![20001]),
             ..Default::default()
         }
         .into();
-        let kind_one_filter = nostro2::relays::NostrSubscription {
+        let kind_one_filter = nostro2::NostrSubscription {
             kinds: Some(vec![1]),
-            limit: Some(2000),
+            limit: Some(20),
             ..Default::default()
+        };
+        if let nostro2::NostrClientEvent::Subscribe(.., id, _sub) = &nostr_sub {
+            let sub_id = id.clone();
+            id_handle.set(Some(sub_id));
+            relay_clone.send(nostr_sub);
         }
-        .into();
-        id_handle.set(Some(nostr_sub.1.clone()));
-        subscriber.emit(nostr_sub);
-        subscriber.emit(kind_one_filter);
+        relay_clone.send(kind_one_filter);
         || {}
     });
     let note_handle = latest_note.clone();
     let note_counter = yew::use_state(|| 0);
 
     let counter_handle = note_counter.clone();
-    yew::use_effect_with(relay_ctx.unique_notes.clone(), move |notes| {
-        if let Some(note) = notes.last() {
-            if note.kind == 20001 {
-                note_handle.set(Some(note.clone()));
-            }
-            if note.kind == 1 {
-                counter_handle.set(*counter_handle + 1);
-            }
+    yew::use_effect_with(relay_ctx.unique_notes.clone(), move |relay_clone| {
+        gloo::console::log!("Unique notes:", relay_clone.len());
+        if let Some(last_note) = relay_clone.last().cloned() {
+            let mut counter = *counter_handle;
+            counter += 1;
+            counter_handle.set(counter);
+            note_handle.set(Some(last_note));
         }
         || {}
     });
 
-    let note_sender = relay_ctx.send_note.clone();
+    let note_sender = relay_ctx.clone();
     let send_note_onclick = yew::Callback::from(move |_| {
-        let new_keys = nostro2::keypair::NostrKeypair::generate(false);
+        let new_keys = nostro2_signer::keypair::NostrKeypair::generate(false);
         let mut new_note = NostrNote {
             content: "Minion Note".to_string(),
             kind: 20001,
-            pubkey: new_keys.public_key().to_string(),
+            pubkey: new_keys.public_key(),
             ..Default::default()
         };
-        new_keys.sign_nostr_event(&mut new_note);
-        note_sender.emit(new_note);
+        if new_keys.sign_nostr_note(&mut new_note).is_ok() {
+            note_sender.send(new_note);
+        }
     });
 
-    match subscription_id.as_ref() {
-        Some(id) => {
-            let unsubscriber = relay_ctx.unsubscribe.clone();
-            let sub_id = id.clone();
+    subscription_id.as_ref().map_or_else(
+        || yew::html! { <div>{"Loading Relay Pool..."}</div> },
+        |id| {
+            let unsubscriber = relay_ctx;
+            let sub_id = nostro2::NostrClientEvent::close_subscription(id);
             let unsubscribe_onclick = yew::Callback::from(move |_| {
-                unsubscriber.emit(sub_id.clone());
+                unsubscriber.send(sub_id.clone());
             });
             yew::html! {
                 <div class="flex flex-col gap-4">
@@ -80,20 +85,18 @@ pub fn relay_pool_test() -> yew::Html {
                         <h3>{"Kind 1 Count"}</h3>
                         <p>{*note_counter}</p>
                     </div>
-                    {{
-                        match latest_note.as_ref() {
-                            Some(note) => yew::html! {
-                                <div>
-                                    <h3>{"My Latest Note"}</h3>
-                                    <p>{note.content.as_str()}</p>
-                                </div>
-                            },
-                            None => yew::html! { <div>{"Send a note!"}</div> },
-                        }
-                    }}
+                    {latest_note.as_ref().map_or_else(
+                        ||
+                        yew::html! { <div>{"Send a note!"}</div> },
+                        |note|
+                        yew::html! {
+                            <div>
+                                <h3>{"My Latest Note"}</h3>
+                                <p>{note.content.as_str()}</p>
+                            </div>
+                    })}
                 </div>
             }
-        }
-        None => yew::html! { <div>{"Loading Relay Pool..."}</div> },
-    }
+        },
+    )
 }

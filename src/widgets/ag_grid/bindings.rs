@@ -4,7 +4,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::wasm_bindgen::JsValue;
 use web_sys::Element;
 
-#[derive(Debug, Clone, PartialEq, Copy, Default, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Copy, Default, Serialize)]
 pub enum AgGridTheme {
     #[default]
     Quartz,
@@ -12,9 +12,9 @@ pub enum AgGridTheme {
     Balham,
     Alpine,
 }
-impl Into<&'static str> for AgGridTheme {
-    fn into(self) -> &'static str {
-        match self {
+impl From<AgGridTheme> for &'static str {
+    fn from(val: AgGridTheme) -> Self {
+        match val {
             AgGridTheme::Quartz => "ag-theme-quartz",
             AgGridTheme::Material => "ag-theme-material",
             AgGridTheme::Balham => "ag-theme-balham",
@@ -38,7 +38,7 @@ extern "C" {
     pub fn size_columns_to_fit(this: &AgGrid);
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ColumnDefinition {
     pub field: String,
     #[serde(rename = "headerName")]
@@ -58,7 +58,7 @@ pub struct ColumnDefinition {
     pub cell_renderer: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DefaultColDef {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sortable: Option<bool>,
@@ -92,14 +92,15 @@ where
     #[serde(rename = "rowSelection")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub row_selection: Option<String>,
-    pub theme: AgGridTheme,
+    pub theme: &'static str,
 }
 impl<T> AgGridOptions<T>
 where
     T: Serialize,
 {
+    #[must_use]
     pub fn new(row_data: Vec<T>) -> Self {
-        AgGridOptions {
+        Self {
             row_data,
             column_defs: Vec::new(),
             default_col_def: DefaultColDef {
@@ -112,33 +113,45 @@ where
             pagination: Some(true),
             pagination_page_size: Some(10),
             row_selection: Some("single".to_string()),
-            theme: AgGridTheme::Quartz,
+            theme: AgGridTheme::Quartz.into(),
         }
     }
 
+    #[must_use]
     pub fn with_columns(mut self, columns: Vec<ColumnDefinition>) -> Self {
         self.column_defs = columns;
         self
     }
 
-    pub fn with_default_col_def(mut self, default_col_def: DefaultColDef) -> Self {
+    #[must_use]
+    pub const fn with_default_col_def(mut self, default_col_def: DefaultColDef) -> Self {
         self.default_col_def = default_col_def;
         self
     }
 
-    pub fn with_pagination(mut self, enabled: bool, page_size: Option<i32>) -> Self {
+    #[must_use]
+    pub const fn with_pagination(mut self, enabled: bool, page_size: Option<i32>) -> Self {
         self.pagination = Some(enabled);
         self.pagination_page_size = page_size;
         self
     }
 
+    #[must_use]
     pub fn with_row_selection(mut self, selection_type: &str) -> Self {
         self.row_selection = Some(selection_type.to_string());
         self
     }
+    #[must_use]
     pub fn with_theme(mut self, theme: AgGridTheme) -> Self {
-        self.theme = theme;
+        self.theme = theme.into();
         self
+    }
+    #[must_use]
+    pub fn on_row_clicked(&self, callback: &JsValue) -> JsValue {
+        let options = JsValue::from_serde(&self).unwrap_or_default();
+        let _ =
+            web_sys::js_sys::Reflect::set(&options, &JsValue::from_str("onRowClicked"), callback);
+        options
     }
 }
 
@@ -146,11 +159,12 @@ impl<T> From<AgGridOptions<T>> for JsValue
 where
     T: Serialize,
 {
-    fn from(options: AgGridOptions<T>) -> JsValue {
-        JsValue::from_serde(&options).unwrap()
+    fn from(options: AgGridOptions<T>) -> Self {
+        Self::from_serde(&options).unwrap_or_default()
     }
 }
 
+#[must_use]
 pub fn create_column(field: &str, header: &str) -> ColumnDefinition {
     ColumnDefinition {
         field: field.to_string(),

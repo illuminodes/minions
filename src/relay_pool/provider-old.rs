@@ -1,12 +1,9 @@
 use std::collections::HashMap;
 
-use nostro2::{
-    notes::NostrNote,
-    relays::{CloseEvent, RelayEvent, SubscribeEvent},
-};
+use nostro2_signer::nostro2::note::NostrNote;
+use nostro2_signer::nostro2::relay_events::{NostrClientEvent, NostrRelayEvent};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
-
-use web_sys::wasm_bindgen::JsValue;
+use wasm_bindgen::JsValue;
 use yew::platform::spawn_local;
 use yew::{prelude::*, props};
 
@@ -19,32 +16,32 @@ pub struct RelayContextProps {
 }
 
 pub enum RelayAction {
-    Event(RelayEvent),
+    Event(NostrRelayEvent),
     UniqueNote(NostrNote),
     SendNote(NostrNote),
-    Subscribe(SubscribeEvent),
+    Subscribe(NostrClientEvent),
     Unsubscribe(String),
     Close,
 }
 
 #[derive(Properties, Clone, PartialEq)]
-pub struct NostrProps {
-    pub relay_events: Vec<RelayEvent>,
+pub struct NostrPoolStore {
+    pub relay_events: Vec<NostrRelayEvent>,
     pub unique_notes: Vec<NostrNote>,
     pub send_note: Callback<NostrNote>,
-    pub subscribe: Callback<SubscribeEvent>,
+    pub subscribe: Callback<NostrClientEvent>,
     pub unsubscribe: Callback<String>,
     pub close: Callback<()>,
 }
 pub struct RelayProvider {
-    relay_events: Vec<RelayEvent>,
+    relay_events: Vec<NostrRelayEvent>,
     unique_notes: Vec<NostrNote>,
     sender_channel: UnboundedSender<NostrNote>,
-    filter_channel: UnboundedSender<SubscribeEvent>,
+    filter_channel: UnboundedSender<NostrClientEvent>,
     unsubscribe_channel: UnboundedSender<String>,
     close_channel: UnboundedSender<()>,
     send_note_callback: Callback<NostrNote>,
-    subscribe_callback: Callback<SubscribeEvent>,
+    subscribe_callback: Callback<NostrClientEvent>,
     unsubscribe_callback: Callback<String>,
     close_callback: Callback<()>,
     children: Children,
@@ -58,9 +55,9 @@ impl Component for RelayProvider {
         let props = self.build_props();
         html! {
             <>
-                <ContextProvider<NostrProps> context={props}>
+                <ContextProvider<NostrPoolStore> context={props}>
                     {self.children.clone()}
-                </ContextProvider<NostrProps>>
+                </ContextProvider<NostrPoolStore>>
             </>
         }
     }
@@ -147,23 +144,26 @@ impl Component for RelayProvider {
 
 impl RelayProvider {
     fn read_relays(
-        event_cb: Callback<RelayEvent>,
+        event_cb: Callback<NostrRelayEvent>,
         note_cb: Callback<NostrNote>,
         relays: Vec<UserRelay>,
     ) -> (
         UnboundedSender<NostrNote>,
-        UnboundedSender<SubscribeEvent>,
+        UnboundedSender<NostrClientEvent>,
         UnboundedSender<String>,
         UnboundedSender<()>,
     ) {
         let (send_note_tx, mut send_note_rx) = unbounded_channel::<NostrNote>();
-        let (filter_tx, mut filter_rx) = unbounded_channel::<SubscribeEvent>();
+        let (filter_tx, mut filter_rx) = unbounded_channel::<NostrClientEvent>();
         let (unsubscribe_tx, mut unsubscribe_rx) = unbounded_channel::<String>();
         let (close_tx, mut close_rx) = unbounded_channel::<()>();
 
         spawn_local(async move {
             // Show initial connection attempt
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD:src/relay_pool/relay_pool.rs
             let mut relay_pool = match nostro2::relays::NostrRelayPool::new(
                 relays.iter().map(|relay| relay.url.clone()).collect(),
             )
@@ -174,13 +174,29 @@ impl RelayProvider {
                     gloo::console::error!("Error connecting to relay pool: ", format!("{:?}", e));
                     return;
                 }
+=======
+>>>>>>> mera
+            let relay_pool = nostro2_web_relay::pool::RelayPool::from(
+                relays
+                    .iter()
+                    .map(|relay| relay.url.clone())
+                    .collect::<Vec<String>>()
+                    .as_slice(),
+            );
+            if relay_pool.connect().await.is_err() {
+                gloo::console::error!("Error connecting to relay pool");
+                return;
+<<<<<<< HEAD
+=======
+>>>>>>> 3bb58ab (New nostro2 (#18)):src/relay_pool/provider-old.rs
+>>>>>>> mera
             };
 
             loop {
                 tokio::select! {
-                    Some(note) = relay_pool.reader.recv() => {
-                        match note.1 {
-                            RelayEvent::NewNote((_, _, note)) => {
+                    Ok(note) = relay_pool.read() => {
+                        match note {
+                            NostrRelayEvent::NewNote(.., note) => {
                                 note_cb.emit(note);
                             }
                             event => {
@@ -189,28 +205,62 @@ impl RelayProvider {
                         }
                     }
                     Some(note) = send_note_rx.recv() => {
+<<<<<<< HEAD
+                        if let Err(e) = relay_pool.send(note).await {
+=======
+<<<<<<< HEAD:src/relay_pool/relay_pool.rs
                         if let Err(e) = relay_pool.broadcaster.send(note.into()) {
+=======
+                        if let Err(e) = relay_pool.send(note).await {
+>>>>>>> 3bb58ab (New nostro2 (#18)):src/relay_pool/provider-old.rs
+>>>>>>> mera
                             gloo::console::error!("Error sending note: ", format!("{:?}", e));
                         }
                     }
                     Some(filter) = filter_rx.recv() => {
+<<<<<<< HEAD
+                        if let Err(e) = relay_pool.send(filter).await {
+=======
+<<<<<<< HEAD:src/relay_pool/relay_pool.rs
                         if let Err(e) = relay_pool.broadcaster.send(filter.into()) {
+=======
+                        if let Err(e) = relay_pool.send(filter).await {
+>>>>>>> 3bb58ab (New nostro2 (#18)):src/relay_pool/provider-old.rs
+>>>>>>> mera
                             gloo::console::error!("Error subscribing: ", format!("{:?}", e));
                         }
                     }
                     Some(filter_id) = unsubscribe_rx.recv() => {
+<<<<<<< HEAD
+                        let close_event =  nostro2_web_relay::nostro2::relay_events::NostrClientEvent::close_subscription(filter_id.as_str());
+                        if let Err(e) = relay_pool.send(close_event).await {
+=======
+<<<<<<< HEAD:src/relay_pool/relay_pool.rs
                         let close_event: CloseEvent = filter_id.into();
                         if let Err(e) = relay_pool.broadcaster.send(close_event.into()) {
+=======
+                        let close_event =  nostro2_web_relay::nostro2::relay_events::NostrClientEvent::close_subscription(filter_id.as_str());
+                        if let Err(e) = relay_pool.send(close_event).await {
+>>>>>>> 3bb58ab (New nostro2 (#18)):src/relay_pool/provider-old.rs
+>>>>>>> mera
                             gloo::console::error!("Error unsubscribing: ", format!("{:?}", e));
                         }
                     }
                     _ = close_rx.recv() => {
                         gloo::console::log!("Closing relay pool");
+<<<<<<< HEAD
+                        let _ = relay_pool.close("Closed").await;
+=======
+<<<<<<< HEAD:src/relay_pool/relay_pool.rs
                         let _ = relay_pool.close();
+=======
+                        let _ = relay_pool.close("Closed").await;
+>>>>>>> 3bb58ab (New nostro2 (#18)):src/relay_pool/provider-old.rs
+>>>>>>> mera
                         break;
                     }
                     else => {
-                        let _ = relay_pool.close();
+                        let _ = relay_pool.close("Closed").await;
                         break;
                     }
                 }
@@ -220,19 +270,19 @@ impl RelayProvider {
         (send_note_tx, filter_tx, unsubscribe_tx, close_tx)
     }
 
-    pub fn build_props(&self) -> NostrProps {
+    pub fn build_props(&self) -> NostrPoolStore {
         let _unique_notes = self
             .relay_events
             .iter()
             .filter_map(|event| match event {
-                RelayEvent::NewNote((_, _, note)) => Some(note.clone()),
+                NostrRelayEvent::NewNote(_, _, note) => Some(note.clone()),
                 _ => None,
             })
             .fold(HashMap::new(), |mut acc, note| {
                 acc.insert(note.id.clone().unwrap(), note);
                 acc
             });
-        props!(NostrProps {
+        props!(NostrPoolStore {
             relay_events: self.relay_events.clone(),
             unique_notes: self.unique_notes.clone(),
             send_note: self.send_note_callback.clone(),
@@ -243,15 +293,15 @@ impl RelayProvider {
     }
 
     fn send_nostr_note(&self, signed_note: NostrNote) -> Result<(), JsValue> {
-        let _ = self
+        self
             .sender_channel
             .send(signed_note)
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
         Ok(())
     }
 
-    fn subscribe(&self, filter: SubscribeEvent) -> Result<(), JsValue> {
-        let _ = self
+    fn subscribe(&self, filter: NostrClientEvent) -> Result<(), JsValue> {
+        self
             .filter_channel
             .send(filter)
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
@@ -259,14 +309,14 @@ impl RelayProvider {
     }
 
     fn unsubscribe(&self, filter: String) -> Result<(), JsValue> {
-        let _ = self
+        self
             .unsubscribe_channel
             .send(filter)
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
         Ok(())
     }
 
-    fn add_event(&mut self, event: RelayEvent) {
+    fn add_event(&mut self, event: NostrRelayEvent) {
         self.relay_events.push(event);
     }
     fn add_unique_note(&mut self, note: NostrNote) {
@@ -274,7 +324,7 @@ impl RelayProvider {
     }
 
     fn close_ws(&self) -> Result<(), JsValue> {
-        let _ = self
+        self
             .close_channel
             .send(())
             .map_err(|e| JsValue::from_str(&e.to_string()))?;

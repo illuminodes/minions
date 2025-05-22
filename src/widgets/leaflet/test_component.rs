@@ -1,24 +1,32 @@
 use super::component::LeafletComponent;
 use crate::browser_api::GeolocationCoordinates;
+<<<<<<< HEAD
 use crate::relay_pool::NostrProps;
+=======
+use crate::relay_pool::NostrRelayPoolStore;
+>>>>>>> 3bb58ab (New nostro2 (#18))
 use crate::widgets::leaflet::{
     nominatim::NominatimLookup, IconOptions, LatLng, LeafletLocateOptions, LeafletMap,
     LeafletMapOptions,
 };
+<<<<<<< HEAD
 use nostro2::notes::NostrNote;
+=======
+use nostro2_web_relay::nostro2::note::NostrNote;
+>>>>>>> 3bb58ab (New nostro2 (#18))
 use wasm_bindgen::JsValue;
 use web_sys::MouseEvent;
 use yew::prelude::*;
 
 #[function_component(LeafletTest)]
 pub fn leaflet_test() -> Html {
-    let relay_ctx = use_context::<NostrProps>().expect("No relay context found");
+    let relay_ctx = use_context::<NostrRelayPoolStore>().expect("No relay context found");
     let map = use_state(|| None::<LeafletMap>);
-    let markers = use_state(|| Vec::<(f64, f64)>::new());
-    let location_name = use_state(|| String::new());
+    let markers = use_state(Vec::<(f64, f64)>::new);
+    let location_name = use_state(String::new);
 
     let send_test_event = {
-        let note_sender = relay_ctx.send_note.clone();
+        let note_sender = relay_ctx.clone();
         let markers = markers.clone();
         let map = map.clone();
 
@@ -72,7 +80,7 @@ pub fn leaflet_test() -> Html {
 
                 // Send Nostr event
                 let content = serde_json::to_string(&coords).unwrap();
-                let new_keys = nostro2::keypair::NostrKeypair::generate(false);
+                let new_keys = nostro2_signer::keypair::NostrKeypair::generate(false);
                 let mut new_note = NostrNote {
                     pubkey: new_keys.public_key(),
                     kind: 27235,
@@ -80,7 +88,7 @@ pub fn leaflet_test() -> Html {
                     ..Default::default()
                 };
                 new_keys.sign_nostr_event(&mut new_note);
-                note_sender.emit(new_note);
+                note_sender.send(new_note);
             }
 
             crate::widgets::toastify::ToastifyOptions::new_event_received(
@@ -134,11 +142,17 @@ pub fn leaflet_test() -> Html {
 
                     // Try to get latitude and longitude directly from the event
                     let latitude =
+<<<<<<< HEAD
                         web_sys::js_sys::Reflect::get(&event, &JsValue::from_str("latitude"))
                             .and_then(|v| Ok(v.as_f64().unwrap_or(0.0)));
                     let longitude =
                         web_sys::js_sys::Reflect::get(&event, &JsValue::from_str("longitude"))
                             .and_then(|v| Ok(v.as_f64().unwrap_or(0.0)));
+=======
+                        web_sys::js_sys::Reflect::get(&event, &JsValue::from_str("latitude")).map(|v| v.as_f64().unwrap_or(0.0));
+                    let longitude =
+                        web_sys::js_sys::Reflect::get(&event, &JsValue::from_str("longitude")).map(|v| v.as_f64().unwrap_or(0.0));
+>>>>>>> 3bb58ab (New nostro2 (#18))
 
                     if let (Ok(lat), Ok(lng)) = (latitude, longitude) {
                         web_sys::console::log_1(
@@ -162,7 +176,7 @@ pub fn leaflet_test() -> Html {
                         if let Ok(js_coords) = lat_lng.try_into() {
                             map_for_closure.set_view(&js_coords, 13);
 
-                            if let Ok(_) = map_for_closure.add_leaflet_marker(&geo_coords) {
+                            if map_for_closure.add_leaflet_marker(&geo_coords).is_ok() {
                                 let mut current_markers = (*markers).clone();
                                 current_markers.push((geo_coords.latitude, geo_coords.longitude));
                                 markers.set(current_markers);
@@ -178,11 +192,17 @@ pub fn leaflet_test() -> Html {
                             web_sys::js_sys::Reflect::get(&event, &JsValue::from_str("latlng"))
                         {
                             let lat =
+<<<<<<< HEAD
                                 web_sys::js_sys::Reflect::get(&latlng, &JsValue::from_str("lat"))
                                     .and_then(|v| Ok(v.as_f64().unwrap_or(0.0)));
                             let lng =
                                 web_sys::js_sys::Reflect::get(&latlng, &JsValue::from_str("lng"))
                                     .and_then(|v| Ok(v.as_f64().unwrap_or(0.0)));
+=======
+                                web_sys::js_sys::Reflect::get(&latlng, &JsValue::from_str("lat")).map(|v| v.as_f64().unwrap_or(0.0));
+                            let lng =
+                                web_sys::js_sys::Reflect::get(&latlng, &JsValue::from_str("lng")).map(|v| v.as_f64().unwrap_or(0.0));
+>>>>>>> 3bb58ab (New nostro2 (#18))
 
                             if let (Ok(lat), Ok(lng)) = (lat, lng) {
                                 web_sys::console::log_1(
@@ -210,7 +230,7 @@ pub fn leaflet_test() -> Html {
                                 if let Ok(js_coords) = lat_lng.try_into() {
                                     map_for_closure.set_view(&js_coords, 13);
 
-                                    if let Ok(_) = map_for_closure.add_leaflet_marker(&geo_coords) {
+                                    if map_for_closure.add_leaflet_marker(&geo_coords).is_ok() {
                                         let mut current_markers = (*markers).clone();
                                         current_markers
                                             .push((geo_coords.latitude, geo_coords.longitude));

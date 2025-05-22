@@ -2,7 +2,7 @@ use crate::widgets::toastify::ToastifyOptions;
 use web_sys::HtmlElement;
 use yew::prelude::*;
 
-use super::full_calendar::{
+use super::bindings::{
     Calendar, FullCalendarEvent, FullCalendarOptions, FullCalendarSelectEvent,
 };
 use wasm_bindgen::JsValue;

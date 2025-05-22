@@ -98,11 +98,11 @@ pub trait IdbStoreManager {
                 let result: Vec<Self> = js_array
                     .iter()
                     .map(|value| {
-                        let value: JsValue = value.into();
+                        let value: JsValue = value;
                         value.try_into().unwrap()
                     })
                     .collect();
-                let _ = sender.send(result.into());
+                let _ = sender.send(result);
             });
             request.set_onsuccess(Some(on_success.dyn_ref().unwrap()));
             receiver
@@ -131,8 +131,8 @@ pub trait IdbStoreManager {
             let db = Self::request_db_open().await?;
             let store_name_str = Self::config().store_name;
             let transaction =
-                db.transaction_with_str_and_mode(&store_name_str, IdbTransactionMode::Readwrite)?;
-            let object_store = transaction.object_store(&store_name_str)?;
+                db.transaction_with_str_and_mode(store_name_str, IdbTransactionMode::Readwrite)?;
+            let object_store = transaction.object_store(store_name_str)?;
             Ok(object_store)
         }
     }
@@ -192,7 +192,7 @@ pub trait IdbStoreManager {
         let user_relay_params = web_sys::IdbObjectStoreParameters::new();
         user_relay_params.set_key_path(&JsValue::from_str(Self::config().document_key));
         db.create_object_store_with_optional_parameters(
-            &Self::config().store_name,
+            Self::config().store_name,
             &user_relay_params,
         )?;
         Ok(())

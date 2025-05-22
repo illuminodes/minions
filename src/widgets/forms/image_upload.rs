@@ -1,12 +1,11 @@
 use crate::browser_api::HtmlDocument;
 use crate::constants::{
     NOSTR_KIND_PRESIGNED_URL_REQ, NOSTR_KIND_PRESIGNED_URL_RESP, NOSTR_KIND_SERVER_REQUEST,
-    TEST_PUB_KEY,
 };
-use crate::key_manager::{NostrIdStore, UserIdentity};
-use crate::relay_pool::NostrProps;
+use crate::key_manager::UserIdentity;
+use crate::relay_pool::NostrRelayPoolStore;
 use lucide_yew::Plus;
-use nostro2::notes::NostrNote;
+use nostro2_signer::nostro2::note::NostrNote;
 use upload_things::{UtPreSignedUrl, UtUpload};
 use web_sys::wasm_bindgen::JsCast;
 use web_sys::{FileReader, FormData, HtmlInputElement};
@@ -17,7 +16,9 @@ pub struct ImageUploadInputProps {
     pub url_handle: UseStateHandle<Option<String>>,
     pub nostr_keys: UserIdentity,
     pub classes: Classes,
+    pub image_classes: Classes,
     pub input_id: String,
+    pub server_pubkey: String,
 }
 
 #[function_component(ImageUploadInput)]
@@ -26,9 +27,11 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
         url_handle,
         nostr_keys,
         classes,
+        mut image_classes,
         input_id,
+        server_pubkey,
     } = props.clone();
-    let relay_pool = use_context::<NostrProps>().expect("No RelayPool Context found");
+    let relay_pool = use_context::<NostrRelayPoolStore>().expect("No RelayPool Context found");
     let user_keys = nostr_keys.clone();
     let url_clone = url_handle.clone();
     let is_loading_new = use_state(|| false);
@@ -39,7 +42,7 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
         let relay_ctx = relay_pool.clone();
         use_effect_with((), move |_| {
             // Create subscription for presigned URL responses
-            let filter = nostro2::relays::NostrSubscription {
+            let filter = nostro2_web_relay::nostro2::subscriptions::NostrSubscription {
                 kinds: Some(vec![NOSTR_KIND_PRESIGNED_URL_RESP]),
                 limit: Some(20),
                 ..Default::default()
@@ -47,39 +50,18 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
 
             // Send subscription to relay
             gloo::console::log!("Subscribing to presigned URL responses (kind 20421)");
-            relay_ctx.subscribe.emit(filter.into());
+            relay_ctx.send(filter);
 
             || {}
         });
     }
-    // Add this separate effect to log ALL notes
-    use_effect_with(relay_pool.unique_notes.clone(), move |notes| {
-        for note in notes.iter() {
-            gloo::console::log!(
-                "RECEIVED ANY NOTE - kind:",
-                note.kind,
-                "id:",
-                note.id.as_ref().unwrap_or(&"none".to_string()),
-                "from pubkey:",
-                &note.pubkey
-            );
-        }
-        || {}
-    });
     // Clone input_id for use in the effect
     let input_id_for_effect = input_id.clone();
 
     use_effect_with(relay_pool.unique_notes.clone(), move |notes| {
         if let Some(last_note) = notes.last().cloned() {
-            gloo::console::log!("Received note of kind:", last_note.kind);
-
             if last_note.kind == NOSTR_KIND_PRESIGNED_URL_RESP {
-                gloo::console::log!("Processing presigned URL response");
-            }
-            spawn_local(async move {
-                if last_note.kind == NOSTR_KIND_PRESIGNED_URL_RESP {
-                    gloo::console::log!("Processing presigned URL response");
-
+                spawn_local(async move {
                     let decrypted_content = match user_keys.decrypt_nip44(&last_note).await {
                         Ok(content) => {
                             gloo::console::log!("Successfully decrypted response");
@@ -166,7 +148,7 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
 
                     let closure = web_sys::wasm_bindgen::closure::Closure::wrap(Box::new(
                         move |_: web_sys::ProgressEvent| {
-                            if let Ok(_) = reader_handle.result() {
+                            if reader_handle.result().is_ok() {
                                 let url_setter = url_handle_clone.clone();
                                 let loading_setter = loading_handle_clone.clone();
                                 let url = presigned_url_clone.clone();
@@ -211,19 +193,20 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
                         return;
                     }
                     closure.forget();
-                }
-            });
+                });
+            }
         }
     });
 
     let user_keys = nostr_keys.clone();
-    let sender = relay_pool.send_note.clone();
+    let sender = relay_pool.clone();
     let loading_handle = is_loading_new.clone();
     let onchange = Callback::from(move |e: yew::Event| {
         let loading_handle = loading_handle.clone();
         loading_handle.set(true);
         let user_keys = user_keys.clone();
         let sender = sender.clone();
+        let server_pubkey = server_pubkey.clone();
         spawn_local(async move {
             let pubkey = user_keys.get_pubkey().await.unwrap_or_default();
 
@@ -262,14 +245,14 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
             );
 
             // Create and sign the request note
-            let req_note = NostrNote {
+            let mut req_note = NostrNote {
                 content: file_req.to_string(),
                 kind: NOSTR_KIND_PRESIGNED_URL_REQ,
                 pubkey: pubkey.clone(),
                 ..Default::default()
             };
 
-            let req_note = match user_keys.sign_nostr_note(req_note).await {
+            match user_keys.sign_nostr_note(&mut req_note).await {
                 Ok(note) => note,
                 Err(e) => {
                     gloo::console::error!("Failed to sign request note:", e);
@@ -279,15 +262,15 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
             };
 
             // Create and sign the giftwrap note
-            let giftwrap = NostrNote {
+            let mut giftwrap = NostrNote {
                 content: req_note.to_string(),
                 kind: NOSTR_KIND_SERVER_REQUEST,
                 pubkey,
                 ..Default::default()
             };
 
-            let giftwrap = match user_keys
-                .sign_nip44(giftwrap, TEST_PUB_KEY.to_string())
+            match user_keys
+                .sign_nip44(&mut giftwrap, server_pubkey.to_string())
                 .await
             {
                 Ok(note) => note,
@@ -304,7 +287,7 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
 
             // Send the note to the relay
             gloo::console::log!("Sending giftwrap to relay");
-            sender.emit(giftwrap);
+            sender.send(giftwrap);
         });
     });
 
@@ -321,27 +304,24 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
     default_classes.extend(classes.clone());
     let mut with_url = default_classes.clone();
     with_url.extend(classes!("bg-transparent", "absolute"));
-    let mut image_classes = classes!("rounded-xl", "absolute");
-    image_classes.extend(classes);
 
     html! {
-        <div class="flex justify-center items-center">
+        <>
         {match url_clone.as_ref() {
             Some(url) => {
+                image_classes.push("relative");
                 html! {
-                     <div class="relative w-full h-full">
-                        <img src={url.clone()} class="size-20 object-cover" />
-                        <label for={input_id.clone()} class="absolute inset-0 flex items-center justify-center">
-                            <input {onchange} id={input_id.clone()} type="file" accept="image/*" class="hidden" />
-                            {match *is_loading_new {
-                                true => html! {
-                                    <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-                                },
-                                false => html! {
-                                }
-                            }}
-                        </label>
-                    </div>
+                    <label for={input_id.clone()} class={image_classes}>
+                        <img src={url.clone()} class="absolute inset-0 size-full object-cover" />
+                        <input {onchange} id={input_id.clone()} type="file" accept="image/*" class="hidden" />
+                        {match *is_loading_new {
+                            true => html! {
+                                <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+                            },
+                            false => html! {
+                            }
+                        }}
+                    </label>
                 }
             }
             None => html! {
@@ -358,7 +338,11 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
                 </label>
             }
         }}
+<<<<<<< HEAD
         </div>
+=======
+        </>
+>>>>>>> 3bb58ab (New nostro2 (#18))
     }
 }
 #[function_component(ImageUploadTestComponent)]
@@ -394,6 +378,11 @@ pub fn image_upload_test_component() -> Html {
                                 nostr_keys={identity.clone()}
                                 classes={classes!("w-32", "h-32")}
                                 input_id={"test-upload-input"}
+<<<<<<< HEAD
+=======
+                                server_pubkey={crate::constants::TEST_PUB_KEY.to_string()}
+                                image_classes={classes!("w-32", "h-32")}
+>>>>>>> 3bb58ab (New nostro2 (#18))
                             />
                             <div>
                                 {url_display}

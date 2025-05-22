@@ -71,7 +71,9 @@ pub fn calendar_component(props: &Props) -> Html {
                 calendar.set(Some(calendar_instance.clone()));
                 // Add initial events
                 for event in &*events {
-                    if let Err(e) = calendar_instance.add_or_replace_event(event) {}
+                    if let Err(e) = calendar_instance.add_or_replace_event(event) {
+                        gloo::console::error!("Failed to add/replace event:", e);
+                    }
                 }
 
                 calendar_instance.render();

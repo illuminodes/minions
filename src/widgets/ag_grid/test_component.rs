@@ -1,6 +1,6 @@
 use crate::relay_pool::NostrRelayPoolStore;
 use crate::widgets::ag_grid::{create_column, AgGridComponent, AgGridTheme};
-use nostro2::note::NostrNote;
+use nostro2::NostrNote;
 use serde::Serialize;
 use yew::prelude::*;
 
@@ -30,7 +30,7 @@ pub fn nostr_notes_grid() -> Html {
     let relay_ctx = use_context::<NostrRelayPoolStore>().expect("No relay context found");
     let relay_clone = relay_ctx.clone();
     use_effect_with((), move |()| {
-        let filter = nostro2::subscriptions::NostrSubscription {
+        let filter = nostro2::NostrSubscription {
             kinds: Some(vec![1]),
             limit: Some(10),
             ..Default::default()

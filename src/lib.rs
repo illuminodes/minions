@@ -129,3 +129,4 @@ impl IdbStoreManager for LastSyncTime {
         JsValue::from_str("id")
     }
 }
+

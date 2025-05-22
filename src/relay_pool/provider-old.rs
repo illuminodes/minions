@@ -161,6 +161,21 @@ impl RelayProvider {
         spawn_local(async move {
             // Show initial connection attempt
 
+<<<<<<< HEAD
+=======
+<<<<<<< HEAD:src/relay_pool/relay_pool.rs
+            let mut relay_pool = match nostro2::relays::NostrRelayPool::new(
+                relays.iter().map(|relay| relay.url.clone()).collect(),
+            )
+            .await
+            {
+                Ok(pool) => pool,
+                Err(e) => {
+                    gloo::console::error!("Error connecting to relay pool: ", format!("{:?}", e));
+                    return;
+                }
+=======
+>>>>>>> mera
             let relay_pool = nostro2_web_relay::pool::RelayPool::from(
                 relays
                     .iter()
@@ -171,6 +186,10 @@ impl RelayProvider {
             if relay_pool.connect().await.is_err() {
                 gloo::console::error!("Error connecting to relay pool");
                 return;
+<<<<<<< HEAD
+=======
+>>>>>>> 3bb58ab (New nostro2 (#18)):src/relay_pool/provider-old.rs
+>>>>>>> mera
             };
 
             loop {
@@ -186,24 +205,58 @@ impl RelayProvider {
                         }
                     }
                     Some(note) = send_note_rx.recv() => {
+<<<<<<< HEAD
                         if let Err(e) = relay_pool.send(note).await {
+=======
+<<<<<<< HEAD:src/relay_pool/relay_pool.rs
+                        if let Err(e) = relay_pool.broadcaster.send(note.into()) {
+=======
+                        if let Err(e) = relay_pool.send(note).await {
+>>>>>>> 3bb58ab (New nostro2 (#18)):src/relay_pool/provider-old.rs
+>>>>>>> mera
                             gloo::console::error!("Error sending note: ", format!("{:?}", e));
                         }
                     }
                     Some(filter) = filter_rx.recv() => {
+<<<<<<< HEAD
                         if let Err(e) = relay_pool.send(filter).await {
+=======
+<<<<<<< HEAD:src/relay_pool/relay_pool.rs
+                        if let Err(e) = relay_pool.broadcaster.send(filter.into()) {
+=======
+                        if let Err(e) = relay_pool.send(filter).await {
+>>>>>>> 3bb58ab (New nostro2 (#18)):src/relay_pool/provider-old.rs
+>>>>>>> mera
                             gloo::console::error!("Error subscribing: ", format!("{:?}", e));
                         }
                     }
                     Some(filter_id) = unsubscribe_rx.recv() => {
+<<<<<<< HEAD
                         let close_event =  nostro2_web_relay::nostro2::relay_events::NostrClientEvent::close_subscription(filter_id.as_str());
                         if let Err(e) = relay_pool.send(close_event).await {
+=======
+<<<<<<< HEAD:src/relay_pool/relay_pool.rs
+                        let close_event: CloseEvent = filter_id.into();
+                        if let Err(e) = relay_pool.broadcaster.send(close_event.into()) {
+=======
+                        let close_event =  nostro2_web_relay::nostro2::relay_events::NostrClientEvent::close_subscription(filter_id.as_str());
+                        if let Err(e) = relay_pool.send(close_event).await {
+>>>>>>> 3bb58ab (New nostro2 (#18)):src/relay_pool/provider-old.rs
+>>>>>>> mera
                             gloo::console::error!("Error unsubscribing: ", format!("{:?}", e));
                         }
                     }
                     _ = close_rx.recv() => {
                         gloo::console::log!("Closing relay pool");
+<<<<<<< HEAD
                         let _ = relay_pool.close("Closed").await;
+=======
+<<<<<<< HEAD:src/relay_pool/relay_pool.rs
+                        let _ = relay_pool.close();
+=======
+                        let _ = relay_pool.close("Closed").await;
+>>>>>>> 3bb58ab (New nostro2 (#18)):src/relay_pool/provider-old.rs
+>>>>>>> mera
                         break;
                     }
                     else => {

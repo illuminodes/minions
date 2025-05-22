@@ -2,8 +2,8 @@ use super::{Calendar, FullCalendarComponent, FullCalendarEvent};
 use crate::relay_pool::NostrRelayPoolStore;
 use crate::widgets::toastify::ToastifyOptions;
 use nostro2_signer::nostro2::NostrSigner;
-use nostro2_web_relay::nostro2::note::NostrNote;
-use nostro2_web_relay::nostro2::subscriptions::NostrSubscription;
+use nostro2::NostrNote;
+use nostro2::NostrSubscription;
 use serde_json::json;
 use wasm_bindgen::JsValue;
 use web_sys::js_sys::Date;
@@ -52,11 +52,6 @@ pub fn calendar_test() -> Html {
                     &start,
                     &end,
                     FullCalendarEvent::COLOR_BLUE,
-                    json!({
-                        "noteId": note.id.as_ref().unwrap(),
-                        "pubkey": note.pubkey,
-                        "kind": 31924,
-                    }),
                 );
                 gloo::console::log!("Created event:", event.get_title());
                 Some(event)

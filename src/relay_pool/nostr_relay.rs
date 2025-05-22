@@ -55,8 +55,7 @@ mod tests {
         };
         user_relay
             .save_to_store()
-            .await
-            .expect("Error saving to store");
+            .await.expect("Error saving to store");
         let retrieved: UserRelay =
             UserRelay::retrieve_from_store(&JsValue::from_str("wss://example.com"))
                 .await

@@ -6,7 +6,7 @@ use crate::widgets::leaflet::{
     LeafletMapOptions,
 };
 use nostro2_signer::nostro2::NostrSigner;
-use nostro2::note::NostrNote;
+use nostro2::NostrNote;
 use wasm_bindgen::JsValue;
 use web_sys::MouseEvent;
 use yew::prelude::*;

@@ -14,7 +14,7 @@ pub struct GeolocationCoordinates {
 }
 impl From<GeolocationCoordinates> for web_sys::wasm_bindgen::JsValue {
     fn from(val: GeolocationCoordinates) -> Self {
-        Self::from_serde(&val).unwrap_or_default()
+        serde_wasm_bindgen::to_value(&val).unwrap_or_default()
     }
 }
 

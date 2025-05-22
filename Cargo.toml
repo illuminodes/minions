@@ -1,6 +1,6 @@
 [package]
 name = "nostr-minions"
-version = "0.1.16"
+version = "0.1.17"
 edition = "2021"
 license = "BSD-3-Clause"
 description = "A Yew-based framework for client side Nostr apps"
@@ -16,18 +16,14 @@ full-calendar = ["toastify"]
 leaflet = []
 toastify = []
 uploads = []
-all-widgets = ["ag-grid", "bitcoin-qr", "full-calendar", "leaflet", "toastify", "uploads"]
+all-widgets = ["ag-grid", "bitcoin-qr", "full-calendar", "leaflet", "toastify"]
 
 [dependencies]
 # Nostr Stack
-
-
-# nostro2 = "0.3.5"
-nostro2 =  { path = "../NostrO2/nostro2" }
-# nostro2-signer =  "0.1.8"
-nostro2-signer =  { path = "../NostrO2/nostro2-signer" }
-# nostro2-web-signer =  "0.1.0"
-# nostro2-web-signer =  { path = "../NostrO2/nostro2-web-signer" }
+#nostro2 =  { path = "../NostrO2/nostro2" }
+#nostro2-signer =  { path = "../NostrO2/nostro2-signer" }
+nostro2 = "0.3.6"
+nostro2-signer = "0.1.9"
 upload-things = "0.1.2"
 lucide-yew = "1.1.0"
 uuid = { version = "1.15", features = ["v4", "js"] }
@@ -39,13 +35,13 @@ serde-wasm-bindgen = "0.6.5"
 
 # DOM and Browser Bindings
 gloo = "0.11"
-web-sys = { version = "0.3", features = [ "Window", "Clipboard",  "Navigator",
-"SubtleCrypto", "CryptoKey",  "Crypto", "AesKeyGenParams", "AesGcmParams", 
-"IdbFactory", "IdbOpenDbOptions", "IdbObjectStoreParameters","IdbOpenDbRequest", "IdbTransaction", 
-"IdbRequest", "IdbDatabase", "IdbObjectStore", "IdbRequestReadyState", "IdbTransactionMode", 
-"Geolocation", "Response", "ReadableStream",  "DomStringList",
-"ServiceWorkerContainer", "ServiceWorkerGlobalScope", "FetchEvent"] }
+web-sys = { version = "0.3", features = ["HtmlInputElement", "HtmlFormElement", "SubtleCrypto", "CryptoKey", 
+"Window", "Crypto", "AesKeyGenParams", "AesGcmParams", "IdbFactory", "IdbOpenDbOptions", "HtmlSelectElement", 
+"Clipboard", "IdbOpenDbRequest", "IdbTransaction", "IdbRequest", "IdbDatabase", "IdbObjectStore", "IdbRequestReadyState", 
+"Navigator", "HtmlAudioElement", "HtmlMediaElement", "Geolocation", "Response", "ReadableStream", "IdbTransactionMode", 
+"IdbObjectStoreParameters", "Navigator", "ServiceWorkerContainer", "ServiceWorkerGlobalScope", "FetchEvent", "CustomEvent", "DomStringList"] }
 
+# I/O
 tokio = { version = "1", features = ["macros", "sync"] }
 wasm-bindgen-futures = "0.4"
 

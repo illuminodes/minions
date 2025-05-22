@@ -1,11 +1,13 @@
+use crate::browser_api::HtmlDocument;
 use crate::constants::{
     NOSTR_KIND_PRESIGNED_URL_REQ, NOSTR_KIND_PRESIGNED_URL_RESP, NOSTR_KIND_SERVER_REQUEST,
 };
 use crate::key_manager::UserIdentity;
 use crate::relay_pool::NostrRelayPoolStore;
 use lucide_yew::Plus;
-use nostro2_signer::nostro2::NostrNote;
+use nostro2_signer::nostro2::note::NostrNote;
 use upload_things::{UtPreSignedUrl, UtUpload};
+use web_sys::wasm_bindgen::JsCast;
 use web_sys::{FileReader, FormData, HtmlInputElement};
 use yew::{platform::spawn_local, prelude::*};
 
@@ -38,9 +40,9 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
     // Add subscription for presigned URL responses
     {
         let relay_ctx = relay_pool.clone();
-        use_effect_with((), move |()| {
+        use_effect_with((), move |_| {
             // Create subscription for presigned URL responses
-            let filter = nostro2::NostrSubscription {
+            let filter = nostro2_web_relay::nostro2::subscriptions::NostrSubscription {
                 kinds: Some(vec![NOSTR_KIND_PRESIGNED_URL_RESP]),
                 limit: Some(20),
                 ..Default::default()
@@ -81,26 +83,37 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
                     };
 
                     // Get document and input safely
-                    let Some(document) = web_sys::window().and_then(|w| w.document()) else {
-                        gloo::console::error!("Failed to get document");
-                        return;
-                    };
-
-                    let Some(Ok(input)) = document
-                        .get_element_by_id(&input_id_for_effect)
-                        .map(wasm_bindgen::JsCast::dyn_into::<HtmlInputElement>) else {
-                            gloo::console::error!("Failed to get input element");
+                    let document = match HtmlDocument::new() {
+                        Ok(doc) => doc,
+                        Err(e) => {
+                            gloo::console::error!("Failed to get document:", e);
                             return;
+                        }
                     };
 
-                    let Some(files) = input.files() else {
-                        gloo::console::error!("No files found");
-                        return;
+                    let input: HtmlInputElement =
+                        match document.find_element_by_id(&input_id_for_effect) {
+                            Ok(input) => input,
+                            Err(e) => {
+                                gloo::console::error!("Failed to find input element:", e);
+                                return;
+                            }
+                        };
+
+                    let files = match input.files() {
+                        Some(files) => files,
+                        None => {
+                            gloo::console::error!("No files found");
+                            return;
+                        }
                     };
 
-                    let Some(file) = files.get(0) else {
-                        gloo::console::error!("No file selected");
-                        return;
+                    let file = match files.get(0) {
+                        Some(file) => file,
+                        None => {
+                            gloo::console::error!("No file selected");
+                            return;
+                        }
                     };
 
                     // Create form data
@@ -129,9 +142,9 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
                     let reader_handle = reader.clone();
                     let loading_handle = loading_handle.clone();
                     let url_handle_clone = url_handle.clone();
-                    let loading_handle_clone = loading_handle;
-                    let presigned_url_clone = presigned_url;
-                    let form_data_clone = form_data;
+                    let loading_handle_clone = loading_handle.clone();
+                    let presigned_url_clone = presigned_url.clone();
+                    let form_data_clone = form_data.clone();
 
                     let closure = web_sys::wasm_bindgen::closure::Closure::wrap(Box::new(
                         move |_: web_sys::ProgressEvent| {
@@ -174,9 +187,7 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
                     )
                         as Box<dyn FnMut(web_sys::ProgressEvent)>);
 
-                    reader.set_onloadend(
-                        Some(web_sys::wasm_bindgen::JsCast::unchecked_ref(closure.as_ref())
-                    ));
+                    reader.set_onloadend(Some(closure.as_ref().unchecked_ref()));
                     if let Err(e) = reader.read_as_array_buffer(&file) {
                         gloo::console::error!("Failed to read file:", e);
                         return;
@@ -187,8 +198,8 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
         }
     });
 
-    let user_keys = nostr_keys;
-    let sender = relay_pool;
+    let user_keys = nostr_keys.clone();
+    let sender = relay_pool.clone();
     let loading_handle = is_loading_new.clone();
     let onchange = Callback::from(move |e: yew::Event| {
         let loading_handle = loading_handle.clone();
@@ -200,24 +211,28 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
             let pubkey = user_keys.get_pubkey().await.unwrap_or_default();
 
             // Get the file from the input element
-            let Some(input) = e.target().map(
-                web_sys::wasm_bindgen::JsCast::unchecked_into::<HtmlInputElement>
-            ) else {
-                gloo::console::error!("Failed to get input element");
-                loading_handle.set(false);
-                return;
+            let input = e
+                .target()
+                .unwrap()
+                .dyn_into::<HtmlInputElement>()
+                .expect("Failed to get input element");
+
+            let files = match input.files() {
+                Some(files) => files,
+                None => {
+                    gloo::console::error!("No files found");
+                    loading_handle.set(false);
+                    return;
+                }
             };
 
-            let Some(files) = input.files() else {
-                gloo::console::error!("No files found");
-                loading_handle.set(false);
-                return;
-            };
-
-            let Some(file) = files.get(0) else {
-                gloo::console::error!("No file selected");
-                loading_handle.set(false);
-                return;
+            let file = match files.get(0) {
+                Some(file) => file,
+                None => {
+                    gloo::console::error!("No file selected");
+                    loading_handle.set(false);
+                    return;
+                }
             };
 
             // Create the upload request
@@ -244,11 +259,11 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
                     loading_handle.set(false);
                     return;
                 }
-            }
+            };
 
             // Create and sign the giftwrap note
             let mut giftwrap = NostrNote {
-                content: serde_json::to_string(&file_req).unwrap_or_default(),
+                content: req_note.to_string(),
                 kind: NOSTR_KIND_SERVER_REQUEST,
                 pubkey,
                 ..Default::default()
@@ -264,7 +279,7 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
                     loading_handle.set(false);
                     return;
                 }
-            }
+            };
             gloo::console::log!(
                 "Sending giftwrap note:",
                 serde_json::to_string(&giftwrap).unwrap()
@@ -286,84 +301,104 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
         "border-blue-500",
         "rounded-xl"
     );
-    default_classes.extend(classes);
+    default_classes.extend(classes.clone());
     let mut with_url = default_classes.clone();
     with_url.extend(classes!("bg-transparent", "absolute"));
-    url_clone.as_ref().map_or_else(
-        || {
-            html! {
+
+    html! {
+        <>
+        {match url_clone.as_ref() {
+            Some(url) => {
+                image_classes.push("relative");
+                html! {
+                    <label for={input_id.clone()} class={image_classes}>
+                        <img src={url.clone()} class="absolute inset-0 size-full object-cover" />
+                        <input {onchange} id={input_id.clone()} type="file" accept="image/*" class="hidden" />
+                        {match *is_loading_new {
+                            true => html! {
+                                <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+                            },
+                            false => html! {
+                            }
+                        }}
+                    </label>
+                }
+            }
+            None => html! {
                 <label for={input_id.clone()} class={default_classes}>
-                    <input onchange={&onchange} id={input_id.clone()} type="file" accept="image/*" class="hidden" />
-                    {if *is_loading_new {
-                        html! {
+                    <input {onchange} id={input_id.clone()} type="file" accept="image/*" class="hidden" />
+                    {match *is_loading_new {
+                        true => html! {
                             <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-                    }} else {
-                        html! {
+                        },
+                        false => html! {
                             <Plus class="w-8 h-8 text-blue-500" />
-                    }   }}
+                        }
+                    }}
                 </label>
             }
-        },
-        |url|{
-            image_classes.push("relative");
-            html! {
-                <label for={input_id.clone()} class={image_classes}>
-                    <img src={url.clone()} class="absolute inset-0 size-full object-cover" />
-                    <input onchange={&onchange} id={input_id.clone()} type="file" accept="image/*" class="hidden" />
-                    {if *is_loading_new {
-                        html! {
-                            <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-                    }} else { html! {} }}
-                </label>
-            }})
+        }}
+<<<<<<< HEAD
+        </div>
+=======
+        </>
+>>>>>>> 3bb58ab (New nostro2 (#18))
+    }
 }
 #[function_component(ImageUploadTestComponent)]
 pub fn image_upload_test_component() -> Html {
     let url_handle = use_state(|| None::<String>);
 
     // Try to get Nostr context
-    let nostr_ctx = use_context::<crate::key_manager::NostrIdStore>().expect("No Nostr context found");
-    if nostr_ctx.loaded() {
-        return html! { <p>{"Loading Nostr identity..."}</p> };
-    }
-    let content = nostr_ctx.get_identity().map_or_else(
-        || html! { 
-            <p class="text-yellow-600">{"No Nostr identity available. Login first to test uploads."}</p> 
-        },
-        |identity| {
-            // Prepare URL display component separately
-            let url_display = (*url_handle).clone().map_or_else(
-                || html! { <p>{"No image uploaded yet. Click the + to upload."}</p> },
-                |url| {
+    let nostr_ctx = use_context::<crate::key_manager::NostrIdStore>();
+
+    // Prepare the content based on conditions
+    let content = if let Some(ctx) = nostr_ctx {
+        if ctx.loaded() {
+            if let Some(identity) = ctx.get_identity() {
+                // Prepare URL display component separately
+                let url_display = if let Some(url) = (*url_handle).clone() {
                     html! {
                         <>
                             <p class="text-green-600 font-bold">{"Image Uploaded!"}</p>
                             <p class="break-all text-xs mt-2">{url}</p>
-                            </>
+                        </>
                     }
-                },
-            );
+                } else {
+                    html! { <p>{"No image uploaded yet. Click the + to upload."}</p> }
+                };
 
-            // We have an identity, render the component
-            html! {
-                <>
-                    <p class="mb-4 text-green-600">{"Nostr identity loaded. You can test uploading."}</p>
-                    <div class="flex items-center gap-4">
-                        <ImageUploadInput
-                            url_handle={url_handle.clone()}
-                            nostr_keys={identity.clone()}
-                            classes={classes!("w-32", "h-32")}
-                            input_id={"test-upload-input"}
-                            server_pubkey={crate::constants::TEST_PUB_KEY.to_string()}
-                            image_classes={classes!("w-32", "h-32")}
+                // We have an identity, render the component
+                html! {
+                    <>
+                        <p class="mb-4 text-green-600">{"Nostr identity loaded. You can test uploading."}</p>
+                        <div class="flex items-center gap-4">
+                            <ImageUploadInput
+                                url_handle={url_handle.clone()}
+                                nostr_keys={identity.clone()}
+                                classes={classes!("w-32", "h-32")}
+                                input_id={"test-upload-input"}
+<<<<<<< HEAD
+=======
+                                server_pubkey={crate::constants::TEST_PUB_KEY.to_string()}
+                                image_classes={classes!("w-32", "h-32")}
+>>>>>>> 3bb58ab (New nostro2 (#18))
                             />
-                        <div>
-                            {url_display}
+                            <div>
+                                {url_display}
+                            </div>
                         </div>
-                    </div>
-                </>
+                    </>
+                }
+            } else {
+                html! { <p class="text-yellow-600">{"No Nostr identity available. Login first to test uploads."}</p> }
             }
-        });
+        } else {
+            html! { <p>{"Loading Nostr identity..."}</p> }
+        }
+    } else {
+        html! { <p class="text-red-600">{"No Nostr context available. Make sure you're using NostrIdProvider."}</p> }
+    };
 
     // Main component structure
     html! {

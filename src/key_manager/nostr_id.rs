@@ -1,5 +1,5 @@
 use nostro2_signer::keypair::NostrKeypair;
-use nostro2_signer::nostro2::note::NostrNote;
+use nostro2_signer::nostro2::NostrNote;
 use nostro2_signer::nostro2::NostrSigner;
 use web_sys::wasm_bindgen::{JsCast, JsValue};
 use web_sys::CryptoKey;
@@ -96,7 +96,7 @@ impl UserIdentity {
             }
             NostrIdType::Extension => None,
             NostrIdType::Bunker(url) => {
-                gloo::console::log!("Bunker url: {:?}", url);
+                gloo::console::log!("Bunker url: ", url);
                 None
             }
         }

@@ -22,9 +22,10 @@ all-widgets = ["ag-grid", "bitcoin-qr", "full-calendar", "leaflet", "toastify", 
 # Nostr Stack
 
 
-nostro2 = "0.3.5"
-nostro2-signer =  "0.1.8"
-# nostro2-signer =  { path = "../NostrO2/nostro2-signer" }
+# nostro2 = "0.3.5"
+nostro2 =  { path = "../NostrO2/nostro2" }
+# nostro2-signer =  "0.1.8"
+nostro2-signer =  { path = "../NostrO2/nostro2-signer" }
 # nostro2-web-signer =  "0.1.0"
 # nostro2-web-signer =  { path = "../NostrO2/nostro2-web-signer" }
 upload-things = "0.1.2"

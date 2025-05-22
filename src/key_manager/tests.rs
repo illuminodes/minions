@@ -1,4 +1,4 @@
-use nostro2_signer::nostro2::note::NostrNote;
+use nostro2_signer::nostro2::NostrNote;
 use yew::prelude::*;
 
 use crate::browser_api::IdbStoreManager;
@@ -25,7 +25,7 @@ pub fn nostr_id_login_test() -> Html {
             let relay_ctx = relay_ctx.clone();
             yew::platform::spawn_local(async move {
                 let pubkey = ctx.get_pubkey().expect("No pubkey");
-                let mut note = nostro2::note::NostrNote {
+                let mut note = nostro2::NostrNote {
                     content: "Test Note".to_string(),
                     pubkey,
                     ..Default::default()

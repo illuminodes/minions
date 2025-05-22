@@ -13,14 +13,14 @@ struct NostrRelay {
     websocket: web_sys::WebSocket,
     url: String,
     ready_state: ReadyState,
-    queue: std::rc::Rc<std::cell::RefCell<Vec<nostro2::relay_events::NostrClientEvent>>>,
+    queue: std::rc::Rc<std::cell::RefCell<Vec<nostro2::NostrClientEvent>>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct NostrRelayPool {
     pool: std::rc::Rc<std::cell::RefCell<Vec<NostrRelay>>>,
-    pub unique_notes: Vec<nostro2::note::NostrNote>,
-    pub relay_events: Vec<nostro2::relay_events::NostrRelayEvent>,
+    pub unique_notes: Vec<nostro2::NostrNote>,
+    pub relay_events: Vec<nostro2::NostrRelayEvent>,
 }
 impl NostrRelayPool {
     #[must_use]
@@ -31,9 +31,9 @@ impl NostrRelayPool {
         }
         health
     }
-    pub fn send<T>(&self, event: T) -> nostro2::relay_events::NostrClientEvent
+    pub fn send<T>(&self, event: T) -> nostro2::NostrClientEvent
     where
-        T: Into<nostro2::relay_events::NostrClientEvent> + Clone,
+        T: Into<nostro2::NostrClientEvent> + Clone,
     {
         let event = event.into();
         for relay in self.pool.borrow().iter() {
@@ -57,8 +57,8 @@ impl NostrRelayPool {
 
 pub enum NostrRelayPoolAction {
     Open(String),
-    NewEvent(nostro2::relay_events::NostrRelayEvent),
-    NewNote(nostro2::note::NostrNote),
+    NewEvent(nostro2::NostrRelayEvent),
+    NewNote(nostro2::NostrNote),
     CloseRelay(String),
 }
 impl Reducible for NostrRelayPool {
@@ -170,15 +170,13 @@ pub fn key_handler(props: &RelayContextProps) -> Html {
                             event.data().dyn_into::<wasm_bindgen::JsValue>().map(|v| {
                                 v.as_string()
                                     .unwrap_or_default()
-                                    .parse::<nostro2::relay_events::NostrRelayEvent>()
+                                    .parse::<nostro2::NostrRelayEvent>()
                             })
                         else {
                             web_sys::console::error_1(&event);
                             return;
                         };
-                        if let nostro2::relay_events::NostrRelayEvent::NewNote(_tag, _id, note) =
-                            data
-                        {
+                        if let nostro2::NostrRelayEvent::NewNote(_tag, _id, note) = data {
                             if let Some(ref note_id) = note.id {
                                 if note_lib.borrow().contains(note_id.as_str()) {
                                     return;

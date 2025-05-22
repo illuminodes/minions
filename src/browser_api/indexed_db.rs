@@ -64,7 +64,7 @@ pub trait IdbStoreManager {
                     }
                 },
                 move |e| {
-                    error!("Error retrieving from store: {:?}", e);
+                    error!(format!("Error retrieving from store: {e:?}"));
                 },
             );
 
@@ -99,7 +99,7 @@ pub trait IdbStoreManager {
                     let _ = sender.send(result);
                 },
                 move |e| {
-                    error!("Error retrieving all from store: {:?}", e);
+                    error!(format!("Error retrieving all from store: {e:?}"));
                 },
             );
             receiver
@@ -119,7 +119,7 @@ pub trait IdbStoreManager {
                     let _ = sender.send(());
                 },
                 move |e| {
-                    error!("Error deleting from store: {:?}", e);
+                    error!("Error deleting from store: ", e);
                 },
             );
 
@@ -239,7 +239,7 @@ pub trait IdbStoreManager {
                         config.store_name,
                         &store_params,
                     ) {
-                        error!("Error creating store: {:?}", e);
+                        error!("Error creating store: ", e);
                     }
                 }
             }) as Box<dyn FnMut(_)>);
@@ -261,7 +261,7 @@ pub trait IdbStoreManager {
                 });
 
             let on_error = Closure::wrap(Box::new(move |event: web_sys::Event| {
-                error!("Database open error: {:?}", event);
+                error!("Database open error: ", event);
             }) as Box<dyn FnMut(_)>);
 
             // Set handlers

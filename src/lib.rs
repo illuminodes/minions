@@ -42,7 +42,7 @@ pub fn init_nostr_db() -> Result<(), JsValue> {
             }
         });
         let on_error = Closure::once_into_js(move |event: web_sys::Event| {
-            gloo::console::log!("Database error event: {:?}", event);
+            gloo::console::log!(format!("Database error event: {event:?}"));
         });
         idb_open_request.set_onupgradeneeded(Some(on_upgrade_needed.as_ref().unchecked_ref()));
         idb_open_request.set_onerror(Some(on_error.as_ref().unchecked_ref()));
@@ -54,7 +54,7 @@ pub fn init_nostr_db() -> Result<(), JsValue> {
 fn upgrade_nostr_db(event: &web_sys::Event) -> Result<(), JsValue> {
     if event.target().is_none() {
         return Err(JsValue::from_str("Error upgrading database"));
-    };
+    }
     let target = event.target().unwrap();
     let db = target
         .dyn_into::<web_sys::IdbOpenDbRequest>()?

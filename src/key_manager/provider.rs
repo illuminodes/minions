@@ -1,4 +1,4 @@
-use nostro2_signer::nostro2::note::NostrNote;
+use nostro2_signer::nostro2::NostrNote;
 use std::rc::Rc;
 use wasm_bindgen::JsValue;
 use yew::prelude::*;

@@ -1263,9 +1263,7 @@ dependencies = [
 
 [[package]]
 name = "nostro2"
-version = "0.3.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e97024507852e3b7379600859fb7c53ede23a061ba32dfe1242f7a34b0a8db6"
+version = "0.3.6"
 dependencies = [
  "bech32",
  "chrono",
@@ -1279,9 +1277,7 @@ dependencies = [
 
 [[package]]
 name = "nostro2-nips"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5666c0e26b8b5729083b7b0560d1e6252015d7e4bb080befcd4c8dc2f52723f"
+version = "0.1.5"
 dependencies = [
  "base64",
  "chacha20",
@@ -1299,9 +1295,7 @@ dependencies = [
 
 [[package]]
 name = "nostro2-signer"
-version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9f97f81943086f1af1d04970bb03bb8443ca0b23772c426e6f8d2e59d350a8f3"
+version = "0.1.9"
 dependencies = [
  "base64",
  "bech32",

@@ -66,7 +66,7 @@ impl Calendar {
         self.clear_events();
         for event in events {
             if let Err(e) = self.add_calendar_event(&event) {
-                gloo::console::error!("Failed to add calendar event:", e);
+                web_sys::console::error_1(&format!("Failed to add event: {e:?}").into());
             }
         }
     }
@@ -301,10 +301,7 @@ impl Default for FullCalendarHeaderOptions {
 
 impl From<FullCalendarOptions> for JsValue {
     fn from(val: FullCalendarOptions) -> Self {
-        val.to_js_value().unwrap_or_else(|e| {
-            gloo::console::error!("Failed to convert calendar options:", e);
-            Self::NULL
-        })
+        serde_wasm_bindgen::to_value(&val).unwrap_or_default()
     }
 }
 
@@ -391,13 +388,7 @@ impl FullCalendarEvent {
             .checked_add(duration_mins.try_into().unwrap_or(0))
             .unwrap_or(0);
         end.set_minutes(total_minutes);
-        Self::new(
-            id,
-            title,
-            start,
-            &end,
-            Self::COLOR_BLUE,
-        )
+        Self::new(id, title, start, &end, Self::COLOR_BLUE)
     }
 
     pub fn from_event_value(value: JsValue) -> Result<Self, JsValue> {
@@ -415,13 +406,7 @@ impl FullCalendarEvent {
     }
 
     #[must_use]
-    pub fn new(
-        id: &str,
-        title: &str,
-        start: &Date,
-        end: &Date,
-        color: &str,
-    ) -> Self {
+    pub fn new(id: &str, title: &str, start: &Date, end: &Date, color: &str) -> Self {
         let locale_options: JsValue = web_sys::js_sys::Object::new().into();
 
         Self {

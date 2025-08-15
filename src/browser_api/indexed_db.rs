@@ -1,6 +1,5 @@
 use std::future::Future;
 
-use gloo::console::error;
 use web_sys::wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use web_sys::{IdbObjectStore, IdbTransactionMode};
 use yew::platform::pinned::oneshot::{self};
@@ -29,7 +28,7 @@ pub trait IdbStoreManager {
                     let _ = sender.send(());
                 },
                 move |e| {
-                    error!(&e);
+                    web_sys::console::error_1(&e);
                 },
             );
             receiver
@@ -51,7 +50,7 @@ pub trait IdbStoreManager {
                 &request,
                 move |result| {
                     if result.is_null() || result.is_undefined() {
-                        error!("Result is null or undefined");
+                        web_sys::console::error_1(&"Result is null or undefined".into());
                         return;
                     }
                     match result.try_into() {
@@ -59,12 +58,14 @@ pub trait IdbStoreManager {
                             let _ = sender.send(value);
                         }
                         Err(_) => {
-                            error!("Error converting to T");
+                            web_sys::console::error_1(&"Error converting result".into());
                         }
                     }
                 },
                 move |e| {
-                    error!(format!("Error retrieving from store: {e:?}"));
+                    web_sys::console::error_1(
+                        &format!("Error retrieving from store: {e:?}").into(),
+                    );
                 },
             );
 
@@ -89,7 +90,7 @@ pub trait IdbStoreManager {
                         .dyn_into::<web_sys::js_sys::Array>()
                         .map_err(|_| JsValue::from_str("Expected an array"))
                     else {
-                        error!("Error converting to array");
+                        web_sys::console::error_1(&"Error converting to array".into());
                         return;
                     };
                     let result: Vec<Self> = js_array
@@ -99,7 +100,9 @@ pub trait IdbStoreManager {
                     let _ = sender.send(result);
                 },
                 move |e| {
-                    error!(format!("Error retrieving all from store: {e:?}"));
+                    web_sys::console::error_1(
+                        &format!("Error retrieving all from store: {e:?}").into(),
+                    );
                 },
             );
             receiver
@@ -119,7 +122,7 @@ pub trait IdbStoreManager {
                     let _ = sender.send(());
                 },
                 move |e| {
-                    error!("Error deleting from store: ", e);
+                    web_sys::console::error_1(&format!("Error deleting from store: {e:?}").into());
                 },
             );
 
@@ -139,7 +142,7 @@ pub trait IdbStoreManager {
                 move |_| {
                     let _ = sender.send(());
                 },
-                move |e| error!(e),
+                move |e| web_sys::console::error_1(&format!("Error clearing store: {e:?}").into()),
             );
             receiver
                 .await
@@ -151,7 +154,7 @@ pub trait IdbStoreManager {
     fn request_store_open() -> impl Future<Output = Result<IdbObjectStore, JsValue>> {
         async {
             let db = Self::request_db_open().await.ok_or_else(|| {
-                error!("Failed to open database");
+                web_sys::console::error_1(&"Failed to open database".into());
                 JsValue::from_str("Failed to open database")
             })?;
             let store_name_str = Self::config().store_name;
@@ -179,7 +182,7 @@ pub trait IdbStoreManager {
         let result = request.clone();
         let success_closure = Closure::once(move |_: web_sys::Event| {
             let Ok(result) = result.result() else {
-                error!("Error retrieving from store");
+                web_sys::console::error_1(&"Error retrieving from store".into());
                 return;
             };
             on_success(result);
@@ -212,18 +215,18 @@ pub trait IdbStoreManager {
             // Handle upgrade: create store only if it doesn't exist
             let on_upgrade_needed = Closure::wrap(Box::new(move |event: web_sys::Event| {
                 let Some(target) = event.target() else {
-                    error!("Upgrade event target missing");
+                    web_sys::console::error_1(&"Event target is None".into());
                     return;
                 };
                 let Ok(request) = target.dyn_into::<web_sys::IdbOpenDbRequest>() else {
-                    error!("Failed to cast to IdbOpenDbRequest");
+                    web_sys::console::error_1(&"Failed to cast to IdbOpenDbRequest".into());
                     return;
                 };
                 let Ok(db) = request
                     .result()
                     .and_then(web_sys::wasm_bindgen::JsCast::dyn_into::<web_sys::IdbDatabase>)
                 else {
-                    error!("Failed to get DB result");
+                    web_sys::console::error_1(&"Failed to get DB result".into());
                     return;
                 };
 
@@ -239,7 +242,13 @@ pub trait IdbStoreManager {
                         config.store_name,
                         &store_params,
                     ) {
-                        error!("Error creating store: ", e);
+                        web_sys::console::error_1(
+                            &format!(
+                                "Failed to create object store '{}': {:?}",
+                                config.store_name, e
+                            )
+                            .into(),
+                        );
                     }
                 }
             }) as Box<dyn FnMut(_)>);
@@ -252,16 +261,20 @@ pub trait IdbStoreManager {
                         if let Ok(db) = db_value.dyn_into::<web_sys::IdbDatabase>() {
                             let _ = sender.send(db);
                         } else {
-                            error!("Failed to cast result into IdbDatabase");
+                            web_sys::console::error_1(
+                                &"Failed to cast result into IdbDatabase".into(),
+                            );
                         }
                     }
                     _ => {
-                        error!("DB open success, but result is null/undefined");
+                        web_sys::console::error_1(
+                            &"DB open success, but result is null/undefined".into(),
+                        );
                     }
                 });
 
             let on_error = Closure::wrap(Box::new(move |event: web_sys::Event| {
-                error!("Database open error: ", event);
+                web_sys::console::error_1(&format!("Error opening IndexedDB: {event:?}",).into());
             }) as Box<dyn FnMut(_)>);
 
             // Set handlers

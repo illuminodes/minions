@@ -8,5 +8,3 @@ extern "C" {
     #[wasm_bindgen(method, js_name = "preventDefault")]
     pub fn prevent_default(this: &BeforeInstallPromptEvent);
 }
-
-

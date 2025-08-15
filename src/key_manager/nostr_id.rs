@@ -95,10 +95,7 @@ impl UserIdentity {
                 Some(pubkey)
             }
             NostrIdType::Extension => None,
-            NostrIdType::Bunker(url) => {
-                gloo::console::log!("Bunker url: ", url);
-                None
-            }
+            NostrIdType::Bunker(_url) => None,
         }
     }
     pub async fn new_local_identity() -> Result<Self, JsValue> {

@@ -1,7 +1,3 @@
-use gloo::utils::format::JsValueSerdeExt;
-
-// use crate::widgets::leaflet::LatLng;
-
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct GeolocationCoordinates {
     pub accuracy: f64,
@@ -47,26 +43,21 @@ impl GeolocationPosition {
 impl TryFrom<web_sys::wasm_bindgen::JsValue> for GeolocationPosition {
     type Error = web_sys::wasm_bindgen::JsValue;
     fn try_from(value: web_sys::wasm_bindgen::JsValue) -> Result<Self, Self::Error> {
-        let value = value
-            .into_serde()
-            .map_err(|e| web_sys::wasm_bindgen::JsValue::from_str(&e.to_string()))?;
+        let value = serde_wasm_bindgen::from_value(value)?;
         Ok(value)
     }
 }
 impl TryInto<web_sys::wasm_bindgen::JsValue> for GeolocationPosition {
     type Error = web_sys::wasm_bindgen::JsValue;
     fn try_into(self) -> Result<web_sys::wasm_bindgen::JsValue, Self::Error> {
-        web_sys::wasm_bindgen::JsValue::from_serde(&self)
-            .map_err(|e| web_sys::wasm_bindgen::JsValue::from_str(&e.to_string()))
+        Ok(serde_wasm_bindgen::to_value(&self)?)
     }
 }
 impl TryFrom<web_sys::Geolocation> for GeolocationPosition {
     type Error = web_sys::wasm_bindgen::JsValue;
     fn try_from(coords: web_sys::Geolocation) -> Result<Self, Self::Error> {
         let js_value: web_sys::wasm_bindgen::JsValue = coords.into();
-        js_value
-            .into_serde()
-            .map_err(|e| web_sys::wasm_bindgen::JsValue::from_str(&e.to_string()))
+        Ok(serde_wasm_bindgen::from_value(js_value)?)
     }
 }
 

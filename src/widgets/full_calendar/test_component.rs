@@ -1,9 +1,9 @@
 use super::{Calendar, FullCalendarComponent, FullCalendarEvent};
 use crate::relay_pool::NostrRelayPoolStore;
 use crate::widgets::toastify::ToastifyOptions;
-use nostro2_signer::nostro2::NostrSigner;
 use nostro2::NostrNote;
 use nostro2::NostrSubscription;
+use nostro2_signer::nostro2::NostrSigner;
 use serde_json::json;
 use wasm_bindgen::JsValue;
 use web_sys::js_sys::Date;

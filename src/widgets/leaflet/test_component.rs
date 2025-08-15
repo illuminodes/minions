@@ -5,8 +5,8 @@ use crate::widgets::leaflet::{
     nominatim::NominatimLookup, IconOptions, LatLng, LeafletLocateOptions, LeafletMap,
     LeafletMapOptions,
 };
-use nostro2_signer::nostro2::NostrSigner;
 use nostro2::NostrNote;
+use nostro2_signer::nostro2::NostrSigner;
 use wasm_bindgen::JsValue;
 use web_sys::MouseEvent;
 use yew::prelude::*;

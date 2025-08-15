@@ -5,4 +5,3 @@ pub use bindings::ToastifyOptions;
 mod toastify_test;
 #[cfg(test)]
 pub use toastify_test::ToastifyTest;
-

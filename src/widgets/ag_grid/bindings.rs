@@ -1,4 +1,3 @@
-use gloo::utils::format::JsValueSerdeExt;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 use web_sys::wasm_bindgen::JsValue;
@@ -148,7 +147,7 @@ where
     }
     #[must_use]
     pub fn on_row_clicked(&self, callback: &JsValue) -> JsValue {
-        let options = JsValue::from_serde(&self).unwrap_or_default();
+        let options = serde_wasm_bindgen::to_value(self).unwrap_or_default();
         let _ =
             web_sys::js_sys::Reflect::set(&options, &JsValue::from_str("onRowClicked"), callback);
         options
@@ -160,7 +159,7 @@ where
     T: Serialize,
 {
     fn from(options: AgGridOptions<T>) -> Self {
-        Self::from_serde(&options).unwrap_or_default()
+        serde_wasm_bindgen::to_value(&options).unwrap_or_default()
     }
 }
 

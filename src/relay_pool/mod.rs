@@ -5,6 +5,26 @@ use nostro2::{NostrClientEvent, NostrNote};
 use nostro2_signer::nostro2::NostrSigner;
 pub use provider::*;
 
+use crate::browser_api::IdbStoreManager;
+
+#[yew::hook]
+pub fn use_nostr_relay_pool() -> provider::NostrRelayPoolStore {
+    yew::use_context::<provider::NostrRelayPoolStore>().expect("No Nostr Relay Pool context found")
+}
+
+#[yew::hook]
+pub fn use_saved_relays() -> Vec<UserRelay> {
+    let relay_pool = use_nostr_relay_pool();
+    let Ok(relays) = yew::suspense::use_future_with(relay_pool, |_| async move {
+        UserRelay::retrieve_all_from_store()
+            .await
+            .unwrap_or(Vec::new())
+    }) else {
+        return Vec::new();
+    };
+    (*relays).clone()
+}
+
 #[yew::function_component(RelayPoolTest)]
 pub fn relay_pool_test() -> yew::Html {
     let relay_ctx =
@@ -38,7 +58,6 @@ pub fn relay_pool_test() -> yew::Html {
 
     let counter_handle = note_counter.clone();
     yew::use_effect_with(relay_ctx.unique_notes.clone(), move |relay_clone| {
-        gloo::console::log!("Unique notes:", relay_clone.len());
         if let Some(last_note) = relay_clone.last().cloned() {
             let mut counter = *counter_handle;
             counter += 1;

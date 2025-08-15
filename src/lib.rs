@@ -38,11 +38,11 @@ pub fn init_nostr_db() -> Result<(), JsValue> {
         let idb_open_request = idb_factory.open_with_u32(DB_NAME, DB_VERSION)?;
         let on_upgrade_needed = Closure::once_into_js(move |event: web_sys::Event| {
             if let Err(e) = upgrade_nostr_db(&event) {
-                gloo::console::error!(&e);
+                web_sys::console::error_1(&e);
             }
         });
         let on_error = Closure::once_into_js(move |event: web_sys::Event| {
-            gloo::console::log!(format!("Database error event: {event:?}"));
+            web_sys::console::error_1(&format!("Error opening IndexedDB: {event:#?}",).into());
         });
         idb_open_request.set_onupgradeneeded(Some(on_upgrade_needed.as_ref().unchecked_ref()));
         idb_open_request.set_onerror(Some(on_error.as_ref().unchecked_ref()));
@@ -129,4 +129,3 @@ impl IdbStoreManager for LastSyncTime {
         JsValue::from_str("id")
     }
 }
-

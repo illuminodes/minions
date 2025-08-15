@@ -1,5 +1,5 @@
-use yew::prelude::*;
 use super::ToastifyOptions;
+use yew::prelude::*;
 
 #[function_component(ToastifyTest)]
 pub fn toastify_test() -> Html {
@@ -14,7 +14,7 @@ pub fn toastify_test() -> Html {
                 let options3 = ToastifyOptions::new_relay_disconnected("Relay Disconnected");
                 let options4 = ToastifyOptions::new_event_received("Event Received");
                 let interval = std::time::Duration::from_secs(1);
-                
+
                 login_options.clone().show();
                 gloo_timers::future::sleep(interval).await;
                 logout_options.clone().show();
@@ -31,7 +31,7 @@ pub fn toastify_test() -> Html {
         .forget();
         || {}
     });
-    
+
     html! {
         <div class="p-4">
             <h1 class="text-2xl font-bold mb-2">{"Toastify Test"}</h1>

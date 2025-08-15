@@ -43,7 +43,6 @@ pub fn nostr_notes_grid() -> Html {
         let rows = rows.clone();
 
         use_effect_with(relay_ctx.unique_notes.clone(), move |notes| {
-            gloo::console::log!("Unique notes:", notes.len());
             if let Some(note) = notes.last() {
                 let mut new_rows = (*rows).clone();
                 new_rows.push(NostrNoteRow::from(note));

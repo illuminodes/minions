@@ -72,7 +72,9 @@ pub fn calendar_component(props: &Props) -> Html {
                 // Add initial events
                 for event in &*events {
                     if let Err(e) = calendar_instance.add_or_replace_event(event) {
-                        gloo::console::error!("Failed to add/replace event:", e);
+                        web_sys::console::error_1(
+                            &format!("Failed to add/replace event: {e:#?}").into(),
+                        );
                     }
                 }
 
@@ -96,7 +98,9 @@ pub fn calendar_component(props: &Props) -> Html {
                 calendar_instance.clear_events();
                 for event in &**events {
                     if let Err(e) = calendar_instance.add_or_replace_event(event) {
-                        gloo::console::error!("Failed to add/replace event:", e);
+                        web_sys::console::error_1(
+                            &format!("Failed to add/replace event: {e:#?}").into(),
+                        );
                     }
                 }
             }

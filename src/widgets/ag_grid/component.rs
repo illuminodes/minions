@@ -1,5 +1,4 @@
 use super::{AgGrid, AgGridOptions, AgGridTheme, ColumnDefinition};
-use gloo::console;
 use serde::Serialize;
 use web_sys::HtmlElement;
 use yew::prelude::*;
@@ -87,7 +86,7 @@ where
                         grid.refresh_cells();
                     }
                     Err(e) => {
-                        console::error!("Failed to serialize grid data:", e.to_string());
+                        web_sys::console::error_1(&format!("Failed to serialize data: {e}").into());
                     }
                 }
             }
@@ -108,4 +107,3 @@ where
         </div>
     }
 }
-

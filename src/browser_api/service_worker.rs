@@ -11,9 +11,7 @@ impl AppServiceWorker {
     }
     pub async fn install(&self, file_path: &str) -> Result<(), JsValue> {
         let register = self.sw.register(file_path);
-        let register = wasm_bindgen_futures::JsFuture::from(register).await?;
-        gloo::console::info!(register);
+        wasm_bindgen_futures::JsFuture::from(register).await?;
         Ok(())
     }
 }
-

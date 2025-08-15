@@ -60,12 +60,54 @@ pub enum NostrRelayPoolAction {
     NewEvent(nostro2::NostrRelayEvent),
     NewNote(nostro2::NostrNote),
     CloseRelay(String),
+    AddRelay(crate::relay_pool::UserRelay),
+    RemoveRelay(crate::relay_pool::UserRelay),
 }
 impl Reducible for NostrRelayPool {
     type Action = NostrRelayPoolAction;
 
     fn reduce(self: std::rc::Rc<Self>, action: Self::Action) -> std::rc::Rc<Self> {
         match action {
+            NostrRelayPoolAction::AddRelay(relay) => {
+                let mut pool = self.pool.borrow_mut();
+                if let Ok(ws) = web_sys::WebSocket::new(&relay.url) {
+                    let ws = NostrRelay {
+                        websocket: ws,
+                        url: relay.url.clone(),
+                        ready_state: ReadyState::CONNECTING,
+                        queue: std::rc::Rc::new(std::cell::RefCell::new(vec![])),
+                    };
+                    pool.push(ws);
+                    yew::platform::spawn_local(async move {
+                        if let Err(e) =
+                            crate::browser_api::IdbStoreManager::save_to_store(relay).await
+                        {
+                            web_sys::console::error_1(&e);
+                        }
+                    });
+                }
+                std::rc::Rc::new(Self {
+                    pool: std::rc::Rc::new(std::cell::RefCell::new(pool.to_vec())),
+                    unique_notes: self.unique_notes.clone(),
+                    relay_events: self.relay_events.clone(),
+                })
+            }
+            NostrRelayPoolAction::RemoveRelay(relay) => {
+                let mut pool = self.pool.borrow_mut();
+                pool.retain(|r| r.url != relay.url);
+                yew::platform::spawn_local(async move {
+                    if let Err(e) =
+                        crate::browser_api::IdbStoreManager::delete_from_store(&relay).await
+                    {
+                        web_sys::console::error_1(&e);
+                    }
+                });
+                std::rc::Rc::new(Self {
+                    pool: std::rc::Rc::new(std::cell::RefCell::new(pool.to_vec())),
+                    unique_notes: self.unique_notes.clone(),
+                    relay_events: self.relay_events.clone(),
+                })
+            }
             NostrRelayPoolAction::Open(url) => {
                 let mut pool = self.pool.borrow_mut();
                 for relay in pool.iter_mut() {
@@ -132,7 +174,7 @@ pub fn key_handler(props: &RelayContextProps) -> Html {
         }
         pool
     });
-    let ctx = use_reducer_eq(|| NostrRelayPool {
+    let ctx = use_reducer(|| NostrRelayPool {
         pool: pool.clone(),
         unique_notes: vec![],
         relay_events: vec![],
@@ -140,8 +182,8 @@ pub fn key_handler(props: &RelayContextProps) -> Html {
     let ctx_clone = ctx.clone();
     let note_lib: std::rc::Rc<std::cell::RefCell<std::collections::HashSet<String>>> =
         use_mut_ref(std::collections::HashSet::new);
-    use_memo((), move |()| {
-        for relay in (ctx_clone.pool.borrow()).iter().cloned() {
+    use_memo(ctx_clone.pool.clone(), move |pool| {
+        for relay in (pool.borrow()).iter().cloned() {
             let dispatcher = ctx_clone.dispatcher();
             let sender = relay.websocket.clone();
             let url = relay.url.clone();
@@ -181,6 +223,7 @@ pub fn key_handler(props: &RelayContextProps) -> Html {
                                 if note_lib.borrow().contains(note_id.as_str()) {
                                     return;
                                 }
+                                note_lib.borrow_mut().insert(note_id.clone());
                             }
                             dispatcher.dispatch(NostrRelayPoolAction::NewNote(note));
                         } else {

@@ -13,7 +13,7 @@ pub struct ToastifyOptions {
     #[serde(rename = "className")]
     class_name: &'static str,
     #[serde(rename = "style")]
-    style: ToastifyStyle,  // Changed to use a dedicated style struct
+    style: ToastifyStyle, // Changed to use a dedicated style struct
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -27,7 +27,8 @@ impl ToastifyOptions {
         toasts(&options).show_toast();
     }
 
-    #[must_use] pub fn new_relay_connected(relay_url: &str) -> Self {
+    #[must_use]
+    pub fn new_relay_connected(relay_url: &str) -> Self {
         Self {
             text: format!("Connected to relay: {relay_url}"),
             duration: 3000,
@@ -42,7 +43,8 @@ impl ToastifyOptions {
         }
     }
 
-    #[must_use] pub fn new_relay_disconnected(relay_url: &str) -> Self {
+    #[must_use]
+    pub fn new_relay_disconnected(relay_url: &str) -> Self {
         Self {
             text: format!("Disconnected from relay: {relay_url}. Please refresh the app."),
             duration: u32::MAX,
@@ -57,7 +59,8 @@ impl ToastifyOptions {
         }
     }
 
-    #[must_use] pub fn new_event_received(event_type: &str) -> Self {
+    #[must_use]
+    pub fn new_event_received(event_type: &str) -> Self {
         Self {
             text: format!("New {event_type} event received"),
             duration: 2000,
@@ -72,7 +75,8 @@ impl ToastifyOptions {
         }
     }
 
-    #[must_use] pub fn new_relay_error(error: &str) -> Self {
+    #[must_use]
+    pub fn new_relay_error(error: &str) -> Self {
         Self {
             text: format!("Relay error: {error}"),
             duration: 4000,
@@ -87,7 +91,8 @@ impl ToastifyOptions {
         }
     }
 
-    #[must_use] pub fn new_login(text: String) -> Self {
+    #[must_use]
+    pub fn new_login(text: String) -> Self {
         Self {
             text,
             duration: 21000,
@@ -102,7 +107,8 @@ impl ToastifyOptions {
         }
     }
 
-    #[must_use] pub fn new_success(text: &'static str) -> Self {
+    #[must_use]
+    pub fn new_success(text: &'static str) -> Self {
         Self {
             text: text.to_string(),
             duration: 2100,
@@ -117,7 +123,8 @@ impl ToastifyOptions {
         }
     }
 
-    #[must_use] pub fn new_failure(text: &'static str) -> Self {
+    #[must_use]
+    pub fn new_failure(text: &'static str) -> Self {
         Self {
             text: text.to_string(),
             duration: 2100,

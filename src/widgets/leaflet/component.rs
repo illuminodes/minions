@@ -115,7 +115,7 @@ pub fn leaflet_component(props: &Props) -> Html {
     }
 
     html! {
-        <div style="position: relative;" 
+        <div style="position: relative;"
             class={props.class.clone()}>
             <div
                 id={props.map_id.clone()}

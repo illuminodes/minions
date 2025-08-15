@@ -47,7 +47,6 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
             };
 
             // Send subscription to relay
-            gloo::console::log!("Subscribing to presigned URL responses (kind 20421)");
             relay_ctx.send(filter);
 
             || {}
@@ -61,67 +60,55 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
             if last_note.kind == NOSTR_KIND_PRESIGNED_URL_RESP {
                 spawn_local(async move {
                     let decrypted_content = match user_keys.decrypt_nip44(&last_note).await {
-                        Ok(content) => {
-                            gloo::console::log!("Successfully decrypted response");
-                            content
-                        }
-                        Err(e) => {
-                            gloo::console::error!("Failed to decrypt note:", e);
+                        Ok(content) => content,
+                        Err(_e) => {
                             return;
                         }
                     };
-                    gloo::console::log!("Decrypted note content:", &decrypted_content);
 
                     let presigned_url: UtPreSignedUrl = match decrypted_content.try_into() {
                         Ok(url) => url,
-                        Err(e) => {
-                            gloo::console::error!("Failed to parse presigned url:", e.to_string());
+                        Err(_e) => {
                             return;
                         }
                     };
 
                     // Get document and input safely
                     let Some(document) = web_sys::window().and_then(|w| w.document()) else {
-                        gloo::console::error!("Failed to get document");
                         return;
                     };
 
                     let Some(Ok(input)) = document
                         .get_element_by_id(&input_id_for_effect)
-                        .map(wasm_bindgen::JsCast::dyn_into::<HtmlInputElement>) else {
-                            gloo::console::error!("Failed to get input element");
-                            return;
+                        .map(wasm_bindgen::JsCast::dyn_into::<HtmlInputElement>)
+                    else {
+                        return;
                     };
 
                     let Some(files) = input.files() else {
-                        gloo::console::error!("No files found");
                         return;
                     };
 
                     let Some(file) = files.get(0) else {
-                        gloo::console::error!("No file selected");
                         return;
                     };
 
                     // Create form data
                     let form_data = match FormData::new() {
                         Ok(form) => form,
-                        Err(e) => {
-                            gloo::console::error!("Failed to create form data:", e);
+                        Err(_e) => {
                             return;
                         }
                     };
 
-                    if let Err(e) = form_data.append_with_blob("file", &file) {
-                        gloo::console::error!("Failed to append file to form data:", e);
+                    if let Err(_e) = form_data.append_with_blob("file", &file) {
                         return;
                     }
 
                     // Create reader and set up upload
                     let reader = match FileReader::new() {
                         Ok(reader) => reader,
-                        Err(e) => {
-                            gloo::console::error!("Failed to create file reader:", e);
+                        Err(_e) => {
                             return;
                         }
                     };
@@ -144,8 +131,7 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
                                 spawn_local(async move {
                                     let url_req = match url.try_into_request(form_data) {
                                         Ok(req) => req,
-                                        Err(e) => {
-                                            gloo::console::error!("Failed to create request:", e);
+                                        Err(_e) => {
                                             loading_setter.set(false);
                                             return;
                                         }
@@ -157,14 +143,12 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
                                     .await
                                     {
                                         Ok(upload_url) => {
-                                            gloo::console::log!(
-                                                "Upload successful, setting URL:",
-                                                &upload_url.url
-                                            );
                                             url_setter.set(Some(upload_url.url));
                                         }
                                         Err(e) => {
-                                            gloo::console::error!("Upload failed:", e);
+                                            web_sys::console::error_1(
+                                                &format!("Failed to upload file {e:#?}",).into(),
+                                            );
                                         }
                                     }
                                     loading_setter.set(false);
@@ -174,11 +158,10 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
                     )
                         as Box<dyn FnMut(web_sys::ProgressEvent)>);
 
-                    reader.set_onloadend(
-                        Some(web_sys::wasm_bindgen::JsCast::unchecked_ref(closure.as_ref())
-                    ));
-                    if let Err(e) = reader.read_as_array_buffer(&file) {
-                        gloo::console::error!("Failed to read file:", e);
+                    reader.set_onloadend(Some(web_sys::wasm_bindgen::JsCast::unchecked_ref(
+                        closure.as_ref(),
+                    )));
+                    if let Err(_e) = reader.read_as_array_buffer(&file) {
                         return;
                     }
                     closure.forget();
@@ -200,34 +183,26 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
             let pubkey = user_keys.get_pubkey().await.unwrap_or_default();
 
             // Get the file from the input element
-            let Some(input) = e.target().map(
-                web_sys::wasm_bindgen::JsCast::unchecked_into::<HtmlInputElement>
-            ) else {
-                gloo::console::error!("Failed to get input element");
+            let Some(input) = e
+                .target()
+                .map(web_sys::wasm_bindgen::JsCast::unchecked_into::<HtmlInputElement>)
+            else {
                 loading_handle.set(false);
                 return;
             };
 
             let Some(files) = input.files() else {
-                gloo::console::error!("No files found");
                 loading_handle.set(false);
                 return;
             };
 
             let Some(file) = files.get(0) else {
-                gloo::console::error!("No file selected");
                 loading_handle.set(false);
                 return;
             };
 
             // Create the upload request
             let file_req = upload_things::UtRequest::from(&file);
-
-            // Log the request for debugging
-            gloo::console::log!(
-                "Sending upload request:",
-                serde_json::to_string(&file_req).unwrap()
-            );
 
             // Create and sign the request note
             let mut req_note = NostrNote {
@@ -239,8 +214,7 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
 
             match user_keys.sign_nostr_note(&mut req_note).await {
                 Ok(note) => note,
-                Err(e) => {
-                    gloo::console::error!("Failed to sign request note:", e);
+                Err(_e) => {
                     loading_handle.set(false);
                     return;
                 }
@@ -259,19 +233,11 @@ pub fn image_upload_input(props: &ImageUploadInputProps) -> Html {
                 .await
             {
                 Ok(note) => note,
-                Err(e) => {
-                    gloo::console::error!("Failed to sign giftwrap:", e);
+                Err(_e) => {
                     loading_handle.set(false);
                     return;
                 }
             }
-            gloo::console::log!(
-                "Sending giftwrap note:",
-                serde_json::to_string(&giftwrap).unwrap()
-            );
-
-            // Send the note to the relay
-            gloo::console::log!("Sending giftwrap to relay");
             sender.send(giftwrap);
         });
     });
@@ -322,12 +288,13 @@ pub fn image_upload_test_component() -> Html {
     let url_handle = use_state(|| None::<String>);
 
     // Try to get Nostr context
-    let nostr_ctx = use_context::<crate::key_manager::NostrIdStore>().expect("No Nostr context found");
+    let nostr_ctx =
+        use_context::<crate::key_manager::NostrIdStore>().expect("No Nostr context found");
     if nostr_ctx.loaded() {
         return html! { <p>{"Loading Nostr identity..."}</p> };
     }
     let content = nostr_ctx.get_identity().map_or_else(
-        || html! { 
+        || html! {
             <p class="text-yellow-600">{"No Nostr identity available. Login first to test uploads."}</p> 
         },
         |identity| {

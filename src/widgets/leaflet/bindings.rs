@@ -1,5 +1,4 @@
 use crate::browser_api::{GeolocationCoordinates, GeolocationPosition};
-use gloo::utils::format::JsValueSerdeExt;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::{convert::FromWasmAbi, prelude::*};
 use web_sys::js_sys::Function;
@@ -13,23 +12,19 @@ impl TryFrom<yew::MouseEvent> for LatLng {
     type Error = JsValue;
     fn try_from(value: yew::MouseEvent) -> Result<Self, Self::Error> {
         let reflected = web_sys::js_sys::Reflect::get(&value, &"latlng".into())?;
-        reflected
-            .into_serde()
-            .map_err(|e| JsValue::from_str(&e.to_string()))
+        Ok(serde_wasm_bindgen::from_value(reflected)?)
     }
 }
 impl TryInto<JsValue> for LatLng {
     type Error = JsValue;
     fn try_into(self) -> Result<JsValue, Self::Error> {
-        JsValue::from_serde(&self).map_err(|e| JsValue::from_str(&e.to_string()))
+        Ok(serde_wasm_bindgen::to_value(&self)?)
     }
 }
 impl TryFrom<JsValue> for LatLng {
     type Error = JsValue;
     fn try_from(value: JsValue) -> Result<Self, Self::Error> {
-        value
-            .into_serde()
-            .map_err(|e| JsValue::from_str(&e.to_string()))
+        Ok(serde_wasm_bindgen::from_value(value)?)
     }
 }
 impl From<&GeolocationCoordinates> for LatLng {
@@ -86,7 +81,7 @@ impl Default for LeafletMapOptions {
 impl TryInto<JsValue> for LeafletMapOptions {
     type Error = JsValue;
     fn try_into(self) -> Result<JsValue, Self::Error> {
-        JsValue::from_serde(&self).map_err(|e| JsValue::from_str(&e.to_string()))
+        Ok(serde_wasm_bindgen::to_value(&self)?)
     }
 }
 
@@ -114,7 +109,7 @@ impl Default for TileLayerOptions {
 impl TryInto<JsValue> for TileLayerOptions {
     type Error = JsValue;
     fn try_into(self) -> Result<JsValue, Self::Error> {
-        JsValue::from_serde(&self).map_err(|e| JsValue::from_str(&e.to_string()))
+        Ok(serde_wasm_bindgen::to_value(&self)?)
     }
 }
 
@@ -230,7 +225,7 @@ impl Default for LeafletLocateOptions {
 impl TryInto<JsValue> for LeafletLocateOptions {
     type Error = JsValue;
     fn try_into(self) -> Result<JsValue, Self::Error> {
-        JsValue::from_serde(&self).map_err(|e| JsValue::from_str(&e.to_string()))
+        Ok(serde_wasm_bindgen::to_value(&self)?)
     }
 }
 
@@ -261,7 +256,8 @@ impl LeafletMap {
         self.on(event, map_function);
     }
 
-    #[must_use] pub fn zoom_level(&self) -> f64 {
+    #[must_use]
+    pub fn zoom_level(&self) -> f64 {
         self.getZoom()
     }
     pub fn set_zoom_level(&self, zoom: f64) {
@@ -277,7 +273,8 @@ impl LeafletMap {
     pub fn create_map_pane(&self, name: &str) {
         self.create_pane(name);
     }
-    #[must_use] pub fn get_map_pane(&self, name: &str) -> Option<web_sys::Element> {
+    #[must_use]
+    pub fn get_map_pane(&self, name: &str) -> Option<web_sys::Element> {
         match self.get_pane(name) {
             pane if pane.is_undefined() => None,
             pane => Some(pane),
@@ -366,7 +363,7 @@ impl Default for IconOptions {
 impl TryInto<JsValue> for IconOptions {
     type Error = JsValue;
     fn try_into(self) -> Result<JsValue, Self::Error> {
-        JsValue::from_serde(&self).map_err(|e| JsValue::from_str(&e.to_string()))
+        Ok(serde_wasm_bindgen::to_value(&self)?)
     }
 }
 
@@ -414,12 +411,12 @@ impl Default for LeafletMarkerOptions {
 impl TryInto<JsValue> for LeafletMarkerOptions {
     type Error = JsValue;
     fn try_into(self) -> Result<JsValue, Self::Error> {
-        JsValue::from_serde(&self).map_err(|e| JsValue::from_str(&e.to_string()))
+        Ok(serde_wasm_bindgen::to_value(&self)?)
     }
 }
 impl TryFrom<JsValue> for LeafletMarkerOptions {
     type Error = JsValue;
     fn try_from(value: JsValue) -> Result<Self, Self::Error> {
-        value.into_serde().map_err(|e| JsValue::from_str(&e.to_string()))
+        Ok(serde_wasm_bindgen::from_value(value)?)
     }
 }

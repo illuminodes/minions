@@ -18,7 +18,6 @@ pub fn clipboard_copy(message: &str) {
     use wasm_bindgen_futures::{spawn_local, JsFuture};
     use web_sys::window;
     let Some(window) = window() else {
-        gloo::console::error!("No global `window` exists, which is unexpected");
         return;
     };
     let promise = window.navigator().clipboard().write_text(message);

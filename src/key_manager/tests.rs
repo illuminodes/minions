@@ -7,7 +7,8 @@ use super::{NostrIdAction, UserIdentity};
 #[function_component(NostrIdLoginTest)]
 pub fn nostr_id_login_test() -> Html {
     let ctx = use_context::<crate::key_manager::NostrIdStore>().expect("NostrIdStore not found");
-    let relay_ctx = use_context::<crate::relay_pool::NostrRelayPoolStore>().expect("No relay ctx found");
+    let relay_ctx =
+        use_context::<crate::relay_pool::NostrRelayPoolStore>().expect("No relay ctx found");
     let is_loading = ctx.loaded();
     if !is_loading {
         return html! {
@@ -32,10 +33,9 @@ pub fn nostr_id_login_test() -> Html {
                 };
                 match ctx.sign_note(&mut note).await {
                     Ok(()) => {
-                        gloo::console::log!(format!("Signed note: {:?}", note));
                         relay_ctx.send(note.clone());
                     }
-                    Err(e) => gloo::console::error!(e),
+                    Err(e) => web_sys::console::error_1(&e),
                 }
             });
         })
@@ -56,12 +56,11 @@ pub fn nostr_id_login_test() -> Html {
                 };
                 match ctx.sign_encrypted_note(&mut note, pubkey).await {
                     Ok(()) => {
-                        gloo::console::log!(format!("Signed encrypted note: {:?}", note));
                         relay_ctx.send(note.clone());
                         let decrypted = ctx.decrypt_note(&note).await.expect("Decryption failed");
-                        gloo::console::log!(format!("Decrypted note: {}", decrypted));
+                        web_sys::console::log_1(&format!("Decrypted content: {decrypted}").into());
                     }
-                    Err(e) => gloo::console::error!(e),
+                    Err(e) => web_sys::console::error_1(&e),
                 }
             });
         })
@@ -87,66 +86,45 @@ pub fn nostr_id_login_test() -> Html {
 
                 // Sign the inner note
                 if let Err(e) = ctx.sign_note(&mut inner_note).await {
-                    gloo::console::error!("Failed to sign inner note:", e);
+                    web_sys::console::error_1(&e);
                     return;
                 }
-
-                gloo::console::log!("Created and signed inner note");
 
                 // Create the giftwrapped note (unsigned)
                 let kind = 20001; // Example custom kind for giftwraps
                 match ctx.create_giftwrap(inner_note.clone(), kind).await {
                     Ok(mut giftwrapped_note) => {
-                        gloo::console::log!("Successfully created unsigned giftwrapped note");
-
                         // Sign and encrypt the giftwrapped note
                         match ctx
                             .sign_encrypted_note(&mut giftwrapped_note, pubkey.clone())
                             .await
                         {
                             Ok(()) => {
-                                gloo::console::log!(
-                                    "Successfully signed and encrypted giftwrapped note:"
-                                );
-                                gloo::console::log!(format!("Kind: {}", giftwrapped_note.kind));
-                                gloo::console::log!(format!(
-                                    "Content length: {}",
-                                    giftwrapped_note.content.len()
-                                ));
-
                                 // Test unwrapping (decrypting) the note
                                 match ctx.unwrap_giftwrap(&giftwrapped_note).await {
                                     Ok(unwrapped_note) => {
-                                        gloo::console::log!("Successfully unwrapped note:");
-                                        gloo::console::log!(format!(
-                                            "Content: {}",
-                                            unwrapped_note.content
-                                        ));
-                                        gloo::console::log!(format!(
-                                            "Original content: {}",
-                                            inner_note.content
-                                        ));
-
                                         // Verify contents match
                                         if unwrapped_note.content == inner_note.content {
-                                            gloo::console::log!("✅ TEST PASSED: Unwrapped content matches original");
+                                            web_sys::console::log_1(
+                                                &"Giftwrap test passed: Contents match".into(),
+                                            );
                                         } else {
-                                            gloo::console::error!("❌ TEST FAILED: Unwrapped content doesn't match original");
+                                            web_sys::console::error_1(
+                                                &"Giftwrap test failed: Contents do not match"
+                                                    .into(),
+                                            );
                                         }
 
                                         // Optionally send the giftwrapped note to demonstrate it in relay
                                         relay_ctx.send(giftwrapped_note);
                                     }
-                                    Err(e) => gloo::console::error!("Failed to unwrap note:", e),
+                                    Err(e) => web_sys::console::error_1(&e),
                                 }
                             }
-                            Err(e) => gloo::console::error!(
-                                "Failed to sign and encrypt giftwrapped note:",
-                                e
-                            ),
+                            Err(e) => web_sys::console::error_1(&e),
                         }
                     }
-                    Err(e) => gloo::console::error!("Failed to create giftwrapped note:", e),
+                    Err(e) => web_sys::console::error_1(&e),
                 }
             });
         })
@@ -179,7 +157,7 @@ pub fn nostr_id_login_test() -> Html {
                                 let pubkey = id.get_pubkey().await.unwrap();
                                 id.clone().save_to_store().await.unwrap();
                                 ctx.dispatch(NostrIdAction::LoadIdentity(pubkey ,id.clone()));},
-                            Err(e) => gloo::console::error!(&e),
+                            Err(e) => web_sys::console::error_1(&e.into()),
                         }
                     });
                 })

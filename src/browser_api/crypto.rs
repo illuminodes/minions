@@ -33,27 +33,37 @@ impl BrowserCrypto {
     pub async fn import_key_array(
         &self,
         p_key: web_sys::js_sys::Object,
-    ) -> Result<CryptoKey, JsValue> {
+    ) -> Result<CryptoKey, crate::MinionError> {
         let usage_tags: web_sys::js_sys::Array =
             [JsValue::from_str("encrypt"), JsValue::from_str("decrypt")]
                 .iter()
                 .collect();
-        let key = self.crypto.import_key_with_object(
-            "raw",
-            &p_key,
-            &KeyGenParams::AesKeyGenParams.into(),
-            true,
-            &usage_tags,
-        )?;
-        let key: JsValue = wasm_bindgen_futures::JsFuture::from(key).await?;
-        key.dyn_into()
+        let key = self
+            .crypto
+            .import_key_with_object(
+                "raw",
+                &p_key,
+                &KeyGenParams::AesKeyGenParams.into(),
+                true,
+                &usage_tags,
+            )
+            .map_err(crate::MinionError::CryptoError)?;
+        let key: JsValue = wasm_bindgen_futures::JsFuture::from(key)
+            .await
+            .map_err(crate::MinionError::CryptoError)?;
+        key.dyn_into().map_err(crate::MinionError::CryptoError)
     }
     pub async fn export_raw_key(
         &self,
         js_value: CryptoKey,
-    ) -> Result<web_sys::js_sys::ArrayBuffer, JsValue> {
-        let key =
-            wasm_bindgen_futures::JsFuture::from(self.crypto.export_key("raw", &js_value)?).await?;
+    ) -> Result<web_sys::js_sys::ArrayBuffer, crate::MinionError> {
+        let key = wasm_bindgen_futures::JsFuture::from(
+            self.crypto
+                .export_key("raw", &js_value)
+                .map_err(crate::MinionError::CryptoError)?,
+        )
+        .await
+        .map_err(crate::MinionError::CryptoError)?;
         Ok(key.into())
     }
 }

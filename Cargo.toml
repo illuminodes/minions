@@ -8,25 +8,12 @@ repository = "https://github.com/illuminodes/minions"
 readme = "README.md"
 homepage = "https://github.com/illuminodes/minions"
 
-[features]
-default = []
-ag-grid = []
-bitcoin-qr = []
-full-calendar = ["toastify"]
-leaflet = []
-toastify = []
-uploads = []
-all-widgets = ["ag-grid", "bitcoin-qr", "full-calendar", "leaflet", "toastify"]
-
 [dependencies]
 # Nostr Stack
-nostro2 = "0.3.7"
-nostro2-signer = "0.1.10"
+nostro2 = "0.3.8"
+nostro2-signer = "0.1.11"
 # nostro2 = { path = "../NostrO2/nostro2" }
 # nostro2-signer = { path = "../NostrO2/nostro2-signer" }
-lucide-yew = "1.1.0"
-upload-things = "0.1.2"
-uuid = { version = "1.15", features = ["v4", "js"] }
 
 # JSON manipulation
 serde = { version = "1", features = ["derive"] }
@@ -34,11 +21,9 @@ serde_json = "1"
 serde-wasm-bindgen = "0.6.5"
 
 # DOM and Browser Bindings
-web-sys = { version = "0.3", features = ["HtmlInputElement", "HtmlFormElement", "SubtleCrypto", "CryptoKey", 
-"Window", "Crypto", "AesKeyGenParams", "AesGcmParams", "IdbFactory", "IdbOpenDbOptions", "HtmlSelectElement", 
-"Clipboard", "IdbOpenDbRequest", "IdbTransaction", "IdbRequest", "IdbDatabase", "IdbObjectStore", "IdbRequestReadyState", 
-"Navigator", "HtmlAudioElement", "HtmlMediaElement", "Geolocation", "Response", "ReadableStream", "IdbTransactionMode", 
-"IdbObjectStoreParameters", "Navigator", "ServiceWorkerContainer", "ServiceWorkerGlobalScope", "FetchEvent", "CustomEvent", "DomStringList"] }
+web-sys = { version = "0.3", features = [ "SubtleCrypto", "CryptoKey", "Window", "Crypto", "AesKeyGenParams", "AesGcmParams",  
+"Clipboard", "Navigator", "Response", "ReadableStream", "Navigator", "ServiceWorkerContainer", "ServiceWorkerGlobalScope", 
+"FetchEvent", "CustomEvent", "DomStringList"] }
 
 # I/O
 wasm-bindgen-futures = "0.4"
@@ -46,6 +31,8 @@ wasm-bindgen-futures = "0.4"
 # PWA stack
 yew = { version = "0.21.0" }
 wasm-bindgen = "0.2"
+idb = "0.6.4"
+thiserror = "2.0.16"
 
 [dev-dependencies]
 gloo-timers = "0.3.0"

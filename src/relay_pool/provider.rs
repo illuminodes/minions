@@ -78,13 +78,6 @@ impl Reducible for NostrRelayPool {
                         queue: std::rc::Rc::new(std::cell::RefCell::new(vec![])),
                     };
                     pool.push(ws);
-                    yew::platform::spawn_local(async move {
-                        if let Err(e) =
-                            crate::browser_api::IdbStoreManager::save_to_store(relay).await
-                        {
-                            web_sys::console::error_1(&e);
-                        }
-                    });
                 }
                 std::rc::Rc::new(Self {
                     pool: std::rc::Rc::new(std::cell::RefCell::new(pool.to_vec())),
@@ -95,13 +88,6 @@ impl Reducible for NostrRelayPool {
             NostrRelayPoolAction::RemoveRelay(relay) => {
                 let mut pool = self.pool.borrow_mut();
                 pool.retain(|r| r.url != relay.url);
-                yew::platform::spawn_local(async move {
-                    if let Err(e) =
-                        crate::browser_api::IdbStoreManager::delete_from_store(&relay).await
-                    {
-                        web_sys::console::error_1(&e);
-                    }
-                });
                 std::rc::Rc::new(Self {
                     pool: std::rc::Rc::new(std::cell::RefCell::new(pool.to_vec())),
                     unique_notes: self.unique_notes.clone(),
@@ -188,19 +174,20 @@ pub fn key_handler(props: &RelayContextProps) -> Html {
             let sender = relay.websocket.clone();
             let url = relay.url.clone();
             relay.websocket.set_onopen(Some(
-                wasm_bindgen::closure::Closure::once_into_js(move |open: wasm_bindgen::JsValue| {
-                    web_sys::console::log_1(&open);
-                    dispatcher.dispatch(NostrRelayPoolAction::Open(url.clone()));
-                    let queue = relay.queue.clone();
-                    for event in queue.borrow().iter() {
-                        if let Ok(event_str) = serde_json::to_string(event) {
-                            if let Err(e) = sender.send_with_str(&event_str) {
-                                web_sys::console::error_1(&e);
+                wasm_bindgen::closure::Closure::once_into_js(
+                    move |_open: wasm_bindgen::JsValue| {
+                        dispatcher.dispatch(NostrRelayPoolAction::Open(url.clone()));
+                        let queue = relay.queue.clone();
+                        for event in queue.borrow().iter() {
+                            if let Ok(event_str) = serde_json::to_string(event) {
+                                if let Err(e) = sender.send_with_str(&event_str) {
+                                    web_sys::console::error_1(&e);
+                                }
                             }
                         }
-                    }
-                    queue.borrow_mut().clear();
-                })
+                        queue.borrow_mut().clear();
+                    },
+                )
                 .unchecked_ref(),
             ));
             let dispatcher = ctx_clone.dispatcher();
@@ -237,7 +224,7 @@ pub fn key_handler(props: &RelayContextProps) -> Html {
             let dispatcher = ctx_clone.dispatcher();
             relay.websocket.set_onclose(Some(
                 wasm_bindgen::closure::Closure::once_into_js(move |close: web_sys::CloseEvent| {
-                    web_sys::console::error_1(&close);
+                    web_sys::console::log_1(&close);
                     dispatcher.dispatch(NostrRelayPoolAction::CloseRelay(relay.url.clone()));
                 })
                 .unchecked_ref(),

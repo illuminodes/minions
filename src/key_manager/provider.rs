@@ -1,12 +1,33 @@
-use nostro2_signer::nostro2::NostrNote;
+use nostro2_signer::nostro2::{NostrNote, NostrSigner};
 use std::rc::Rc;
-use wasm_bindgen::JsValue;
 use yew::prelude::*;
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+pub struct IdbKeypairEntry {
+    pub pubkey: String,
+    #[serde(with = "serde_wasm_bindgen::preserve")]
+    pub keypair: web_sys::CryptoKey,
+}
+impl IdbKeypairEntry {
+    pub async fn from_keypair(
+        keypair: nostro2_signer::keypair::NostrKeypair,
+    ) -> Result<Self, crate::MinionError> {
+        let array = keypair.secret_key();
+        let js_array = web_sys::js_sys::Uint8Array::from(array.as_slice());
+        let crypto_key: web_sys::CryptoKey = crate::browser_api::BrowserCrypto::default()
+            .import_key_array(js_array.into())
+            .await?;
+        Ok(Self {
+            pubkey: keypair.public_key(),
+            keypair: crypto_key,
+        })
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NostrId {
     loaded: bool,
-    identity: Option<super::nostr_id::UserIdentity>,
+    identity: Option<nostro2_signer::keypair::NostrKeypair>,
     pubkey: Option<String>,
 }
 impl NostrId {
@@ -15,66 +36,66 @@ impl NostrId {
         self.loaded
     }
     #[must_use]
-    pub const fn get_identity(&self) -> Option<&super::nostr_id::UserIdentity> {
-        self.identity.as_ref()
-    }
-    #[must_use]
     pub fn get_pubkey(&self) -> Option<String> {
         self.pubkey.clone()
     }
-    pub async fn sign_note(&self, note: &mut NostrNote) -> Result<(), JsValue> {
+    pub fn sign_note(&self, note: &mut NostrNote) -> Result<(), crate::MinionError> {
         let id = self
             .identity
             .as_ref()
-            .ok_or_else(|| JsValue::from_str("No identity"))?;
-        id.sign_nostr_note(note).await
+            .ok_or(crate::MinionError::NoNostrKeyFound)?;
+        Ok(id.sign_nostr_note(note)?)
     }
-    pub async fn sign_encrypted_note(
+    pub fn sign_encrypted_note(
         &self,
         note: &mut NostrNote,
-        pubkey: String,
-    ) -> Result<(), JsValue> {
+        pubkey: &str,
+    ) -> Result<(), crate::MinionError> {
         let id = self
             .identity
             .as_ref()
-            .ok_or_else(|| JsValue::from_str("No identity"))?;
-        id.sign_nip44(note, pubkey).await
+            .ok_or(crate::MinionError::NoNostrKeyFound)?;
+        Ok(id.sign_encrypted_note(
+            note,
+            pubkey,
+            &nostro2_signer::keypair::EncryptionScheme::Nip44,
+        )?)
     }
-    pub async fn decrypt_note(&self, event: &NostrNote) -> Result<String, JsValue> {
+    pub fn decrypt_note(&self, event: &NostrNote) -> Result<String, crate::MinionError> {
         let id = self
             .identity
             .as_ref()
-            .ok_or_else(|| JsValue::from_str("No identity"))?;
-        id.decrypt_nip44(event).await
+            .ok_or(crate::MinionError::NoNostrKeyFound)?;
+        Ok(id
+            .decrypt_note(
+                event,
+                event.pubkey.as_str(),
+                &nostro2_signer::keypair::EncryptionScheme::Nip44,
+            )?
+            .to_string())
     }
-    pub async fn get_nostr_key(&self) -> Option<nostro2_signer::keypair::NostrKeypair> {
-        let id = self.identity.as_ref()?;
-        id.get_user_keys().await.ok()
+    #[must_use]
+    pub const fn get_nostr_key(&self) -> Option<&nostro2_signer::keypair::NostrKeypair> {
+        self.identity.as_ref()
     }
-    pub async fn create_giftwrap(
+    pub fn create_giftwrap(
         &self,
-        inner_note: NostrNote,
-        kind: u32,
-    ) -> Result<NostrNote, JsValue> {
+        inner_note: &mut NostrNote,
+        peer_pubkey: &str,
+        scheme: &nostro2_signer::keypair::GiftwrapScheme,
+    ) -> Result<NostrNote, crate::MinionError> {
         let id = self
             .identity
             .as_ref()
-            .ok_or_else(|| JsValue::from_str("No identity"))?;
-        id.create_giftwrap(inner_note, kind).await
-    }
-
-    pub async fn unwrap_giftwrap(&self, giftwrap: &NostrNote) -> Result<NostrNote, JsValue> {
-        let id = self
-            .identity
-            .as_ref()
-            .ok_or_else(|| JsValue::from_str("No identity"))?;
-        id.unwrap_giftwrap(giftwrap).await
+            .ok_or(crate::MinionError::NoNostrKeyFound)?;
+        Ok(id.giftwrap_note(inner_note, peer_pubkey, scheme)?)
     }
 }
 
 pub enum NostrIdAction {
     FinishedLoadingKey,
-    LoadIdentity(String, super::nostr_id::UserIdentity),
+    LoadIdentity(String, nostro2_signer::keypair::NostrKeypair),
+    LoadedNoId,
     DeleteIdentity,
 }
 impl Reducible for NostrId {
@@ -97,13 +118,45 @@ impl Reducible for NostrId {
                 pubkey: None,
                 identity: None,
             }),
+            NostrIdAction::LoadedNoId => Rc::new(Self {
+                loaded: true,
+                pubkey: self.pubkey.clone(),
+                identity: None,
+            }),
         }
     }
 }
 pub type NostrIdStore = UseReducerHandle<NostrId>;
 
+pub async fn load_identity(
+    db: std::rc::Rc<idb::Database>,
+) -> Result<nostro2_signer::keypair::NostrKeypair, crate::MinionError> {
+    let transaction = db.transaction(
+        &[crate::idb_manager::NostrDbStoreName::UserIdentity.as_ref()],
+        idb::TransactionMode::ReadOnly,
+    )?;
+    let store =
+        transaction.object_store(crate::idb_manager::NostrDbStoreName::UserIdentity.as_ref())?;
+    let keys = store.get_all(None, Some(1))?.await?;
+    let Some(keys) = keys
+        .into_iter()
+        .next()
+        .and_then(|key| serde_wasm_bindgen::from_value::<crate::IdbKeypairEntry>(key).ok())
+    else {
+        return Err(crate::MinionError::NoNostrKeyFound);
+    };
+
+    let crypto = crate::browser_api::BrowserCrypto::default();
+    let secret_array = crypto.export_raw_key(keys.keypair).await?;
+    let secret_slice = web_sys::js_sys::Uint8Array::new(&secret_array);
+    Ok(nostro2_signer::keypair::NostrKeypair::try_from(
+        secret_slice.to_vec().as_slice(),
+    )?)
+}
+
 #[function_component(NostrIdProvider)]
 pub fn key_handler(props: &yew::html::ChildrenProps) -> Html {
+    let idb_ctx = crate::idb_manager::use_idb_manager();
     let ctx = use_reducer(|| NostrId {
         loaded: false,
         pubkey: None,
@@ -111,17 +164,20 @@ pub fn key_handler(props: &yew::html::ChildrenProps) -> Html {
     });
 
     let ctx_clone = ctx.dispatcher();
-    use_memo((), move |()| {
+    use_memo(idb_ctx, move |idb_ctx| {
+        let Some(db) = idb_ctx.as_ref().and_then(|ctx| (ctx.db.clone())) else {
+            return;
+        };
         yew::platform::spawn_local(async move {
-            let id = super::nostr_id::UserIdentity::find_identity().await;
-            if let Ok(user_id) = id {
-                ctx_clone.dispatch(NostrIdAction::LoadIdentity(
-                    user_id.get_pubkey().await.unwrap_or_default(),
-                    user_id.clone(),
-                ));
-                return;
-            }
-            ctx_clone.dispatch(NostrIdAction::FinishedLoadingKey);
+            let identity = match load_identity(db).await {
+                Ok(id) => id,
+                Err(e) => {
+                    web_sys::console::error_1(&format!("Error loading identity: {e:#?}").into());
+                    ctx_clone.dispatch(NostrIdAction::LoadedNoId);
+                    return;
+                }
+            };
+            ctx_clone.dispatch(NostrIdAction::LoadIdentity(identity.public_key(), identity));
         });
     });
 

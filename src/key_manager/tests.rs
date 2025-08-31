@@ -1,11 +1,10 @@
+use nostro2::NostrSigner;
 use nostro2_signer::nostro2::NostrNote;
 use yew::prelude::*;
 
-use crate::browser_api::IdbStoreManager;
-
-use super::{NostrIdAction, UserIdentity};
 #[function_component(NostrIdLoginTest)]
 pub fn nostr_id_login_test() -> Html {
+    let idb_ctx = crate::idb_manager::use_idb_database();
     let ctx = use_context::<crate::key_manager::NostrIdStore>().expect("NostrIdStore not found");
     let relay_ctx =
         use_context::<crate::relay_pool::NostrRelayPoolStore>().expect("No relay ctx found");
@@ -15,7 +14,7 @@ pub fn nostr_id_login_test() -> Html {
             <p>{"Loading..."}</p>
         };
     }
-    let has_identity = ctx.get_identity();
+    let has_identity = ctx.get_nostr_key();
     let pubkey = ctx.get_pubkey();
 
     let sign_onclick = {
@@ -24,20 +23,18 @@ pub fn nostr_id_login_test() -> Html {
         Callback::from(move |_| {
             let ctx = ctx.clone();
             let relay_ctx = relay_ctx.clone();
-            yew::platform::spawn_local(async move {
-                let pubkey = ctx.get_pubkey().expect("No pubkey");
-                let mut note = nostro2::NostrNote {
-                    content: "Test Note".to_string(),
-                    pubkey,
-                    ..Default::default()
-                };
-                match ctx.sign_note(&mut note).await {
-                    Ok(()) => {
-                        relay_ctx.send(note.clone());
-                    }
-                    Err(e) => web_sys::console::error_1(&e),
+            let pubkey = ctx.get_pubkey().expect("No pubkey");
+            let mut note = nostro2::NostrNote {
+                content: "Test Note".to_string(),
+                pubkey,
+                ..Default::default()
+            };
+            match ctx.sign_note(&mut note) {
+                Ok(()) => {
+                    relay_ctx.send(note.clone());
                 }
-            });
+                Err(e) => web_sys::console::error_1(&format!("Error signing note: {e:#?}").into()),
+            }
         })
     };
 
@@ -54,13 +51,15 @@ pub fn nostr_id_login_test() -> Html {
                     pubkey: pubkey.clone(),
                     ..Default::default()
                 };
-                match ctx.sign_encrypted_note(&mut note, pubkey).await {
+                match ctx.sign_encrypted_note(&mut note, &pubkey) {
                     Ok(()) => {
                         relay_ctx.send(note.clone());
-                        let decrypted = ctx.decrypt_note(&note).await.expect("Decryption failed");
+                        let decrypted = ctx.decrypt_note(&note).expect("Decryption failed");
                         web_sys::console::log_1(&format!("Decrypted content: {decrypted}").into());
                     }
-                    Err(e) => web_sys::console::error_1(&e),
+                    Err(e) => {
+                        web_sys::console::error_1(&format!("Error signing note: {e:#?}").into());
+                    }
                 }
             });
         })
@@ -85,26 +84,26 @@ pub fn nostr_id_login_test() -> Html {
                 };
 
                 // Sign the inner note
-                if let Err(e) = ctx.sign_note(&mut inner_note).await {
-                    web_sys::console::error_1(&e);
+                if let Err(e) = ctx.sign_note(&mut inner_note) {
+                    web_sys::console::error_1(&format!("Error signing note: {e:#?}").into());
                     return;
                 }
 
                 // Create the giftwrapped note (unsigned)
-                let kind = 20001; // Example custom kind for giftwraps
-                match ctx.create_giftwrap(inner_note.clone(), kind).await {
+                match ctx.create_giftwrap(
+                    &mut inner_note,
+                    &pubkey,
+                    &nostro2_signer::keypair::GiftwrapScheme::Ephemeral,
+                ) {
                     Ok(mut giftwrapped_note) => {
                         // Sign and encrypt the giftwrapped note
-                        match ctx
-                            .sign_encrypted_note(&mut giftwrapped_note, pubkey.clone())
-                            .await
-                        {
+                        match ctx.sign_encrypted_note(&mut giftwrapped_note, &pubkey) {
                             Ok(()) => {
                                 // Test unwrapping (decrypting) the note
-                                match ctx.unwrap_giftwrap(&giftwrapped_note).await {
+                                match ctx.decrypt_note(&giftwrapped_note) {
                                     Ok(unwrapped_note) => {
                                         // Verify contents match
-                                        if unwrapped_note.content == inner_note.content {
+                                        if unwrapped_note == inner_note.content {
                                             web_sys::console::log_1(
                                                 &"Giftwrap test passed: Contents match".into(),
                                             );
@@ -118,13 +117,19 @@ pub fn nostr_id_login_test() -> Html {
                                         // Optionally send the giftwrapped note to demonstrate it in relay
                                         relay_ctx.send(giftwrapped_note);
                                     }
-                                    Err(e) => web_sys::console::error_1(&e),
+                                    Err(e) => web_sys::console::error_1(
+                                        &format!("Error unwrapping note: {e:#?}").into(),
+                                    ),
                                 }
                             }
-                            Err(e) => web_sys::console::error_1(&e),
+                            Err(e) => web_sys::console::error_1(
+                                &format!("Error creating giftwrap: {e:#?}").into(),
+                            ),
                         }
                     }
-                    Err(e) => web_sys::console::error_1(&e),
+                    Err(e) => web_sys::console::error_1(
+                        &format!("Error creating giftwrap: {e:#?}").into(),
+                    ),
                 }
             });
         })
@@ -151,14 +156,28 @@ pub fn nostr_id_login_test() -> Html {
                 let ctx = ctx.clone();
                 Callback::from(move |_| {
                     let ctx = ctx.clone();
+                    let idb_ctx = idb_ctx.clone();
                     yew::platform::spawn_local(async move {
-                        match UserIdentity::new_local_identity().await {
-                            Ok(id) => {
-                                let pubkey = id.get_pubkey().await.unwrap();
-                                id.clone().save_to_store().await.unwrap();
-                                ctx.dispatch(NostrIdAction::LoadIdentity(pubkey ,id.clone()));},
-                            Err(e) => web_sys::console::error_1(&e.into()),
-                        }
+                        let Some(db) = idb_ctx else {
+                            web_sys::console::error_1(&"No IDB Context found".into());
+                            return;
+                        };
+                        let new_identity = nostro2_signer::keypair::NostrKeypair::generate(true);
+                        let new_identity_entry = crate::IdbKeypairEntry::from_keypair(new_identity.clone()).await.unwrap();
+
+                        let transaction = db
+                            .transaction(
+                                &[crate::idb_manager::NostrDbStoreName::UserIdentity.as_ref()],
+                                idb::TransactionMode::ReadWrite,
+                            ).expect("No user keys store found");
+                        let store =
+                            transaction.object_store(crate::idb_manager::NostrDbStoreName::UserIdentity.as_ref()).expect("No user keys store found");
+                        store.put(
+                            &serde_wasm_bindgen::to_value(&new_identity_entry).unwrap(),
+                            None
+                        ).expect("Error saving identity");
+                        ctx.dispatch(crate::key_manager::NostrIdAction::LoadIdentity(new_identity_entry.pubkey, new_identity));
+
                     });
                 })
             }>

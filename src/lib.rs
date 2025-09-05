@@ -51,4 +51,6 @@ pub enum MinionError {
     NostrKeypairError(#[from] nostro2_signer::errors::NostrKeypairError),
     #[error("Crypto Error: {0:?}")]
     CryptoError(wasm_bindgen::JsValue),
+    #[error("Nostr Relay Error: {0}")]
+    WasmSerde(#[from] serde_wasm_bindgen::Error),
 }

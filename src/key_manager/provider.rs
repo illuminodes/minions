@@ -39,6 +39,40 @@ impl NostrId {
     pub fn get_pubkey(&self) -> Option<String> {
         self.pubkey.clone()
     }
+    pub async fn generate_new_identity(
+        &self,
+        db: &idb::Database,
+    ) -> Result<nostro2_signer::keypair::NostrKeypair, crate::MinionError> {
+        let new_identity = nostro2_signer::keypair::NostrKeypair::generate(true);
+        let new_identity_entry = crate::IdbKeypairEntry::from_keypair(new_identity.clone()).await?;
+
+        let transaction = db.transaction(
+            &[crate::idb_manager::NostrDbStoreName::UserIdentity.as_ref()],
+            idb::TransactionMode::ReadWrite,
+        )?;
+        let store = transaction
+            .object_store(crate::idb_manager::NostrDbStoreName::UserIdentity.as_ref())?;
+        store.put(&serde_wasm_bindgen::to_value(&new_identity_entry)?, None)?;
+        transaction.commit()?;
+        Ok(new_identity)
+    }
+    pub async fn import_identity(
+        &self,
+        db: &idb::Database,
+        keypair: nostro2_signer::keypair::NostrKeypair,
+    ) -> Result<(), crate::MinionError> {
+        let new_identity_entry = crate::IdbKeypairEntry::from_keypair(keypair.clone()).await?;
+
+        let transaction = db.transaction(
+            &[crate::idb_manager::NostrDbStoreName::UserIdentity.as_ref()],
+            idb::TransactionMode::ReadWrite,
+        )?;
+        let store = transaction
+            .object_store(crate::idb_manager::NostrDbStoreName::UserIdentity.as_ref())?;
+        store.put(&serde_wasm_bindgen::to_value(&new_identity_entry)?, None)?;
+        transaction.commit()?;
+        Ok(())
+    }
     pub fn sign_note(&self, note: &mut NostrNote) -> Result<(), crate::MinionError> {
         let id = self
             .identity
@@ -130,7 +164,7 @@ pub type NostrIdStore = UseReducerHandle<NostrId>;
 
 pub async fn load_identity(
     db: std::rc::Rc<idb::Database>,
-) -> Result<nostro2_signer::keypair::NostrKeypair, crate::MinionError> {
+) -> Result<Option<nostro2_signer::keypair::NostrKeypair>, crate::MinionError> {
     let transaction = db.transaction(
         &[crate::idb_manager::NostrDbStoreName::UserIdentity.as_ref()],
         idb::TransactionMode::ReadOnly,
@@ -143,15 +177,15 @@ pub async fn load_identity(
         .next()
         .and_then(|key| serde_wasm_bindgen::from_value::<crate::IdbKeypairEntry>(key).ok())
     else {
-        return Err(crate::MinionError::NoNostrKeyFound);
+        return Ok(None);
     };
 
     let crypto = crate::browser_api::BrowserCrypto::default();
     let secret_array = crypto.export_raw_key(keys.keypair).await?;
     let secret_slice = web_sys::js_sys::Uint8Array::new(&secret_array);
-    Ok(nostro2_signer::keypair::NostrKeypair::try_from(
+    Ok(Some(nostro2_signer::keypair::NostrKeypair::try_from(
         secret_slice.to_vec().as_slice(),
-    )?)
+    )?))
 }
 
 #[function_component(NostrIdProvider)]
@@ -169,15 +203,17 @@ pub fn key_handler(props: &yew::html::ChildrenProps) -> Html {
             return;
         };
         yew::platform::spawn_local(async move {
-            let identity = match load_identity(db).await {
-                Ok(id) => id,
+            match load_identity(db).await {
+                Ok(Some(id)) => {
+                    ctx_clone.dispatch(NostrIdAction::LoadIdentity(id.public_key(), id));
+                }
+                Ok(None) => {
+                    ctx_clone.dispatch(NostrIdAction::LoadedNoId);
+                }
                 Err(e) => {
                     web_sys::console::error_1(&format!("Error loading identity: {e:#?}").into());
-                    ctx_clone.dispatch(NostrIdAction::LoadedNoId);
-                    return;
                 }
-            };
-            ctx_clone.dispatch(NostrIdAction::LoadIdentity(identity.public_key(), identity));
+            }
         });
     });
 

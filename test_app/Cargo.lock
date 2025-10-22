@@ -895,7 +895,7 @@ dependencies = [
 
 [[package]]
 name = "nostr-minions"
-version = "0.1.21"
+version = "0.1.23"
 dependencies = [
  "idb",
  "nostro2",
@@ -904,7 +904,6 @@ dependencies = [
  "serde-wasm-bindgen 0.6.5",
  "serde_json",
  "thiserror 2.0.16",
- "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
  "yew",
@@ -912,16 +911,15 @@ dependencies = [
 
 [[package]]
 name = "nostro2"
-version = "0.3.8"
+version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ba65fb71876a9f41b3637d0a855571683a77ce876f246a719d3c18d9ac1843b"
+checksum = "23b223e2814b582c96c5c300601eeca2ec2c6925ceb697bb5c06b9e4bd8f58b3"
 dependencies = [
  "bech32",
  "js-sys",
  "ring",
  "secp256k1",
  "serde",
- "serde-wasm-bindgen 0.6.5",
  "serde_json",
  "sha2",
  "thiserror 2.0.16",

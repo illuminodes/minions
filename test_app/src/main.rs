@@ -21,7 +21,7 @@ fn app() -> Html {
         },
     ];
     html! {
-        <NostrAppProvider {relays}>
+        <NostrAppProvider {relays} fallback={html!(<Splash/>)}>
             <div class="h-dvw w-dvw items-center justify-center flex flex-col overflow-y-auto">
                 <h1 class="text-2xl font-bold">{"Minions App Showcase"}</h1>
                 // ADD NEW TEST COMPONENTS HERE WITH INLINES
@@ -32,3 +32,10 @@ fn app() -> Html {
     }
 }
 
+#[function_component(Splash)]
+fn relay_pool_test() -> Html {
+    html! {
+        <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+       </div>
+    }
+}

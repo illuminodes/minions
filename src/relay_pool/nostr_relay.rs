@@ -42,14 +42,4 @@ impl From<UserRelay> for JsValue {
 }
 
 #[cfg(test)]
-mod tests {
-
-    use wasm_bindgen_test::*;
-
-    wasm_bindgen_test_configure!(run_in_browser);
-
-    #[wasm_bindgen_test]
-    async fn _relay_idb_manager() -> Result<(), crate::MinionError> {
-        Ok(())
-    }
-}
+mod tests {}

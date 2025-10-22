@@ -1,30 +1,14 @@
-use wasm_bindgen::JsCast;
 use yew::prelude::*;
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum ReadyState {
-    CONNECTING = 0,
-    OPEN = 1,
-    CLOSING = 2,
-    CLOSED = 3,
-}
-#[derive(Debug, PartialEq, Clone)]
-struct NostrRelay {
-    websocket: web_sys::WebSocket,
-    url: String,
-    ready_state: ReadyState,
-    queue: std::rc::Rc<std::cell::RefCell<Vec<nostro2::NostrClientEvent>>>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NostrRelayPool {
-    pool: std::rc::Rc<std::cell::RefCell<Vec<NostrRelay>>>,
-    pub unique_notes: Vec<nostro2::NostrNote>,
-    pub relay_events: Vec<nostro2::NostrRelayEvent>,
+    pool: std::rc::Rc<std::cell::RefCell<Vec<super::NostrWebSocket>>>,
+    pub last_note: Option<nostro2::NostrNote>,
+    pub last_event: Option<nostro2::NostrRelayEvent>,
 }
 impl NostrRelayPool {
     #[must_use]
-    pub fn relay_health(&self) -> std::collections::HashMap<String, ReadyState> {
+    pub fn relay_health(&self) -> std::collections::HashMap<String, super::ReadyState> {
         let mut health = std::collections::HashMap::new();
         for relay in self.pool.borrow().iter() {
             health.insert(relay.url.clone(), relay.ready_state);
@@ -38,10 +22,10 @@ impl NostrRelayPool {
         let event = event.into();
         for relay in self.pool.borrow().iter() {
             match relay.ready_state {
-                ReadyState::CONNECTING => {
+                super::ReadyState::CONNECTING => {
                     relay.queue.borrow_mut().push(event.clone());
                 }
-                ReadyState::OPEN => {
+                super::ReadyState::OPEN => {
                     if let Ok(event_str) = serde_json::to_string(&event) {
                         if let Err(e) = relay.websocket.send_with_str(&event_str) {
                             web_sys::console::error_1(&e);
@@ -71,18 +55,18 @@ impl Reducible for NostrRelayPool {
             NostrRelayPoolAction::AddRelay(relay) => {
                 let mut pool = self.pool.borrow_mut();
                 if let Ok(ws) = web_sys::WebSocket::new(&relay.url) {
-                    let ws = NostrRelay {
+                    let ws = super::NostrWebSocket {
                         websocket: ws,
                         url: relay.url.clone(),
-                        ready_state: ReadyState::CONNECTING,
+                        ready_state: super::ReadyState::CONNECTING,
                         queue: std::rc::Rc::new(std::cell::RefCell::new(vec![])),
                     };
                     pool.push(ws);
                 }
                 std::rc::Rc::new(Self {
                     pool: std::rc::Rc::new(std::cell::RefCell::new(pool.to_vec())),
-                    unique_notes: self.unique_notes.clone(),
-                    relay_events: self.relay_events.clone(),
+                    last_note: self.last_note.clone(),
+                    last_event: self.last_event.clone(),
                 })
             }
             NostrRelayPoolAction::RemoveRelay(relay) => {
@@ -90,44 +74,36 @@ impl Reducible for NostrRelayPool {
                 pool.retain(|r| r.url != relay.url);
                 std::rc::Rc::new(Self {
                     pool: std::rc::Rc::new(std::cell::RefCell::new(pool.to_vec())),
-                    unique_notes: self.unique_notes.clone(),
-                    relay_events: self.relay_events.clone(),
+                    last_note: self.last_note.clone(),
+                    last_event: self.last_event.clone(),
                 })
             }
             NostrRelayPoolAction::Open(url) => {
                 let mut pool = self.pool.borrow_mut();
                 for relay in pool.iter_mut() {
                     if relay.url == url {
-                        relay.ready_state = ReadyState::OPEN;
+                        relay.ready_state = super::ReadyState::OPEN;
                     }
                 }
                 self.clone()
             }
-            NostrRelayPoolAction::NewEvent(event) => {
-                let mut relay_events = self.relay_events.clone();
-                relay_events.push(event);
-                Self {
-                    pool: self.pool.clone(),
-                    unique_notes: self.unique_notes.clone(),
-                    relay_events,
-                }
-                .into()
+            NostrRelayPoolAction::NewEvent(event) => Self {
+                pool: self.pool.clone(),
+                last_note: self.last_note.clone(),
+                last_event: Some(event),
             }
-            NostrRelayPoolAction::NewNote(note) => {
-                let mut unique_notes = self.unique_notes.clone();
-                unique_notes.push(note);
-                Self {
-                    pool: self.pool.clone(),
-                    unique_notes,
-                    relay_events: self.relay_events.clone(),
-                }
-                .into()
+            .into(),
+            NostrRelayPoolAction::NewNote(note) => Self {
+                pool: self.pool.clone(),
+                last_note: Some(note),
+                last_event: self.last_event.clone(),
             }
+            .into(),
             NostrRelayPoolAction::CloseRelay(url) => {
                 let mut pool = self.pool.borrow_mut();
                 for relay in pool.iter_mut() {
                     if relay.url == url {
-                        relay.ready_state = ReadyState::CLOSED;
+                        relay.ready_state = super::ReadyState::CLOSED;
                     }
                 }
                 self.clone()
@@ -145,96 +121,30 @@ pub struct RelayContextProps {
 
 #[function_component(NostrRelayPoolProvider)]
 pub fn key_handler(props: &RelayContextProps) -> Html {
-    let pool = use_mut_ref(|| {
-        let mut pool = vec![];
-        for relay in &props.relays {
-            if let Ok(ws) = web_sys::WebSocket::new(&relay.url) {
-                let ws = NostrRelay {
-                    websocket: ws,
-                    url: relay.url.clone(),
-                    ready_state: ReadyState::CONNECTING,
-                    queue: std::rc::Rc::new(std::cell::RefCell::new(vec![])),
-                };
-                pool.push(ws);
-            }
-        }
-        pool
-    });
+    let pool = use_mut_ref(Vec::new);
     let ctx = use_reducer(|| NostrRelayPool {
         pool: pool.clone(),
-        unique_notes: vec![],
-        relay_events: vec![],
+        last_note: None,
+        last_event: None,
     });
-    let ctx_clone = ctx.clone();
     let note_lib: std::rc::Rc<std::cell::RefCell<std::collections::HashSet<String>>> =
         use_mut_ref(std::collections::HashSet::new);
-    use_memo(ctx_clone.pool.clone(), move |pool| {
-        for relay in (pool.borrow()).iter().cloned() {
-            let dispatcher = ctx_clone.dispatcher();
-            let sender = relay.websocket.clone();
-            let url = relay.url.clone();
-            relay.websocket.set_onopen(Some(
-                wasm_bindgen::closure::Closure::once_into_js(
-                    move |_open: wasm_bindgen::JsValue| {
-                        dispatcher.dispatch(NostrRelayPoolAction::Open(url.clone()));
-                        let queue = relay.queue.clone();
-                        for event in queue.borrow().iter() {
-                            if let Ok(event_str) = serde_json::to_string(event) {
-                                if let Err(e) = sender.send_with_str(&event_str) {
-                                    web_sys::console::error_1(&e);
-                                }
-                            }
-                        }
-                        queue.borrow_mut().clear();
-                    },
-                )
-                .unchecked_ref(),
-            ));
-            let dispatcher = ctx_clone.dispatcher();
-            let note_lib = note_lib.clone();
-            relay.websocket.set_onmessage(Some(
-                wasm_bindgen::closure::Closure::wrap(Box::new(
-                    move |event: web_sys::MessageEvent| {
-                        let Ok(Ok(data)) =
-                            event.data().dyn_into::<wasm_bindgen::JsValue>().map(|v| {
-                                v.as_string()
-                                    .unwrap_or_default()
-                                    .parse::<nostro2::NostrRelayEvent>()
-                            })
-                        else {
-                            web_sys::console::error_1(&event);
-                            return;
-                        };
-                        if let nostro2::NostrRelayEvent::NewNote(_tag, _id, note) = data {
-                            if let Some(ref note_id) = note.id {
-                                if note_lib.borrow().contains(note_id.as_str()) {
-                                    return;
-                                }
-                                note_lib.borrow_mut().insert(note_id.clone());
-                            }
-                            dispatcher.dispatch(NostrRelayPoolAction::NewNote(note));
-                        } else {
-                            dispatcher.dispatch(NostrRelayPoolAction::NewEvent(data));
-                        }
-                    },
-                ) as Box<dyn FnMut(_)>)
-                .into_js_value()
-                .unchecked_ref(),
-            ));
-            let dispatcher = ctx_clone.dispatcher();
-            relay.websocket.set_onclose(Some(
-                wasm_bindgen::closure::Closure::once_into_js(move |close: web_sys::CloseEvent| {
-                    web_sys::console::log_1(&close);
-                    dispatcher.dispatch(NostrRelayPoolAction::CloseRelay(relay.url.clone()));
-                })
-                .unchecked_ref(),
-            ));
-            relay.websocket.set_onerror(Some(
-                wasm_bindgen::closure::Closure::once_into_js(move |event: web_sys::ErrorEvent| {
-                    web_sys::console::error_1(&event);
-                })
-                .unchecked_ref(),
-            ));
+    let dispatch = ctx.dispatcher();
+    let pool = ctx.pool.clone();
+    use_effect_with(props.relays.clone(), move |relays| {
+        for relay in relays {
+            if pool.borrow().iter().any(|r| r.url == relay.url) {
+                continue;
+            }
+            let Ok(relay_ws) = super::NostrWebSocket::connect_with_retry(
+                relay.url.clone(),
+                dispatch.clone(),
+                note_lib.clone(),
+                2,
+            ) else {
+                continue;
+            };
+            pool.borrow_mut().push(relay_ws);
         }
     });
 

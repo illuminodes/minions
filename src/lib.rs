@@ -18,24 +18,27 @@ pub use nostro2_signer::nostro2;
 pub use relay_pool::*;
 pub extern crate nostro2_signer;
 
-
 #[derive(Clone, Debug, PartialEq, yew::Properties)]
 pub struct AppProps {
     pub children: yew::html::Children,
     #[prop_or_default]
     pub relays: Vec<UserRelay>,
+    #[prop_or_default]
+    pub fallback: yew::html::Html,
 }
 
 #[yew::function_component(NostrAppProvider)]
 pub fn nostr_app_provider(props: &AppProps) -> yew::Html {
     yew::html! {
-        <IdbManagerProvider>
-            <NostrRelayPoolProvider relays={props.relays.clone()}>
-                <NostrIdProvider>
-                    {props.children.clone()}
-                </NostrIdProvider>
-            </NostrRelayPoolProvider>
-        </IdbManagerProvider>
+        <yew::suspense::Suspense fallback={props.fallback.clone()}>
+            <IdbManagerProvider>
+                <NostrRelayPoolProvider relays={props.relays.clone()}>
+                    <NostrIdProvider>
+                        {props.children.clone()}
+                    </NostrIdProvider>
+                </NostrRelayPoolProvider>
+            </IdbManagerProvider>
+        </yew::suspense::Suspense>
     }
 }
 
@@ -53,4 +56,6 @@ pub enum MinionError {
     CryptoError(wasm_bindgen::JsValue),
     #[error("Nostr Relay Error: {0}")]
     WasmSerde(#[from] serde_wasm_bindgen::Error),
+    #[error("No Identity Found")]
+    NoIdentityFound,
 }

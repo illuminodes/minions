@@ -1,15 +1,16 @@
 mod nostr_relay;
 mod provider;
+mod websocket;
 pub use nostr_relay::*;
 use nostro2::{NostrClientEvent, NostrNote};
 use nostro2_signer::nostro2::NostrSigner;
 pub use provider::*;
+pub use websocket::*;
 
 #[yew::hook]
 pub fn use_nostr_relay_pool() -> provider::NostrRelayPoolStore {
     yew::use_context::<provider::NostrRelayPoolStore>().expect("No Nostr Relay Pool context found")
 }
-
 
 #[yew::function_component(RelayPoolTest)]
 pub fn relay_pool_test() -> yew::Html {
@@ -43,14 +44,11 @@ pub fn relay_pool_test() -> yew::Html {
     let note_counter = yew::use_state(|| 0);
 
     let counter_handle = note_counter.clone();
-    yew::use_effect_with(relay_ctx.unique_notes.clone(), move |relay_clone| {
-        if let Some(last_note) = relay_clone.last().cloned() {
-            let mut counter = *counter_handle;
-            counter += 1;
-            counter_handle.set(counter);
-            note_handle.set(Some(last_note));
-        }
-        || {}
+    yew::use_effect_with(relay_ctx.last_note.clone(), move |last_note| {
+        let mut counter = *counter_handle;
+        counter += 1;
+        counter_handle.set(counter);
+        note_handle.set(last_note.clone());
     });
 
     let note_sender = relay_ctx.clone();

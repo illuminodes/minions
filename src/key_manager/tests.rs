@@ -2,27 +2,39 @@ use nostro2::NostrSigner;
 use nostro2_signer::nostro2::NostrNote;
 use yew::prelude::*;
 
+#[function_component(NostrIdLoginTestSuspense)]
+pub fn nostr_id_login_test_suspense() -> Html {
+    crate::use_nostr_key().map_or_else(
+        || {
+            html! {
+                <>
+                    <h1>{"Nostr Identity Login Test"}</h1>
+                    <p>{"No key found"}</p>
+                </>
+            }
+        },
+        |key| {
+            html! {
+                <>
+                    <h1>{"Nostr Identity Login Test"}</h1>
+                    <p>{"Has key: "}{key.public_key()}</p>
+                </>
+            }
+        },
+    )
+}
+
 #[function_component(NostrIdLoginTest)]
 pub fn nostr_id_login_test() -> Html {
-    let idb_ctx = crate::idb_manager::use_idb_database();
-    let ctx = use_context::<crate::key_manager::NostrIdStore>().expect("NostrIdStore not found");
-    let relay_ctx =
-        use_context::<crate::relay_pool::NostrRelayPoolStore>().expect("No relay ctx found");
-    let is_loading = ctx.loaded();
-    if !is_loading {
-        return html! {
-            <p>{"Loading..."}</p>
-        };
-    }
-    let has_identity = ctx.get_nostr_key();
-    let pubkey = ctx.get_pubkey();
-
+    let ctx = crate::use_nostr_id_ctx();
+    let relay_ctx = crate::use_nostr_relay_pool();
+    let create_local_key = crate::use_create_local_key();
     let sign_onclick = {
         let ctx = ctx.clone();
         let relay_ctx = relay_ctx.clone();
         Callback::from(move |_| {
-            let ctx = ctx.clone();
             let relay_ctx = relay_ctx.clone();
+
             let pubkey = ctx.get_pubkey().expect("No pubkey");
             let mut note = nostro2::NostrNote {
                 content: "Test Note".to_string(),
@@ -138,49 +150,16 @@ pub fn nostr_id_login_test() -> Html {
     html! {
         <>
             <h1>{"Nostr Identity Login Test"}</h1>
-            <p>{format!("Has Identity: {}", has_identity.is_some())}</p>
-            <p>{format!("Has Keys: {}", pubkey.is_some())}</p>
-            <button onclick={
-                let ctx = ctx.clone();
-                Callback::from(move |_| ctx.dispatch(crate::key_manager::NostrIdAction::FinishedLoadingKey))
-            }>
-                {"Load Identity"}
-            </button>
+            <yew::suspense::Suspense fallback={html!{<p>{"Loading..."}</p>}}>
+                <NostrIdLoginTestSuspense/>
+            </yew::suspense::Suspense>
             <button onclick={
                 let ctx = ctx.clone();
                 Callback::from(move |_| ctx.dispatch(crate::key_manager::NostrIdAction::DeleteIdentity))
             }>
                 {"Delete Identity"}
             </button>
-            <button onclick={
-                let ctx = ctx.clone();
-                Callback::from(move |_| {
-                    let ctx = ctx.clone();
-                    let idb_ctx = idb_ctx.clone();
-                    yew::platform::spawn_local(async move {
-                        let Some(db) = idb_ctx else {
-                            web_sys::console::error_1(&"No IDB Context found".into());
-                            return;
-                        };
-                        let new_identity = nostro2_signer::keypair::NostrKeypair::generate(true);
-                        let new_identity_entry = crate::IdbKeypairEntry::from_keypair(new_identity.clone()).await.unwrap();
-
-                        let transaction = db
-                            .transaction(
-                                &[crate::idb_manager::NostrDbStoreName::UserIdentity.as_ref()],
-                                idb::TransactionMode::ReadWrite,
-                            ).expect("No user keys store found");
-                        let store =
-                            transaction.object_store(crate::idb_manager::NostrDbStoreName::UserIdentity.as_ref()).expect("No user keys store found");
-                        store.put(
-                            &serde_wasm_bindgen::to_value(&new_identity_entry).unwrap(),
-                            None
-                        ).expect("Error saving identity");
-                        ctx.dispatch(crate::key_manager::NostrIdAction::LoadIdentity(new_identity_entry.pubkey, new_identity));
-
-                    });
-                })
-            }>
+            <button onclick={create_local_key.reform(|_| nostro2_signer::keypair::NostrKeypair::generate(true))}>
                 {"New Local Identity"}
             </button>
             <button onclick={

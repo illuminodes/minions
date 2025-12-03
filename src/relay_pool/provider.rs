@@ -3,7 +3,7 @@ use yew::prelude::*;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NostrRelayPool {
     pool: std::rc::Rc<std::cell::RefCell<Vec<super::NostrWebSocket>>>,
-    pub last_note: Option<nostro2::NostrNote>,
+    pub last_note: Option<nostro2::NostrRelayEvent>,
     pub last_event: Option<nostro2::NostrRelayEvent>,
 }
 impl NostrRelayPool {
@@ -42,7 +42,7 @@ impl NostrRelayPool {
 pub enum NostrRelayPoolAction {
     Open(String),
     NewEvent(nostro2::NostrRelayEvent),
-    NewNote(nostro2::NostrNote),
+    NewNote(nostro2::NostrRelayEvent),
     CloseRelay(String),
     AddRelay(crate::relay_pool::UserRelay),
     RemoveRelay(crate::relay_pool::UserRelay),

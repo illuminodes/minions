@@ -83,14 +83,14 @@ impl NostrWebSocket {
                     web_sys::console::error_1(&format!("Invalid message: {e:?}").into());
                     return;
                 };
-                if let nostro2::NostrRelayEvent::NewNote(_tag, _id, note) = data {
+                if let nostro2::NostrRelayEvent::NewNote(.., ref note) = data {
                     if let Some(ref note_id) = note.id {
                         if note_lib.borrow().contains(note_id.as_str()) {
                             return;
                         }
                         note_lib.borrow_mut().insert(note_id.clone());
                     }
-                    dispatch.dispatch(super::NostrRelayPoolAction::NewNote(note));
+                    dispatch.dispatch(super::NostrRelayPoolAction::NewNote(data));
                 } else {
                     dispatch.dispatch(super::NostrRelayPoolAction::NewEvent(data));
                 }

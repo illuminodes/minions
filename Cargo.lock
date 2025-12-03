@@ -885,7 +885,7 @@ dependencies = [
 
 [[package]]
 name = "nostr-minions"
-version = "0.1.24"
+version = "0.1.25"
 dependencies = [
  "idb",
  "nostro2",
@@ -902,9 +902,9 @@ dependencies = [
 
 [[package]]
 name = "nostro2"
-version = "0.3.9"
+version = "0.3.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23b223e2814b582c96c5c300601eeca2ec2c6925ceb697bb5c06b9e4bd8f58b3"
+checksum = "e8cbe88c4bfdf116343783b37aa8dc5d99f6221f6bcdf0e5a02b5873f5a0a3ae"
 dependencies = [
  "bech32",
  "js-sys",
@@ -918,9 +918,9 @@ dependencies = [
 
 [[package]]
 name = "nostro2-nips"
-version = "0.1.6"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18be6e669fef10f9b4d40ecb576f00f567734d95e3bec6126dde2070e80406cc"
+checksum = "51e74a132fc0863248324e31c86a1ae47388bbb152b2e20fa76fc2e5ab1a153c"
 dependencies = [
  "base64",
  "chacha20",
@@ -939,9 +939,9 @@ dependencies = [
 
 [[package]]
 name = "nostro2-signer"
-version = "0.1.11"
+version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb5e0122b101ae414c0a93b5deda0e11591913f5dae3adf545f1cdf278443e1b"
+checksum = "42a2caaab610e19cb07b1bc88e475888bd54e05bb473aa8f78202b41cfac2514"
 dependencies = [
  "base64",
  "bech32",

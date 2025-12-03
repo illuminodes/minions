@@ -93,12 +93,19 @@ pub fn relay_pool_test() -> yew::Html {
                     {latest_note.as_ref().map_or_else(
                         ||
                         yew::html! { <div>{"Send a note!"}</div> },
-                        |note|
-                        yew::html! {
-                            <div>
-                                <h3>{"My Latest Note"}</h3>
-                                <p>{note.content.as_str()}</p>
-                            </div>
+                        |note| {
+                        match note {
+                            nostro2::NostrRelayEvent::NewNote(.., ref note) => {
+                                yew::html! {
+                                    <div>
+                                        <h3>{"My Latest Note"}</h3>
+                                        <p>{note.content.as_str()}</p>
+                                    </div>
+                                }
+                            }
+                            _ => yew::html! { <div>{"Unknown event"}</div> },
+                        }
+
                     })}
                 </div>
             }

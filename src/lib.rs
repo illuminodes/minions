@@ -17,6 +17,8 @@ pub use key_manager::*;
 pub use nostro2_signer::nostro2;
 pub use relay_pool::*;
 pub extern crate nostro2_signer;
+pub use nostro2_signer::keypair::{EncryptionScheme, NostrKeypair};
+pub use nostro2_signer::nostro2::*;
 
 #[derive(Clone, Debug, PartialEq, yew::Properties)]
 pub struct AppProps {
@@ -58,4 +60,10 @@ pub enum MinionError {
     WasmSerde(#[from] serde_wasm_bindgen::Error),
     #[error("No Identity Found")]
     NoIdentityFound,
+}
+
+impl From<MinionError> for web_sys::wasm_bindgen::JsValue {
+    fn from(e: MinionError) -> Self {
+        Self::from_str(e.to_string().as_str())
+    }
 }

@@ -114,16 +114,12 @@ pub fn key_handler(props: &yew::html::ChildrenProps) -> HtmlResult {
     let idb = crate::idb_manager::use_idb_database();
     let identity =
         yew::suspense::use_future_with((), |_| async move { idb.load_identity().await })?;
-    let Ok(identity) = (identity).as_ref().cloned() else {
-        return Ok(html! {
-            <yew::suspense::Suspense />
-        });
-    };
     let ctx = use_reducer(|| NostrId {
-        identity: identity.clone(),
-        pubkey: identity
-            .as_ref()
-            .map(nostro2_signer::keypair::NostrKeypair::public_key),
+        identity: identity.as_ref().cloned().ok().flatten(),
+        pubkey: identity.as_ref().ok().and_then(|id| {
+            id.as_ref()
+                .map(nostro2_signer::keypair::NostrKeypair::public_key)
+        }),
     });
 
     Ok(html! {

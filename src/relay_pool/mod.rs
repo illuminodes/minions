@@ -1,9 +1,11 @@
 mod bounded_dedup;
+mod hooks;
 mod nostr_relay;
 mod provider;
 mod subscription;
 mod websocket;
 pub use bounded_dedup::*;
+pub use hooks::*;
 pub use nostr_relay::*;
 use nostro2::NostrClientEvent;
 pub use provider::*;

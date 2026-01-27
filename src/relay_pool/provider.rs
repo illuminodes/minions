@@ -10,7 +10,9 @@ pub struct NostrRelayPool {
     pending_relays: std::rc::Rc<std::cell::RefCell<Vec<crate::relay_pool::UserRelay>>>,
     // Subscription management
     subscriptions: std::rc::Rc<
-        std::cell::RefCell<std::collections::HashMap<super::SubscriptionId, super::SubscriptionInfo>>,
+        std::cell::RefCell<
+            std::collections::HashMap<super::SubscriptionId, super::SubscriptionInfo>,
+        >,
     >,
 }
 
@@ -50,6 +52,7 @@ impl NostrRelayPool {
     /// Subscribe to notes matching a filter
     ///
     /// Returns a subscription ID that can be used to unsubscribe
+    #[must_use]
     pub fn subscribe(
         &self,
         filter: nostro2::NostrSubscription,
@@ -89,11 +92,11 @@ impl NostrRelayPool {
     }
 
     /// Dispatch a note to matching subscriptions
-    fn dispatch_note(&self, note: nostro2::NostrNote) {
+    fn dispatch_note(&self, note: &nostro2::NostrNote) {
         let mut subs = self.subscriptions.borrow_mut();
 
         for sub in subs.values_mut() {
-            if super::note_matches_filter(&note, &sub.filter) {
+            if super::note_matches_filter(note, &sub.filter) {
                 sub.note_count += 1;
                 sub.callback.emit(note.clone());
             }
@@ -178,7 +181,7 @@ impl Reducible for NostrRelayPool {
             NostrRelayPoolAction::NewNote(event) => {
                 // Extract note from event and dispatch to subscribers
                 if let nostro2::NostrRelayEvent::NewNote(.., ref note) = event {
-                    self.dispatch_note(note.clone());
+                    self.dispatch_note(note);
                 }
 
                 Self {
@@ -225,6 +228,7 @@ pub fn key_handler(props: &RelayContextProps) -> Html {
 
     let subscriptions = use_mut_ref(std::collections::HashMap::new);
 
+    #[allow(clippy::redundant_clone)]
     let ctx = use_reducer({
         let note_dedup = note_dedup.clone();
         let subscriptions = subscriptions.clone();

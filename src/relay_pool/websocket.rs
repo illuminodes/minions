@@ -64,6 +64,7 @@ impl NostrWebSocket {
     ///
     /// # Errors
     /// Returns error if WebSocket creation fails
+    #[allow(clippy::needless_pass_by_value, clippy::redundant_clone)]
     pub fn connect_with_retry(
         url: String,
         dispatch: yew::UseReducerDispatcher<super::NostrRelayPool>,

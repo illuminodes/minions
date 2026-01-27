@@ -19,8 +19,8 @@ pub use relay_pool::*;
 
 // Re-export nostro2 types directly for convenience
 // This allows: use minions::NostrNote instead of minions::nostro2::NostrNote
-pub use nostro2_signer::nostro2::*;
 pub use nostro2_signer::keypair::{EncryptionScheme, GiftwrapScheme, NostrKeypair};
+pub use nostro2_signer::nostro2::*;
 
 // Make the full crate available for advanced usage
 // This allows: minions::nostro2_signer::... if needed

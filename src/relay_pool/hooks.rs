@@ -23,6 +23,7 @@ pub fn use_nostr_notes(filter: NostrSubscription) -> Vec<NostrNote> {
     let sub_id: std::rc::Rc<std::cell::RefCell<Option<SubscriptionId>>> = use_mut_ref(|| None);
 
     // Subscribe on mount or filter change
+    #[allow(clippy::redundant_clone)]
     use_effect_with(filter.clone(), {
         let pool = pool.clone();
         let notes = notes.clone();

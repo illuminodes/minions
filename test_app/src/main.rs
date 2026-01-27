@@ -1,7 +1,4 @@
-use nostr_minions::{
-    // nostro2::{NostrNote, NostrSigner, NostrSubscription},
-    NostrAppProvider,
-};
+use nostr_minions::{use_notes_by_kind, use_text_notes, NostrAppProvider};
 use yew::prelude::*;
 
 #[wasm_bindgen_test::wasm_bindgen_test]
@@ -13,117 +10,200 @@ pub fn main() {
 fn app() -> Html {
     let relays = vec![
         nostr_minions::UserRelay {
-            url: "wss://relay.illuminodes.com".to_string(),
+            url: "wss://relay.damus.io".to_string(),
             read: true,
             write: true,
         },
         nostr_minions::UserRelay {
-            url: "wss://relay.arrakis.lat".to_string(),
+            url: "wss://relay.nostr.band".to_string(),
             read: true,
             write: true,
         },
     ];
+
     html! {
         <NostrAppProvider {relays} fallback={html!(<Splash/>)}>
-                // <FullCalendarTest />
-                // ADD NEW TEST COMPONENTS HERE WITH INLINES
-                <nostr_minions::RelayPoolTest />
-                <nostr_minions::NostrIdLoginTest />
+            <div class="min-h-screen bg-gray-100 p-8">
+                <h1 class="text-3xl font-bold mb-8 text-center">
+                    {"Event Stream Test - Two Independent Subscriptions"}
+                </h1>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <TextNotesComponent />
+                    <ReactionsComponent />
+                </div>
+            </div>
         </NostrAppProvider>
     }
 }
 
 #[function_component(Splash)]
-fn relay_pool_test() -> Html {
+fn splash() -> Html {
     html! {
         <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-       </div>
+            <div class="bg-white p-8 rounded-lg shadow-xl">
+                <p class="text-xl">{"Loading..."}</p>
+            </div>
+        </div>
     }
 }
 
-use web_sys::{js_sys::Date, wasm_bindgen::JsValue};
-use yew_full_calendar::{Calendar, EventDate, FullCalendarComponent};
+/// Component subscribing to kind 1 (text notes)
+/// Should only re-render when kind 1 notes arrive
+#[function_component(TextNotesComponent)]
+fn text_notes_component() -> Html {
+    let notes = use_text_notes(Some(20));
+    let render_count = use_mut_ref(|| 0);
 
-#[function_component(FullCalendarTest)]
-pub fn calendar_test() -> Html {
-    let on_calendar_created = {
-        Callback::from(move |calendar: Calendar| {
-            web_sys::console::log_1(&format!("Calendar created: {calendar:?}").into());
-            // calendar_state.set(Some(calendar));
-            let calendar_clone = calendar.clone();
-            calendar.batch(move || {
-                for i in 0..4 {
-                    let start = Date::new_0();
-                    let end = Date::new(&JsValue::from_f64(start.get_time() + 3600. * 1000.));
-                    #[derive(serde::Serialize, serde::Deserialize)]
-                    struct ExtendedPropsTest {
-                        id: u32,
-                        title: String,
-                    }
-                    let builder = yew_full_calendar::EventBuilder::default()
-                        .id(i.to_string().as_str())
-                        .start(EventDate::DateObject(start))
-                        .end(EventDate::DateObject(end))
-                        .color("hsl(120, 100%, 50%)")
-                        .interactive(true)
-                        .extended_props(ExtendedPropsTest {
-                            id: i,
-                            title: format!("Event {i}"),
-                        })
-                        .unwrap()
-                        .all_day(false);
-                    calendar_clone
-                        .add_or_replace_event(builder)
-                        .expect("add event");
-                    web_sys::console::log_1(&"Added event".into());
-                }
-            });
-        })
-    };
+    // Increment render count
+    *render_count.borrow_mut() += 1;
+    let count = *render_count.borrow();
 
-    let on_event_click = {
-        Callback::from(move |event: yew_full_calendar::EventClickInfo| {
-            #[derive(serde::Serialize, serde::Deserialize, Debug)]
-            struct ExtendedPropsTest {
-                id: u32,
-                title: String,
-            }
-            let Some(event) = event.event() else {
-                return;
-            };
-            let props = event.extended_props::<ExtendedPropsTest>().unwrap();
-            web_sys::console::log_1(&format!("Event props: {props:#?}").into());
-        })
-    };
-
-    let on_date_select = {
-        Callback::from(move |select_event: yew_full_calendar::SelectionInfo| {
-            web_sys::console::log_1(&format!("Date selected: {select_event:?}").into());
-        })
-    };
-
-    let on_dates_set = {
-        Callback::from(move |view: yew_full_calendar::DateSetEvent| {
-            web_sys::console::log_1(&format!("View changed: {view:#?}").into());
-        })
-    };
-
-    let calendar_options = yew_full_calendar::Options::new()
-        .with_initial_view(yew_full_calendar::InitialView::TimeGridWeek)
-        .with_locale(yew_full_calendar::Locale::Es)
-        .with_selectable(true);
+    web_sys::console::log_1(&format!("TextNotesComponent rendered {} times", count).into());
 
     html! {
-        <>
-        <h1>{"Calendar"}</h1>
-            <FullCalendarComponent
-                calendar_id="full-calendar"
-                {calendar_options}
-                // {events}  // Use our debug copy
-                {on_event_click}
-                {on_date_select}
-                {on_calendar_created}
-                {on_dates_set}
-        /></>
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold text-blue-600">
+                    {"Text Notes (Kind 1)"}
+                </h2>
+                <span class="text-sm text-gray-500">
+                    {format!("Renders: {}", count)}
+                </span>
+            </div>
+
+            <div class="mb-4 p-3 bg-blue-50 rounded">
+                <p class="text-sm text-gray-700">
+                    {"📝 Subscribed to: "}
+                    <code class="bg-blue-100 px-2 py-1 rounded">{"kind: 1"}</code>
+                </p>
+                <p class="text-xs text-gray-600 mt-1">
+                    {"This component only re-renders when kind 1 notes arrive"}
+                </p>
+            </div>
+
+            <div class="space-y-3 max-h-96 overflow-y-auto">
+                {if notes.is_empty() {
+                    html! {
+                        <p class="text-gray-500 italic text-center py-4">
+                            {"Waiting for text notes..."}
+                        </p>
+                    }
+                } else {
+                    html! {
+                        <>
+                            <p class="text-sm font-semibold text-gray-700 mb-2">
+                                {format!("Received {} notes:", notes.len())}
+                            </p>
+                            {for notes.iter().map(|note| {
+                                html! {
+                                    <div class="p-3 bg-gray-50 rounded border border-gray-200">
+                                        <div class="flex justify-between text-xs text-gray-500 mb-2">
+                                            <span class="font-mono truncate max-w-xs">
+                                                {format!("From: {}...", &note.pubkey[..16])}
+                                            </span>
+                                            <span>
+                                                {format_timestamp(note.created_at)}
+                                            </span>
+                                        </div>
+                                        <p class="text-sm text-gray-800 line-clamp-3">
+                                            {&note.content}
+                                        </p>
+                                    </div>
+                                }
+                            })}
+                        </>
+                    }
+                }}
+            </div>
+        </div>
+    }
+}
+
+/// Component subscribing to kind 7 (reactions)
+/// Should only re-render when kind 7 notes arrive
+#[function_component(ReactionsComponent)]
+fn reactions_component() -> Html {
+    let reactions = use_notes_by_kind(7, Some(20));
+    let render_count = use_mut_ref(|| 0);
+
+    // Increment render count
+    *render_count.borrow_mut() += 1;
+    let count = *render_count.borrow();
+
+    web_sys::console::log_1(&format!("ReactionsComponent rendered {} times", count).into());
+
+    html! {
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold text-purple-600">
+                    {"Reactions (Kind 7)"}
+                </h2>
+                <span class="text-sm text-gray-500">
+                    {format!("Renders: {}", count)}
+                </span>
+            </div>
+
+            <div class="mb-4 p-3 bg-purple-50 rounded">
+                <p class="text-sm text-gray-700">
+                    {"❤️ Subscribed to: "}
+                    <code class="bg-purple-100 px-2 py-1 rounded">{"kind: 7"}</code>
+                </p>
+                <p class="text-xs text-gray-600 mt-1">
+                    {"This component only re-renders when kind 7 notes arrive"}
+                </p>
+            </div>
+
+            <div class="space-y-3 max-h-96 overflow-y-auto">
+                {if reactions.is_empty() {
+                    html! {
+                        <p class="text-gray-500 italic text-center py-4">
+                            {"Waiting for reactions..."}
+                        </p>
+                    }
+                } else {
+                    html! {
+                        <>
+                            <p class="text-sm font-semibold text-gray-700 mb-2">
+                                {format!("Received {} reactions:", reactions.len())}
+                            </p>
+                            {for reactions.iter().map(|note| {
+                                html! {
+                                    <div class="p-3 bg-gray-50 rounded border border-gray-200">
+                                        <div class="flex justify-between text-xs text-gray-500 mb-2">
+                                            <span class="font-mono truncate max-w-xs">
+                                                {format!("From: {}...", &note.pubkey[..16])}
+                                            </span>
+                                            <span>
+                                                {format_timestamp(note.created_at)}
+                                            </span>
+                                        </div>
+                                        <p class="text-2xl">
+                                            {&note.content}
+                                        </p>
+                                    </div>
+                                }
+                            })}
+                        </>
+                    }
+                }}
+            </div>
+        </div>
+    }
+}
+
+/// Format Unix timestamp to relative time
+fn format_timestamp(timestamp: i64) -> String {
+    let now = nostr_minions::NostrNote::now();
+    let diff = now - timestamp;
+
+    if diff < 60 {
+        format!("{}s ago", diff)
+    } else if diff < 3600 {
+        format!("{}m ago", diff / 60)
+    } else if diff < 86400 {
+        format!("{}h ago", diff / 3600)
+    } else {
+        format!("{}d ago", diff / 86400)
     }
 }

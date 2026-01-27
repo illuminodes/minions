@@ -95,8 +95,26 @@ impl NostrRelayPool {
     fn dispatch_note(&self, note: &nostro2::NostrNote) {
         let mut subs = self.subscriptions.borrow_mut();
 
+        web_sys::console::log_1(
+            &format!(
+                "Dispatching note kind:{} to {} subscriptions",
+                note.kind,
+                subs.len()
+            )
+            .into(),
+        );
+
         for sub in subs.values_mut() {
-            if super::note_matches_filter(note, &sub.filter) {
+            let matches = super::note_matches_filter(note, &sub.filter);
+            web_sys::console::log_1(
+                &format!(
+                    "  Sub filter kinds:{:?} - matches: {}",
+                    sub.filter.kinds, matches
+                )
+                .into(),
+            );
+
+            if matches {
                 sub.note_count += 1;
                 sub.callback.emit(note.clone());
             }

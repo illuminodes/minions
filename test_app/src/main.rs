@@ -54,12 +54,26 @@ fn splash() -> Html {
 fn text_notes_component() -> Html {
     let notes = use_text_notes(Some(20));
     let render_count = use_mut_ref(|| 0);
+    let message_count = use_mut_ref(|| 0);
+
+    // Track messages received
+    let current_notes_len = notes.len();
+    if current_notes_len > *message_count.borrow() {
+        *message_count.borrow_mut() = current_notes_len;
+    }
 
     // Increment render count
     *render_count.borrow_mut() += 1;
     let count = *render_count.borrow();
+    let msg_count = *message_count.borrow();
 
-    web_sys::console::log_1(&format!("TextNotesComponent rendered {} times", count).into());
+    web_sys::console::log_1(
+        &format!(
+            "TextNotesComponent rendered {} times, {} messages received",
+            count, msg_count
+        )
+        .into(),
+    );
 
     html! {
         <div class="bg-white rounded-lg shadow-lg p-6">
@@ -67,9 +81,14 @@ fn text_notes_component() -> Html {
                 <h2 class="text-2xl font-bold text-blue-600">
                     {"Text Notes (Kind 1)"}
                 </h2>
-                <span class="text-sm text-gray-500">
-                    {format!("Renders: {}", count)}
-                </span>
+                <div class="text-right">
+                    <div class="text-sm text-gray-500">
+                        {format!("Renders: {}", count)}
+                    </div>
+                    <div class="text-xs text-blue-600 font-semibold">
+                        {format!("Messages: {}", msg_count)}
+                    </div>
+                </div>
             </div>
 
             <div class="mb-4 p-3 bg-blue-50 rounded">
@@ -126,12 +145,26 @@ fn text_notes_component() -> Html {
 fn reactions_component() -> Html {
     let reactions = use_notes_by_kind(7, Some(20));
     let render_count = use_mut_ref(|| 0);
+    let message_count = use_mut_ref(|| 0);
+
+    // Track messages received
+    let current_reactions_len = reactions.len();
+    if current_reactions_len > *message_count.borrow() {
+        *message_count.borrow_mut() = current_reactions_len;
+    }
 
     // Increment render count
     *render_count.borrow_mut() += 1;
     let count = *render_count.borrow();
+    let msg_count = *message_count.borrow();
 
-    web_sys::console::log_1(&format!("ReactionsComponent rendered {} times", count).into());
+    web_sys::console::log_1(
+        &format!(
+            "ReactionsComponent rendered {} times, {} messages received",
+            count, msg_count
+        )
+        .into(),
+    );
 
     html! {
         <div class="bg-white rounded-lg shadow-lg p-6">
@@ -139,9 +172,14 @@ fn reactions_component() -> Html {
                 <h2 class="text-2xl font-bold text-purple-600">
                     {"Reactions (Kind 7)"}
                 </h2>
-                <span class="text-sm text-gray-500">
-                    {format!("Renders: {}", count)}
-                </span>
+                <div class="text-right">
+                    <div class="text-sm text-gray-500">
+                        {format!("Renders: {}", count)}
+                    </div>
+                    <div class="text-xs text-purple-600 font-semibold">
+                        {format!("Messages: {}", msg_count)}
+                    </div>
+                </div>
             </div>
 
             <div class="mb-4 p-3 bg-purple-50 rounded">

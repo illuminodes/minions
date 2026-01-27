@@ -30,10 +30,12 @@ pub struct NostrId {
     pubkey: Option<String>,
 }
 impl NostrId {
+    #[inline]
     #[must_use]
     pub fn get_pubkey(&self) -> Option<String> {
         self.pubkey.clone()
     }
+    #[inline]
     pub fn sign_note(&self, note: &mut NostrNote) -> Result<(), crate::MinionError> {
         let id = self
             .identity
@@ -41,6 +43,7 @@ impl NostrId {
             .ok_or(crate::MinionError::NoNostrKeyFound)?;
         Ok(id.sign_nostr_note(note)?)
     }
+    #[inline]
     pub fn sign_encrypted_note(
         &self,
         note: &mut NostrNote,
@@ -56,6 +59,7 @@ impl NostrId {
             &nostro2_signer::keypair::EncryptionScheme::Nip44,
         )?)
     }
+    #[inline]
     pub fn decrypt_note(&self, event: &NostrNote) -> Result<String, crate::MinionError> {
         let id = self
             .identity
@@ -69,10 +73,12 @@ impl NostrId {
             )?
             .to_string())
     }
+    #[inline]
     #[must_use]
     pub const fn get_nostr_key(&self) -> Option<&nostro2_signer::keypair::NostrKeypair> {
         self.identity.as_ref()
     }
+    #[inline]
     pub fn create_giftwrap(
         &self,
         inner_note: &mut NostrNote,

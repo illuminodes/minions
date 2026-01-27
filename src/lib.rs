@@ -12,13 +12,19 @@ pub mod browser_api;
 mod idb_manager;
 mod key_manager;
 mod relay_pool;
+// Re-export internal modules
 pub use idb_manager::*;
 pub use key_manager::*;
-pub use nostro2_signer::nostro2;
 pub use relay_pool::*;
-pub extern crate nostro2_signer;
-pub use nostro2_signer::keypair::{EncryptionScheme, NostrKeypair};
+
+// Re-export nostro2 types directly for convenience
+// This allows: use minions::NostrNote instead of minions::nostro2::NostrNote
 pub use nostro2_signer::nostro2::*;
+pub use nostro2_signer::keypair::{EncryptionScheme, GiftwrapScheme, NostrKeypair};
+
+// Make the full crate available for advanced usage
+// This allows: minions::nostro2_signer::... if needed
+pub extern crate nostro2_signer;
 
 #[derive(Clone, Debug, PartialEq, yew::Properties)]
 pub struct AppProps {

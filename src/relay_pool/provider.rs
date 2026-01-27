@@ -7,6 +7,7 @@ pub struct NostrRelayPool {
     pub last_event: Option<nostro2::NostrRelayEvent>,
 }
 impl NostrRelayPool {
+    #[inline]
     #[must_use]
     pub fn relay_health(&self) -> std::collections::HashMap<String, super::ReadyState> {
         let mut health = std::collections::HashMap::new();
@@ -15,21 +16,30 @@ impl NostrRelayPool {
         }
         health
     }
+    #[inline]
     pub fn send<T>(&self, event: T) -> nostro2::NostrClientEvent
     where
         T: Into<nostro2::NostrClientEvent> + Clone,
     {
         let event = event.into();
+
+        // Serialize once instead of per-relay
+        let event_str = match serde_json::to_string(&event) {
+            Ok(s) => s,
+            Err(e) => {
+                web_sys::console::error_1(&format!("Failed to serialize event: {e}").into());
+                return event;
+            }
+        };
+
         for relay in self.pool.borrow().iter() {
             match relay.ready_state {
                 super::ReadyState::CONNECTING => {
                     relay.queue.borrow_mut().push(event.clone());
                 }
                 super::ReadyState::OPEN => {
-                    if let Ok(event_str) = serde_json::to_string(&event) {
-                        if let Err(e) = relay.websocket.send_with_str(&event_str) {
-                            web_sys::console::error_1(&e);
-                        }
+                    if let Err(e) = relay.websocket.send_with_str(&event_str) {
+                        web_sys::console::error_1(&e);
                     }
                 }
                 _ => {}
@@ -53,7 +63,6 @@ impl Reducible for NostrRelayPool {
     fn reduce(self: std::rc::Rc<Self>, action: Self::Action) -> std::rc::Rc<Self> {
         match action {
             NostrRelayPoolAction::AddRelay(relay) => {
-                let mut pool = self.pool.borrow_mut();
                 if let Ok(ws) = web_sys::WebSocket::new(&relay.url) {
                     let ws = super::NostrWebSocket {
                         websocket: ws,
@@ -61,31 +70,26 @@ impl Reducible for NostrRelayPool {
                         ready_state: super::ReadyState::CONNECTING,
                         queue: std::rc::Rc::new(std::cell::RefCell::new(vec![])),
                     };
-                    pool.push(ws);
+                    self.pool.borrow_mut().push(ws);
                 }
-                std::rc::Rc::new(Self {
-                    pool: std::rc::Rc::new(std::cell::RefCell::new(pool.to_vec())),
-                    last_note: self.last_note.clone(),
-                    last_event: self.last_event.clone(),
-                })
+                // Mutated in place, return self directly
+                self
             }
             NostrRelayPoolAction::RemoveRelay(relay) => {
-                let mut pool = self.pool.borrow_mut();
-                pool.retain(|r| r.url != relay.url);
-                std::rc::Rc::new(Self {
-                    pool: std::rc::Rc::new(std::cell::RefCell::new(pool.to_vec())),
-                    last_note: self.last_note.clone(),
-                    last_event: self.last_event.clone(),
-                })
+                self.pool.borrow_mut().retain(|r| r.url != relay.url);
+                // Mutated in place, return self directly
+                self
             }
             NostrRelayPoolAction::Open(url) => {
-                let mut pool = self.pool.borrow_mut();
-                for relay in pool.iter_mut() {
-                    if relay.url == url {
-                        relay.ready_state = super::ReadyState::OPEN;
+                {
+                    let mut pool = self.pool.borrow_mut();
+                    for relay in pool.iter_mut() {
+                        if relay.url == url {
+                            relay.ready_state = super::ReadyState::OPEN;
+                        }
                     }
-                }
-                self.clone()
+                } // Drop borrow before returning self
+                self
             }
             NostrRelayPoolAction::NewEvent(event) => Self {
                 pool: self.pool.clone(),
@@ -100,13 +104,15 @@ impl Reducible for NostrRelayPool {
             }
             .into(),
             NostrRelayPoolAction::CloseRelay(url) => {
-                let mut pool = self.pool.borrow_mut();
-                for relay in pool.iter_mut() {
-                    if relay.url == url {
-                        relay.ready_state = super::ReadyState::CLOSED;
+                {
+                    let mut pool = self.pool.borrow_mut();
+                    for relay in pool.iter_mut() {
+                        if relay.url == url {
+                            relay.ready_state = super::ReadyState::CLOSED;
+                        }
                     }
-                }
-                self.clone()
+                } // Drop borrow before returning self
+                self
             }
         }
     }

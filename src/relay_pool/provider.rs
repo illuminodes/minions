@@ -1,11 +1,36 @@
 use yew::prelude::*;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct NostrRelayPool {
     pool: std::rc::Rc<std::cell::RefCell<Vec<super::NostrWebSocket>>>,
     pub last_note: Option<nostro2::NostrRelayEvent>,
     pub last_event: Option<nostro2::NostrRelayEvent>,
+    // Store dedup tracker and pending relays for dynamic relay addition
+    note_dedup: std::rc::Rc<std::cell::RefCell<super::BoundedDedup>>,
+    pending_relays: std::rc::Rc<std::cell::RefCell<Vec<crate::relay_pool::UserRelay>>>,
 }
+
+// Manual Debug impl since internal details don't need to be printed
+impl std::fmt::Debug for NostrRelayPool {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NostrRelayPool")
+            .field("pool_size", &self.pool.borrow().len())
+            .field("last_note", &self.last_note)
+            .field("last_event", &self.last_event)
+            .field("note_dedup_size", &self.note_dedup.borrow().len())
+            .field("pending_relays", &self.pending_relays.borrow().len())
+            .finish()
+    }
+}
+
+// Manual PartialEq impl - compare state but not internal trackers
+impl PartialEq for NostrRelayPool {
+    fn eq(&self, other: &Self) -> bool {
+        self.last_note == other.last_note && self.last_event == other.last_event
+    }
+}
+
+impl Eq for NostrRelayPool {}
 impl NostrRelayPool {
     #[inline]
     #[must_use]
@@ -63,16 +88,8 @@ impl Reducible for NostrRelayPool {
     fn reduce(self: std::rc::Rc<Self>, action: Self::Action) -> std::rc::Rc<Self> {
         match action {
             NostrRelayPoolAction::AddRelay(relay) => {
-                if let Ok(ws) = web_sys::WebSocket::new(&relay.url) {
-                    let ws = super::NostrWebSocket {
-                        websocket: ws,
-                        url: relay.url.clone(),
-                        ready_state: super::ReadyState::CONNECTING,
-                        queue: std::rc::Rc::new(std::cell::RefCell::new(vec![])),
-                    };
-                    self.pool.borrow_mut().push(ws);
-                }
-                // Mutated in place, return self directly
+                // Add to pending queue - the provider effect will handle actual connection
+                self.pending_relays.borrow_mut().push(relay);
                 self
             }
             NostrRelayPoolAction::RemoveRelay(relay) => {
@@ -95,12 +112,16 @@ impl Reducible for NostrRelayPool {
                 pool: self.pool.clone(),
                 last_note: self.last_note.clone(),
                 last_event: Some(event),
+                note_dedup: self.note_dedup.clone(),
+                pending_relays: self.pending_relays.clone(),
             }
             .into(),
             NostrRelayPoolAction::NewNote(note) => Self {
                 pool: self.pool.clone(),
                 last_note: Some(note),
                 last_event: self.last_event.clone(),
+                note_dedup: self.note_dedup.clone(),
+                pending_relays: self.pending_relays.clone(),
             }
             .into(),
             NostrRelayPoolAction::CloseRelay(url) => {
@@ -128,24 +149,62 @@ pub struct RelayContextProps {
 #[function_component(NostrRelayPoolProvider)]
 pub fn key_handler(props: &RelayContextProps) -> Html {
     let pool = use_mut_ref(Vec::new);
-    let ctx = use_reducer(|| NostrRelayPool {
-        pool: pool.clone(),
-        last_note: None,
-        last_event: None,
+    // Use bounded deduplication to prevent memory leaks
+    // Keeps track of last 10,000 note IDs (~ 1MB max)
+    let note_dedup: std::rc::Rc<std::cell::RefCell<crate::relay_pool::BoundedDedup>> =
+        use_mut_ref(|| crate::relay_pool::BoundedDedup::new(10_000));
+
+    let pending_relays = use_mut_ref(Vec::new);
+
+    let ctx = use_reducer({
+        let note_dedup = note_dedup.clone();
+        let pending_relays = pending_relays.clone();
+        move || NostrRelayPool {
+            pool: pool.clone(),
+            last_note: None,
+            last_event: None,
+            note_dedup,
+            pending_relays,
+        }
     });
-    let note_lib: std::rc::Rc<std::cell::RefCell<std::collections::HashSet<String>>> =
-        use_mut_ref(std::collections::HashSet::new);
     let dispatch = ctx.dispatcher();
     let pool = ctx.pool.clone();
-    use_effect_with(props.relays.clone(), move |relays| {
-        for relay in relays {
+
+    // Handle initial relays from props
+    use_effect_with(props.relays.clone(), {
+        let pool = pool.clone();
+        let dispatch = dispatch.clone();
+        let note_dedup = note_dedup.clone();
+        move |relays| {
+            for relay in relays {
+                if pool.borrow().iter().any(|r| r.url == relay.url) {
+                    continue;
+                }
+                let Ok(relay_ws) = super::NostrWebSocket::connect_with_retry(
+                    relay.url.clone(),
+                    dispatch.clone(),
+                    note_dedup.clone(),
+                    2,
+                ) else {
+                    continue;
+                };
+                pool.borrow_mut().push(relay_ws);
+            }
+        }
+    });
+
+    // Handle dynamically added relays via AddRelay action
+    use_effect_with(ctx.clone(), move |ctx| {
+        // Check for pending relays and connect them
+        let pending_list = ctx.pending_relays.borrow_mut().drain(..).collect::<Vec<_>>();
+        for relay in pending_list {
             if pool.borrow().iter().any(|r| r.url == relay.url) {
                 continue;
             }
             let Ok(relay_ws) = super::NostrWebSocket::connect_with_retry(
                 relay.url.clone(),
                 dispatch.clone(),
-                note_lib.clone(),
+                ctx.note_dedup.clone(),
                 2,
             ) else {
                 continue;

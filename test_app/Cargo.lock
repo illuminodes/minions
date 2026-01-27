@@ -948,7 +948,7 @@ dependencies = [
 
 [[package]]
 name = "nostr-minions"
-version = "0.1.24"
+version = "0.1.25"
 dependencies = [
  "idb",
  "nostro2",
@@ -965,9 +965,11 @@ dependencies = [
 
 [[package]]
 name = "nostro2"
-version = "0.3.9"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7debf465024efa774e5aa8434c05211b39639cb456bd6933fb398cc372fca799"
 dependencies = [
- "bech32",
+ "hex",
  "js-sys",
  "ring",
  "secp256k1",
@@ -979,7 +981,9 @@ dependencies = [
 
 [[package]]
 name = "nostro2-nips"
-version = "0.1.6"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e644bb36809bd0a0c8ef18f9bc8c4f98623d4cef65c09cb8f1f14df3300b93d"
 dependencies = [
  "base64",
  "chacha20",
@@ -998,7 +1002,9 @@ dependencies = [
 
 [[package]]
 name = "nostro2-signer"
-version = "0.1.11"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2e1fd56cc2da56aaec206bf130220b273056f77398721fb5a38e41e6c45f02f"
 dependencies = [
  "base64",
  "bech32",
@@ -1869,7 +1875,7 @@ dependencies = [
 
 [[package]]
 name = "yew-full-calendar"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "serde",

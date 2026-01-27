@@ -25,10 +25,10 @@ fn app() -> Html {
     ];
     html! {
         <NostrAppProvider {relays} fallback={html!(<Splash/>)}>
-                <FullCalendarTest />
+                // <FullCalendarTest />
                 // ADD NEW TEST COMPONENTS HERE WITH INLINES
-                // <nostr_minions::RelayPoolTest />
-                // <nostr_minions::NostrIdLoginTest />
+                <nostr_minions::RelayPoolTest />
+                <nostr_minions::NostrIdLoginTest />
         </NostrAppProvider>
     }
 }
@@ -72,7 +72,9 @@ pub fn calendar_test() -> Html {
                         })
                         .unwrap()
                         .all_day(false);
-                    calendar_clone.add_or_replace_event(builder).expect("add event");
+                    calendar_clone
+                        .add_or_replace_event(builder)
+                        .expect("add event");
                     web_sys::console::log_1(&"Added event".into());
                 }
             });

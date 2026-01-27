@@ -8,6 +8,10 @@ pub struct NostrRelayPool {
     // Store dedup tracker and pending relays for dynamic relay addition
     note_dedup: std::rc::Rc<std::cell::RefCell<super::BoundedDedup>>,
     pending_relays: std::rc::Rc<std::cell::RefCell<Vec<crate::relay_pool::UserRelay>>>,
+    // Subscription management
+    subscriptions: std::rc::Rc<
+        std::cell::RefCell<std::collections::HashMap<super::SubscriptionId, super::SubscriptionInfo>>,
+    >,
 }
 
 // Manual Debug impl since internal details don't need to be printed
@@ -19,6 +23,7 @@ impl std::fmt::Debug for NostrRelayPool {
             .field("last_event", &self.last_event)
             .field("note_dedup_size", &self.note_dedup.borrow().len())
             .field("pending_relays", &self.pending_relays.borrow().len())
+            .field("subscriptions", &self.subscriptions.borrow().len())
             .finish()
     }
 }
@@ -40,6 +45,59 @@ impl NostrRelayPool {
             health.insert(relay.url.clone(), relay.ready_state);
         }
         health
+    }
+
+    /// Subscribe to notes matching a filter
+    ///
+    /// Returns a subscription ID that can be used to unsubscribe
+    pub fn subscribe(
+        &self,
+        filter: nostro2::NostrSubscription,
+        callback: yew::Callback<nostro2::NostrNote>,
+    ) -> super::SubscriptionId {
+        let id = super::SubscriptionId::new();
+
+        let info = super::SubscriptionInfo {
+            id: id.clone(),
+            filter: filter.clone(),
+            callback,
+            created_at: nostro2::NostrNote::now(),
+            note_count: 0,
+        };
+
+        // Store subscription
+        self.subscriptions.borrow_mut().insert(id.clone(), info);
+
+        // Send subscription to all relays
+        self.send(filter);
+
+        id
+    }
+
+    /// Unsubscribe from a subscription
+    pub fn unsubscribe(&self, id: &super::SubscriptionId) {
+        self.subscriptions.borrow_mut().remove(id);
+
+        // Send CLOSE to relays
+        self.send(nostro2::NostrClientEvent::close_subscription(id.as_str()));
+    }
+
+    /// Get all active subscriptions
+    #[must_use]
+    pub fn active_subscriptions(&self) -> Vec<super::SubscriptionInfo> {
+        self.subscriptions.borrow().values().cloned().collect()
+    }
+
+    /// Dispatch a note to matching subscriptions
+    fn dispatch_note(&self, note: nostro2::NostrNote) {
+        let mut subs = self.subscriptions.borrow_mut();
+
+        for sub in subs.values_mut() {
+            if super::note_matches_filter(&note, &sub.filter) {
+                sub.note_count += 1;
+                sub.callback.emit(note.clone());
+            }
+        }
     }
     #[inline]
     pub fn send<T>(&self, event: T) -> nostro2::NostrClientEvent
@@ -114,16 +172,25 @@ impl Reducible for NostrRelayPool {
                 last_event: Some(event),
                 note_dedup: self.note_dedup.clone(),
                 pending_relays: self.pending_relays.clone(),
+                subscriptions: self.subscriptions.clone(),
             }
             .into(),
-            NostrRelayPoolAction::NewNote(note) => Self {
-                pool: self.pool.clone(),
-                last_note: Some(note),
-                last_event: self.last_event.clone(),
-                note_dedup: self.note_dedup.clone(),
-                pending_relays: self.pending_relays.clone(),
+            NostrRelayPoolAction::NewNote(event) => {
+                // Extract note from event and dispatch to subscribers
+                if let nostro2::NostrRelayEvent::NewNote(.., ref note) = event {
+                    self.dispatch_note(note.clone());
+                }
+
+                Self {
+                    pool: self.pool.clone(),
+                    last_note: Some(event),
+                    last_event: self.last_event.clone(),
+                    note_dedup: self.note_dedup.clone(),
+                    pending_relays: self.pending_relays.clone(),
+                    subscriptions: self.subscriptions.clone(),
+                }
+                .into()
             }
-            .into(),
             NostrRelayPoolAction::CloseRelay(url) => {
                 {
                     let mut pool = self.pool.borrow_mut();
@@ -156,15 +223,18 @@ pub fn key_handler(props: &RelayContextProps) -> Html {
 
     let pending_relays = use_mut_ref(Vec::new);
 
+    let subscriptions = use_mut_ref(std::collections::HashMap::new);
+
     let ctx = use_reducer({
         let note_dedup = note_dedup.clone();
-        let pending_relays = pending_relays.clone();
+        let subscriptions = subscriptions.clone();
         move || NostrRelayPool {
             pool: pool.clone(),
             last_note: None,
             last_event: None,
             note_dedup,
             pending_relays,
+            subscriptions,
         }
     });
     let dispatch = ctx.dispatcher();
@@ -174,7 +244,6 @@ pub fn key_handler(props: &RelayContextProps) -> Html {
     use_effect_with(props.relays.clone(), {
         let pool = pool.clone();
         let dispatch = dispatch.clone();
-        let note_dedup = note_dedup.clone();
         move |relays| {
             for relay in relays {
                 if pool.borrow().iter().any(|r| r.url == relay.url) {
@@ -196,7 +265,11 @@ pub fn key_handler(props: &RelayContextProps) -> Html {
     // Handle dynamically added relays via AddRelay action
     use_effect_with(ctx.clone(), move |ctx| {
         // Check for pending relays and connect them
-        let pending_list = ctx.pending_relays.borrow_mut().drain(..).collect::<Vec<_>>();
+        let pending_list = ctx
+            .pending_relays
+            .borrow_mut()
+            .drain(..)
+            .collect::<Vec<_>>();
         for relay in pending_list {
             if pool.borrow().iter().any(|r| r.url == relay.url) {
                 continue;

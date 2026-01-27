@@ -187,30 +187,21 @@ impl Reducible for NostrRelayPool {
                 } // Drop borrow before returning self
                 self
             }
-            NostrRelayPoolAction::NewEvent(event) => Self {
-                pool: self.pool.clone(),
-                last_note: self.last_note.clone(),
-                last_event: Some(event),
-                note_dedup: self.note_dedup.clone(),
-                pending_relays: self.pending_relays.clone(),
-                subscriptions: self.subscriptions.clone(),
+            NostrRelayPoolAction::NewEvent(_event) => {
+                // Don't create new state for non-note events
+                // Events are handled via other mechanisms, not subscriptions
+                self
             }
-            .into(),
             NostrRelayPoolAction::NewNote(event) => {
                 // Extract note from event and dispatch to subscribers
                 if let nostro2::NostrRelayEvent::NewNote(.., ref note) = event {
                     self.dispatch_note(note);
                 }
 
-                Self {
-                    pool: self.pool.clone(),
-                    last_note: Some(event),
-                    last_event: self.last_event.clone(),
-                    note_dedup: self.note_dedup.clone(),
-                    pending_relays: self.pending_relays.clone(),
-                    subscriptions: self.subscriptions.clone(),
-                }
-                .into()
+                // Don't create new state - dispatch_note already fired callbacks via RefCell
+                // Creating new state would cause ALL components using context to re-render
+                // We only want components with matching subscriptions to re-render
+                self
             }
             NostrRelayPoolAction::CloseRelay(url) => {
                 {

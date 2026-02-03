@@ -10,8 +10,8 @@ homepage = "https://github.com/illuminodes/minions"
 
 [dependencies]
 # Nostr Stack
-nostro2 = "0.4.1"
-nostro2-signer = "0.2.1"
+nostro2 = "0.4.2"
+nostro2-signer = "0.2.2"
 # nostro2 = { path = "../NostrO2/nostro2" }
 # nostro2-signer = { path = "../NostrO2/nostro2-signer" }
 

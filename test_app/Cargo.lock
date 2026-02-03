@@ -966,9 +966,9 @@ dependencies = [
 
 [[package]]
 name = "nostro2"
-version = "0.4.1"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7debf465024efa774e5aa8434c05211b39639cb456bd6933fb398cc372fca799"
+checksum = "a21fa87b5b8379c76856432f9d3c331bcb280da32ba7d4e23e10b35a5dd457b6"
 dependencies = [
  "hex",
  "js-sys",
@@ -1003,9 +1003,9 @@ dependencies = [
 
 [[package]]
 name = "nostro2-signer"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2e1fd56cc2da56aaec206bf130220b273056f77398721fb5a38e41e6c45f02f"
+checksum = "0a02340e30ff8cdeb50cc00222c91ce6c1d6e7f02e1acbad1091eb10bd394da6"
 dependencies = [
  "base64",
  "bech32",

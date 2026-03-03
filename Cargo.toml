@@ -9,6 +9,15 @@ readme = "README.md"
 homepage = "https://github.com/illuminodes/minions"
 
 [dependencies]
+
+[lib]
+crate-type = ["cdylib"]
+
+# A separate binary for the WASM service worker
+[[bin]]
+name = "service_worker"
+path = "src/sw.rs"
+
 # Nostr Stack
 nostro2 = "0.3.9"
 nostro2-signer = "0.1.11"

@@ -5,13 +5,14 @@ pub struct AppServiceWorker {
 }
 impl AppServiceWorker {
     pub fn new() -> Result<Self, JsValue> {
-        let window = web_sys::window().ok_or("No window")?;
+        let window = web_sys::window().ok_or(JsValue::from_str("No window"))?;
         let sw = window.navigator().service_worker();
         Ok(Self { sw })
     }
     pub async fn install(&self, file_path: &str) -> Result<(), JsValue> {
-        let register = self.sw.register(file_path);
-        wasm_bindgen_futures::JsFuture::from(register).await?;
+        // `register` returns Result<Promise, JsValue>. We unwrap it and wait for the promise.
+        let register_promise = self.sw.register(file_path)?;
+        wasm_bindgen_futures::JsFuture::from(register_promise).await?;
         Ok(())
     }
 }

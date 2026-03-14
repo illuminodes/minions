@@ -85,7 +85,17 @@ impl NostrRelayPool {
         filter: nostro2::NostrSubscription,
         callback: yew::Callback<nostro2::NostrNote>,
     ) -> super::SubscriptionId {
-        let id = super::SubscriptionId::new();
+        // Convert filter to a client event first so we can extract the
+        // relay subscription ID that nostro2 generates. This ensures the
+        // ID we return to callers matches the one relays see in the REQ,
+        // so users can correlate EOSE responses to their subscriptions.
+        let client_event: nostro2::NostrClientEvent = filter.clone().into();
+
+        let id = if let nostro2::NostrClientEvent::Subscribe(_, ref sub_id, _) = client_event {
+            super::SubscriptionId::from_string(sub_id.clone())
+        } else {
+            super::SubscriptionId::new()
+        };
 
         let info = super::SubscriptionInfo {
             id: id.clone(),
@@ -98,8 +108,8 @@ impl NostrRelayPool {
         // Store subscription
         self.subscriptions.borrow_mut().insert(id.clone(), info);
 
-        // Send subscription to all relays
-        self.send(filter);
+        // Send the pre-built event (with the matching subscription ID) to all relays
+        self.send(client_event);
 
         id
     }

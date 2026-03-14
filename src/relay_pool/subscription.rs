@@ -20,6 +20,12 @@ impl SubscriptionId {
         Self(hex)
     }
 
+    /// Create a subscription ID from an existing string
+    #[must_use]
+    pub fn from_string(id: String) -> Self {
+        Self(id)
+    }
+
     /// Get the subscription ID as a string slice
     #[must_use]
     pub fn as_str(&self) -> &str {

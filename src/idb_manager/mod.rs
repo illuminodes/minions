@@ -1,6 +1,6 @@
 mod db;
-pub use db::*;
-
+pub use db::NostrDbStoreName;
+pub use db::NostrIdb;
 use yew::prelude::*;
 
 #[derive(Clone, Debug)]

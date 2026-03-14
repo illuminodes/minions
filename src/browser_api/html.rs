@@ -33,17 +33,17 @@ impl HtmlDocument {
             .dyn_into::<T>()
             .map_err(|_| JsValue::from_str("Failed to cast element"))
     }
-    pub fn edit_document_title(self, title: &str) {
+    pub fn edit_document_title(&self, title: &str, default_title: String) -> Closure<dyn FnMut()> {
         self.document.set_title(title);
 
-        let closure: web_sys::js_sys::Function = Closure::<dyn FnMut()>::new(move || {
-            self.document.set_title("Portal SALUD");
-        })
-        .into_js_value()
-        .into();
+        let document = self.document.clone();
+        let closure = Closure::<dyn FnMut()>::new(move || {
+            document.set_title(&default_title);
+        });
         let _ = self
             .window
-            .add_event_listener_with_callback("focus", &closure);
+            .add_event_listener_with_callback("focus", closure.as_ref().unchecked_ref());
+        closure
     }
 }
 

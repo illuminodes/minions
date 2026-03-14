@@ -162,21 +162,7 @@ pub fn nostr_id_login_test() -> Html {
             <button onclick={create_local_key.reform(|_| nostro2_signer::keypair::NostrKeypair::generate(true))}>
                 {"New Local Identity"}
             </button>
-            <button onclick={
-                let ctx = ctx.clone();
-                Callback::from(move |_| {
-                    let _ctx = ctx.clone();
-                    yew::platform::spawn_local(async move {
-                        // match UserIdentity::new_extension_identity().await {
-                        //     Ok(id) => {
-                        //         let pubkey = id.get_pubkey().await.unwrap();
-                        //         id.clone().save_to_store().await.unwrap();
-                        //         ctx.dispatch(NostrIdAction::LoadIdentity(pubkey,id));},
-                        //     Err(e) => gloo::console::error!(&e),
-                        // }
-                    });
-                })
-            }>
+            <button onclick={Callback::from(move |_| {})}>
                 {"Reload Identity"}
             </button>
             <button onclick={sign_onclick}>

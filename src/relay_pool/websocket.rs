@@ -1,6 +1,8 @@
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
+const MAX_RECONNECT_SECS: u32 = 120;
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ReadyState {
     CONNECTING = 0,
@@ -121,8 +123,6 @@ impl NostrWebSocket {
                         }
                     }
                     dispatch.dispatch(super::NostrRelayPoolAction::NewNote(data));
-                } else {
-                    dispatch.dispatch(super::NostrRelayPoolAction::NewEvent(data));
                 }
             }) as Box<dyn FnMut(web_sys::MessageEvent)>)
         };
@@ -138,7 +138,7 @@ impl NostrWebSocket {
 
                 // Reconnect if not a clean close
                 if !e.was_clean() {
-                    let next_timeout = timeout.saturating_mul(2);
+                    let next_timeout = timeout.saturating_mul(2).min(MAX_RECONNECT_SECS);
                     let url = url.clone();
                     let dispatch = dispatch.clone();
                     let note_dedup = note_dedup.clone();

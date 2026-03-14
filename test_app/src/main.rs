@@ -53,23 +53,16 @@ fn splash() -> Html {
 #[function_component(TextNotesComponent)]
 fn text_notes_component() -> Html {
     let notes = use_text_notes(Some(20));
-    let render_count = use_mut_ref(|| 0);
-    let message_count = use_mut_ref(|| 0);
-
-    // Track messages received
-    let current_notes_len = notes.len();
-    if current_notes_len > *message_count.borrow() {
-        *message_count.borrow_mut() = current_notes_len;
-    }
+    let render_count = use_mut_ref(|| 0usize);
 
     // Increment render count
     *render_count.borrow_mut() += 1;
     let count = *render_count.borrow();
-    let msg_count = *message_count.borrow();
+    let msg_count = notes.len();
 
     web_sys::console::log_1(
         &format!(
-            "TextNotesComponent rendered {} times, {} messages received",
+            "TextNotesComponent rendered {} times, {} notes in buffer",
             count, msg_count
         )
         .into(),
@@ -144,23 +137,16 @@ fn text_notes_component() -> Html {
 #[function_component(ReactionsComponent)]
 fn reactions_component() -> Html {
     let reactions = use_notes_by_kind(7, Some(20));
-    let render_count = use_mut_ref(|| 0);
-    let message_count = use_mut_ref(|| 0);
-
-    // Track messages received
-    let current_reactions_len = reactions.len();
-    if current_reactions_len > *message_count.borrow() {
-        *message_count.borrow_mut() = current_reactions_len;
-    }
+    let render_count = use_mut_ref(|| 0usize);
 
     // Increment render count
     *render_count.borrow_mut() += 1;
     let count = *render_count.borrow();
-    let msg_count = *message_count.borrow();
+    let msg_count = reactions.len();
 
     web_sys::console::log_1(
         &format!(
-            "ReactionsComponent rendered {} times, {} messages received",
+            "ReactionsComponent rendered {} times, {} reactions in buffer",
             count, msg_count
         )
         .into(),

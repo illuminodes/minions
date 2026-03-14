@@ -28,10 +28,7 @@ impl UserRelay {
 impl TryFrom<JsValue> for UserRelay {
     type Error = JsValue;
     fn try_from(value: JsValue) -> Result<Self, Self::Error> {
-        let string = web_sys::js_sys::JSON::stringify(&value)?
-            .as_string()
-            .ok_or(value)?;
-        serde_json::from_str(&string).map_err(|e| JsValue::from_str(&e.to_string()))
+        serde_wasm_bindgen::from_value(value).map_err(|e| JsValue::from_str(&e.to_string()))
     }
 }
 impl From<UserRelay> for JsValue {
@@ -40,6 +37,3 @@ impl From<UserRelay> for JsValue {
         web_sys::js_sys::JSON::parse(&string).unwrap_or_default()
     }
 }
-
-#[cfg(test)]
-mod tests {}

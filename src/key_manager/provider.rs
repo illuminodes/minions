@@ -14,7 +14,7 @@ impl IdbKeypairEntry {
     ) -> Result<Self, crate::MinionError> {
         let array = keypair.secret_key();
         let js_array = web_sys::js_sys::Uint8Array::from(array.as_slice());
-        let crypto_key: web_sys::CryptoKey = crate::browser_api::BrowserCrypto::default()
+        let crypto_key: web_sys::CryptoKey = crate::browser_api::BrowserCrypto::new()?
             .import_key_array(js_array.into())
             .await?;
         Ok(Self {

@@ -12,10 +12,32 @@ pub mod browser_api;
 mod idb_manager;
 mod key_manager;
 mod relay_pool;
-// Re-export internal modules
-pub use idb_manager::*;
-pub use key_manager::*;
-pub use relay_pool::*;
+
+// Re-export hooks
+pub use idb_manager::{use_idb_database, use_idb_manager};
+pub use key_manager::{
+    use_create_local_key, use_delete_local_key, use_nostr_id_ctx, use_nostr_key, use_nostr_pubkey,
+};
+pub use relay_pool::{
+    use_live_note, use_nostr_notes, use_nostr_relay_pool, use_notes_by_authors, use_notes_by_kind,
+    use_recent_notes, use_text_notes,
+};
+
+// Re-export providers/components
+pub use idb_manager::IdbManagerProvider;
+pub use key_manager::{NostrIdProvider, NostrIdStore};
+pub use relay_pool::{NostrRelayPoolProvider, NostrRelayPoolStore};
+
+// Re-export types
+pub use idb_manager::{IdbStore, NostrIdb};
+pub use key_manager::{IdbKeypairEntry, NostrId, NostrIdAction};
+pub use relay_pool::{NostrRelayPool, ReadyState, SubscriptionId, SubscriptionInfo, UserRelay};
+
+// Re-export test components behind feature gate
+#[cfg(feature = "test-components")]
+pub use key_manager::{NostrIdLoginTest, NostrIdLoginTestSuspense};
+#[cfg(feature = "test-components")]
+pub use relay_pool::RelayPoolTest;
 
 // Re-export nostro2 types directly for convenience
 // This allows: use minions::NostrNote instead of minions::nostro2::NostrNote

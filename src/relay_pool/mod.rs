@@ -4,114 +4,51 @@ mod nostr_relay;
 mod provider;
 mod subscription;
 mod websocket;
-pub use bounded_dedup::*;
-pub use hooks::*;
-pub use nostr_relay::*;
-use nostro2::NostrClientEvent;
-pub use provider::*;
-pub use subscription::*;
-pub use websocket::*;
+
+pub use bounded_dedup::BoundedDedup;
+pub use hooks::{
+    use_live_note, use_nostr_notes, use_notes_by_authors, use_notes_by_kind, use_recent_notes,
+    use_text_notes,
+};
+pub use nostr_relay::UserRelay;
+pub use provider::{
+    NostrRelayPool, NostrRelayPoolAction, NostrRelayPoolProvider, NostrRelayPoolStore,
+};
+pub use subscription::{note_matches_filter, SubscriptionId, SubscriptionInfo};
+pub use websocket::NostrWebSocket;
+pub use websocket::ReadyState;
 
 #[yew::hook]
 pub fn use_nostr_relay_pool() -> provider::NostrRelayPoolStore {
     yew::use_context::<provider::NostrRelayPoolStore>().expect("No Nostr Relay Pool context found")
 }
 
+#[cfg(feature = "test-components")]
 #[yew::function_component(RelayPoolTest)]
 pub fn relay_pool_test() -> yew::Html {
-    let relay_ctx =
-        yew::use_context::<provider::NostrRelayPoolStore>().expect("No relay context found");
-    let subscription_id = yew::use_state(|| None);
-    let latest_note = yew::use_state(|| None);
-
-    let id_handle = subscription_id.clone();
-    let relay_clone = relay_ctx.clone();
-    yew::use_effect_with((), move |()| {
-        let nostr_sub: NostrClientEvent = nostro2::NostrSubscription {
-            kinds: Some(vec![20001]),
-            ..Default::default()
-        }
-        .into();
-        let kind_one_filter = nostro2::NostrSubscription {
-            kinds: Some(vec![1]),
-            limit: Some(20),
-            ..Default::default()
-        };
-        if let nostro2::NostrClientEvent::Subscribe(.., id, _sub) = &nostr_sub {
-            let sub_id = id.clone();
-            id_handle.set(Some(sub_id));
-            relay_clone.send(nostr_sub);
-        }
-        relay_clone.send(kind_one_filter);
-        || {}
+    let notes = use_nostr_notes(nostro2::NostrSubscription {
+        kinds: Some(vec![1]),
+        limit: Some(20),
+        ..Default::default()
     });
-    let note_handle = latest_note.clone();
-    let note_counter = yew::use_state(|| 0);
+    let note_count = notes.len();
 
-    let counter_handle = note_counter.clone();
-    yew::use_effect_with(relay_ctx.last_note.clone(), move |last_note| {
-        let mut counter = *counter_handle;
-        counter += 1;
-        counter_handle.set(counter);
-        note_handle.set(last_note.clone());
-    });
-
-    let _note_sender = relay_ctx.clone();
-    let send_note_onclick = yew::Callback::from(move |_| {
-        // let new_keys = nostro2_signer::keypair::NostrKeypair::generate(false);
-        // let mut new_note = NostrNote {
-        //     content: "Minion Note".to_string(),
-        //     kind: 20001,
-        //     pubkey: new_keys.public_key(),
-        //     ..Default::default()
-        // };
-        // if new_keys.sign_nostr_note(&mut new_note).is_ok() {
-        //     note_sender.send(new_note);
-        // }
-    });
-
-    subscription_id.as_ref().map_or_else(
-        || yew::html! { <div>{"Loading Relay Pool..."}</div> },
-        |id| {
-            let unsubscriber = relay_ctx;
-            let sub_id = nostro2::NostrClientEvent::close_subscription(id);
-            let unsubscribe_onclick = yew::Callback::from(move |_| {
-                unsubscriber.send(sub_id.clone());
-            });
-            yew::html! {
-                <div class="flex flex-col gap-4">
-                    <h2 class="text-xl font-bold">{"Relay Pool Test"}</h2>
-                    <div class="flex flex-row gap-2">
-                        <button onclick={send_note_onclick}>
-                            { "Send Note" }
-                        </button>
-                        <button onclick={unsubscribe_onclick}>
-                            { "Unsubscribe" }
-                        </button>
-                    </div>
+    yew::html! {
+        <div class="flex flex-col gap-4">
+            <h2 class="text-xl font-bold">{"Relay Pool Test"}</h2>
+            <div>
+                <h3>{"Kind 1 Count"}</h3>
+                <p>{note_count}</p>
+            </div>
+            {notes.first().map_or_else(
+                || yew::html! { <div>{"Waiting for notes..."}</div> },
+                |note| yew::html! {
                     <div>
-                        <h3>{"Kind 1 Count"}</h3>
-                        <p>{*note_counter}</p>
+                        <h3>{"Latest Note"}</h3>
+                        <p>{note.content.as_str()}</p>
                     </div>
-                    {latest_note.as_ref().map_or_else(
-                        ||
-                        yew::html! { <div>{"Send a note!"}</div> },
-                        |note| {
-                        match note {
-                            nostro2::NostrRelayEvent::NewNote(.., ref note) => {
-                                yew::html! {
-                                    <div>
-                                        <h3>{"My Latest Note"}</h3>
-                                        <p>{note.content.as_str()}</p>
-                                    </div>
-                                }
-                            }
-                            _ => yew::html! { <div>{"Unknown event"}</div> },
-                        }
-
-                    })}
-                </div>
-            }
-        },
-    )
+                },
+            )}
+        </div>
+    }
 }

@@ -1,7 +1,9 @@
 mod provider;
-pub use provider::*;
+pub use provider::{IdbKeypairEntry, NostrId, NostrIdAction, NostrIdProvider, NostrIdStore};
 
+#[cfg(feature = "test-components")]
 mod tests;
+#[cfg(feature = "test-components")]
 pub use tests::*;
 
 #[yew::hook]

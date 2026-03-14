@@ -19,7 +19,8 @@ use super::{use_nostr_relay_pool, SubscriptionId};
 #[hook]
 pub fn use_nostr_notes(filter: NostrSubscription) -> Vec<NostrNote> {
     let pool = use_nostr_relay_pool();
-    let notes = use_state(Vec::<NostrNote>::new);
+    let notes = use_mut_ref(Vec::<NostrNote>::new);
+    let force_update = use_force_update();
     let sub_id: std::rc::Rc<std::cell::RefCell<Option<SubscriptionId>>> = use_mut_ref(|| None);
 
     // Subscribe on mount or filter change
@@ -27,6 +28,7 @@ pub fn use_nostr_notes(filter: NostrSubscription) -> Vec<NostrNote> {
     use_effect_with(filter.clone(), {
         let pool = pool.clone();
         let notes = notes.clone();
+        let force_update = force_update.clone();
         let sub_id = sub_id.clone();
 
         move |filter| {
@@ -37,20 +39,19 @@ pub fn use_nostr_notes(filter: NostrSubscription) -> Vec<NostrNote> {
 
             // Subscribe with callback
             let id = pool.subscribe(filter.clone(), {
-                let notes = notes.clone();
                 let limit = filter.limit;
 
                 Callback::from(move |note: NostrNote| {
-                    // Prepend new note (newest first)
-                    let mut current = (*notes).clone();
-                    current.insert(0, note);
+                    {
+                        let mut current = notes.borrow_mut();
+                        current.insert(0, note);
 
-                    // Respect limit from filter
-                    if let Some(limit) = limit {
-                        current.truncate(limit as usize);
+                        // Respect limit from filter
+                        if let Some(limit) = limit {
+                            current.truncate(limit as usize);
+                        }
                     }
-
-                    notes.set(current);
+                    force_update.force_update();
                 })
             });
 
@@ -65,7 +66,8 @@ pub fn use_nostr_notes(filter: NostrSubscription) -> Vec<NostrNote> {
         }
     });
 
-    (*notes).clone()
+    let result = notes.borrow().clone();
+    result
 }
 
 /// Subscribe to text notes (kind 1)
@@ -121,12 +123,12 @@ pub fn use_notes_by_kind(kind: u32, limit: Option<u32>) -> Vec<NostrNote> {
 /// ```
 #[hook]
 pub fn use_recent_notes(kinds: Vec<u32>, seconds: i64, limit: Option<u32>) -> Vec<NostrNote> {
-    let since = NostrNote::now() - seconds;
+    #[allow(clippy::cast_sign_loss)] // `.max(0)` guarantees non-negative
+    let since = (NostrNote::now() - seconds).max(0) as u64;
 
-    #[allow(clippy::cast_sign_loss)]
     use_nostr_notes(NostrSubscription {
         kinds: Some(kinds),
-        since: Some(since as u64),
+        since: Some(since),
         limit,
         ..Default::default()
     })

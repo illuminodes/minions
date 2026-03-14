@@ -3,8 +3,6 @@ use yew::prelude::*;
 #[derive(Clone)]
 pub struct NostrRelayPool {
     pool: std::rc::Rc<std::cell::RefCell<Vec<super::NostrWebSocket>>>,
-    pub last_note: Option<nostro2::NostrRelayEvent>,
-    pub last_event: Option<nostro2::NostrRelayEvent>,
     // Store dedup tracker and pending relays for dynamic relay addition
     note_dedup: std::rc::Rc<std::cell::RefCell<super::BoundedDedup>>,
     pending_relays: std::rc::Rc<std::cell::RefCell<Vec<crate::relay_pool::UserRelay>>>,
@@ -21,8 +19,6 @@ impl std::fmt::Debug for NostrRelayPool {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("NostrRelayPool")
             .field("pool_size", &self.pool.borrow().len())
-            .field("last_note", &self.last_note)
-            .field("last_event", &self.last_event)
             .field("note_dedup_size", &self.note_dedup.borrow().len())
             .field("pending_relays", &self.pending_relays.borrow().len())
             .field("subscriptions", &self.subscriptions.borrow().len())
@@ -30,10 +26,18 @@ impl std::fmt::Debug for NostrRelayPool {
     }
 }
 
-// Manual PartialEq impl - compare state but not internal trackers
+// Compare observable pool state: relay URLs + ready states + subscription count
 impl PartialEq for NostrRelayPool {
     fn eq(&self, other: &Self) -> bool {
-        self.last_note == other.last_note && self.last_event == other.last_event
+        let self_pool = self.pool.borrow();
+        let other_pool = other.pool.borrow();
+        if self_pool.len() != other_pool.len() {
+            return false;
+        }
+        let self_health: Vec<_> = self_pool.iter().map(|r| (&r.url, r.ready_state)).collect();
+        let other_health: Vec<_> = other_pool.iter().map(|r| (&r.url, r.ready_state)).collect();
+        self_health == other_health
+            && self.subscriptions.borrow().len() == other.subscriptions.borrow().len()
     }
 }
 
@@ -133,27 +137,42 @@ impl NostrRelayPool {
 
 pub enum NostrRelayPoolAction {
     Open(String),
-    NewEvent(nostro2::NostrRelayEvent),
     NewNote(nostro2::NostrRelayEvent),
     CloseRelay(String),
     AddRelay(crate::relay_pool::UserRelay),
     RemoveRelay(crate::relay_pool::UserRelay),
     Reconnected(super::NostrWebSocket),
 }
+
+/// `Reducible` impl for the relay pool.
+///
+/// Actions that change pool composition or health (`Open`, `CloseRelay`, `Reconnected`,
+/// `AddRelay`, `RemoveRelay`) return a new `Rc<Self>` so the context re-renders consumers.
+///
+/// `NewNote` intentionally returns `self` (no re-render) — note dispatch is handled
+/// by per-subscription callbacks via `dispatch_note`, avoiding global re-renders.
 impl Reducible for NostrRelayPool {
     type Action = NostrRelayPoolAction;
 
     fn reduce(self: std::rc::Rc<Self>, action: Self::Action) -> std::rc::Rc<Self> {
         match action {
             NostrRelayPoolAction::AddRelay(relay) => {
-                // Add to pending queue - the provider effect will handle actual connection
                 self.pending_relays.borrow_mut().push(relay);
-                self
+                std::rc::Rc::new(Self {
+                    pool: self.pool.clone(),
+                    note_dedup: self.note_dedup.clone(),
+                    pending_relays: self.pending_relays.clone(),
+                    subscriptions: self.subscriptions.clone(),
+                })
             }
             NostrRelayPoolAction::RemoveRelay(relay) => {
                 self.pool.borrow_mut().retain(|r| r.url != relay.url);
-                // Mutated in place, return self directly
-                self
+                std::rc::Rc::new(Self {
+                    pool: self.pool.clone(),
+                    note_dedup: self.note_dedup.clone(),
+                    pending_relays: self.pending_relays.clone(),
+                    subscriptions: self.subscriptions.clone(),
+                })
             }
             NostrRelayPoolAction::Open(url) => {
                 {
@@ -163,23 +182,19 @@ impl Reducible for NostrRelayPool {
                             relay.ready_state = super::ReadyState::OPEN;
                         }
                     }
-                } // Drop borrow before returning self
-                self
-            }
-            NostrRelayPoolAction::NewEvent(_event) => {
-                // Don't create new state for non-note events
-                // Events are handled via other mechanisms, not subscriptions
-                self
+                }
+                std::rc::Rc::new(Self {
+                    pool: self.pool.clone(),
+                    note_dedup: self.note_dedup.clone(),
+                    pending_relays: self.pending_relays.clone(),
+                    subscriptions: self.subscriptions.clone(),
+                })
             }
             NostrRelayPoolAction::NewNote(event) => {
-                // Extract note from event and dispatch to subscribers
+                // Dispatch to matching subscription callbacks — no global re-render
                 if let nostro2::NostrRelayEvent::NewNote(.., ref note) = event {
                     self.dispatch_note(note);
                 }
-
-                // Don't create new state - dispatch_note already fired callbacks via RefCell
-                // Creating new state would cause ALL components using context to re-render
-                // We only want components with matching subscriptions to re-render
                 self
             }
             NostrRelayPoolAction::CloseRelay(url) => {
@@ -190,17 +205,26 @@ impl Reducible for NostrRelayPool {
                             relay.ready_state = super::ReadyState::CLOSED;
                         }
                     }
-                } // Drop borrow before returning self
-                self
+                }
+                std::rc::Rc::new(Self {
+                    pool: self.pool.clone(),
+                    note_dedup: self.note_dedup.clone(),
+                    pending_relays: self.pending_relays.clone(),
+                    subscriptions: self.subscriptions.clone(),
+                })
             }
             NostrRelayPoolAction::Reconnected(ws) => {
                 {
                     let mut pool = self.pool.borrow_mut();
-                    // Replace the old entry for this URL, or push new
                     pool.retain(|r| r.url != ws.url);
                     pool.push(ws);
                 }
-                self
+                std::rc::Rc::new(Self {
+                    pool: self.pool.clone(),
+                    note_dedup: self.note_dedup.clone(),
+                    pending_relays: self.pending_relays.clone(),
+                    subscriptions: self.subscriptions.clone(),
+                })
             }
         }
     }
@@ -231,8 +255,6 @@ pub fn key_handler(props: &RelayContextProps) -> Html {
         let subscriptions = subscriptions.clone();
         move || NostrRelayPool {
             pool: pool.clone(),
-            last_note: None,
-            last_event: None,
             note_dedup,
             pending_relays,
             subscriptions,

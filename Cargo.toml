@@ -8,6 +8,9 @@ repository = "https://github.com/illuminodes/minions"
 readme = "README.md"
 homepage = "https://github.com/illuminodes/minions"
 
+[features]
+test-components = []
+
 [dependencies]
 # Nostr Stack
 nostro2 = "0.4.2"

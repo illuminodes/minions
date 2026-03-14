@@ -89,6 +89,17 @@ pub fn note_matches_filter(note: &NostrNote, filter: &NostrSubscription) -> bool
         }
     }
 
+    // Check tag filters (e.g. "#p", "#e")
+    if let Some(ref tag_filters) = filter.tags {
+        for (key, values) in tag_filters {
+            let letter = key.strip_prefix('#').unwrap_or(key);
+            let note_vals: Vec<&str> = note.tags.find_tags_ref(letter);
+            if !values.iter().any(|v| note_vals.contains(&v.as_str())) {
+                return false;
+            }
+        }
+    }
+
     true
 }
 
@@ -183,5 +194,98 @@ mod tests {
             ..Default::default()
         };
         assert!(!note_matches_filter(&note, &filter_until_fail));
+    }
+
+    fn note_with_tags(tags: Vec<Vec<String>>) -> NostrNote {
+        NostrNote {
+            kind: 1,
+            pubkey: "alice".to_string(),
+            created_at: 1000,
+            tags: tags.into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn test_note_matches_filter_by_tag() {
+        let note = note_with_tags(vec![
+            vec!["p".to_string(), "bob_pk".to_string()],
+            vec!["e".to_string(), "event123".to_string()],
+        ]);
+
+        let mut tags = std::collections::HashMap::new();
+        tags.insert("#p".to_string(), vec!["bob_pk".to_string()]);
+
+        let filter = NostrSubscription {
+            tags: Some(tags),
+            ..Default::default()
+        };
+        assert!(note_matches_filter(&note, &filter));
+    }
+
+    #[test]
+    fn test_note_does_not_match_missing_tag() {
+        let note = note_with_tags(vec![vec!["p".to_string(), "bob_pk".to_string()]]);
+
+        let mut tags = std::collections::HashMap::new();
+        tags.insert("#p".to_string(), vec!["charlie_pk".to_string()]);
+
+        let filter = NostrSubscription {
+            tags: Some(tags),
+            ..Default::default()
+        };
+        assert!(!note_matches_filter(&note, &filter));
+    }
+
+    #[test]
+    fn test_note_matches_multiple_tag_filters_and() {
+        let note = note_with_tags(vec![
+            vec!["p".to_string(), "bob_pk".to_string()],
+            vec!["e".to_string(), "event123".to_string()],
+        ]);
+
+        let mut tags = std::collections::HashMap::new();
+        tags.insert("#p".to_string(), vec!["bob_pk".to_string()]);
+        tags.insert("#e".to_string(), vec!["event123".to_string()]);
+
+        let filter = NostrSubscription {
+            tags: Some(tags),
+            ..Default::default()
+        };
+        assert!(note_matches_filter(&note, &filter));
+
+        // Fails if one tag filter doesn't match
+        let mut tags_partial = std::collections::HashMap::new();
+        tags_partial.insert("#p".to_string(), vec!["bob_pk".to_string()]);
+        tags_partial.insert("#e".to_string(), vec!["other_event".to_string()]);
+
+        let filter_partial = NostrSubscription {
+            tags: Some(tags_partial),
+            ..Default::default()
+        };
+        assert!(!note_matches_filter(&note, &filter_partial));
+    }
+
+    #[test]
+    fn test_tag_filter_strips_hash_prefix() {
+        let note = note_with_tags(vec![vec!["p".to_string(), "bob_pk".to_string()]]);
+
+        // With # prefix
+        let mut tags_with_hash = std::collections::HashMap::new();
+        tags_with_hash.insert("#p".to_string(), vec!["bob_pk".to_string()]);
+        let filter = NostrSubscription {
+            tags: Some(tags_with_hash),
+            ..Default::default()
+        };
+        assert!(note_matches_filter(&note, &filter));
+
+        // Without # prefix (should also work)
+        let mut tags_without_hash = std::collections::HashMap::new();
+        tags_without_hash.insert("p".to_string(), vec!["bob_pk".to_string()]);
+        let filter2 = NostrSubscription {
+            tags: Some(tags_without_hash),
+            ..Default::default()
+        };
+        assert!(note_matches_filter(&note, &filter2));
     }
 }

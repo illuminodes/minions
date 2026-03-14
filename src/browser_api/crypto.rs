@@ -4,13 +4,15 @@ use web_sys::{AesKeyGenParams, CryptoKey, SubtleCrypto};
 pub struct BrowserCrypto {
     crypto: SubtleCrypto,
 }
-impl Default for BrowserCrypto {
-    fn default() -> Self {
-        let window = web_sys::window().expect("no global `window` exists");
-        let crypto = window.crypto().expect("no global `crypto` exists");
-        Self {
+impl BrowserCrypto {
+    pub fn new() -> Result<Self, crate::MinionError> {
+        let window = web_sys::window().ok_or_else(|| {
+            crate::MinionError::CryptoError(JsValue::from_str("no global `window` exists"))
+        })?;
+        let crypto = window.crypto().map_err(crate::MinionError::CryptoError)?;
+        Ok(Self {
             crypto: crypto.subtle(),
-        }
+        })
     }
 }
 pub enum KeyGenParams {
@@ -67,23 +69,3 @@ impl BrowserCrypto {
         Ok(key.into())
     }
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use wasm_bindgen_test::*;
-//     wasm_bindgen_test_configure!(run_in_browser);
-//     #[wasm_bindgen_test]
-//     async fn _test_crypto_key_from_bytes() {
-//         let crypto = BrowserCrypto::default();
-//         let key = crypto.crypto_key_from_bytes(&[0; 32]).await.unwrap();
-//         assert_eq!(key.type_(), "secret");
-//     }
-//     #[wasm_bindgen_test]
-//     async fn _test_crypto_key_to_hex() {
-//         let crypto = BrowserCrypto::default();
-//         let key = crypto.crypto_key_from_bytes(&[0; 32]).await.unwrap();
-//         let hex = crypto.crypto_key_to_hex(key).await.unwrap();
-//         assert_eq!(hex.len(), 64);
-//     }
-// }

@@ -178,7 +178,7 @@ impl NostrIdb {
             return Ok(None);
         };
 
-        let crypto = crate::browser_api::BrowserCrypto::default();
+        let crypto = crate::browser_api::BrowserCrypto::new()?;
         let secret_array = crypto.export_raw_key(keys.keypair).await?;
         let secret_slice = web_sys::js_sys::Uint8Array::new(&secret_array);
         let mut keypair =

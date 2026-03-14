@@ -74,22 +74,65 @@ pub fn nostr_app_provider(props: &AppProps) -> yew::Html {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum MinionError {
-    #[error("IDB error: {0}")]
-    Idb(#[from] idb::Error),
-    #[error("Could not find Nostr key")]
+    Idb(idb::Error),
     NoNostrKeyFound,
-    #[error("Nostr Error: {0}")]
-    NostrError(#[from] nostro2_signer::nostro2::errors::NostrErrors),
-    #[error("Nostr Keypair Error: {0}")]
-    NostrKeypairError(#[from] nostro2_signer::errors::NostrKeypairError),
-    #[error("Crypto Error: {0:?}")]
+    NostrError(nostro2_signer::nostro2::errors::NostrErrors),
+    NostrKeypairError(nostro2_signer::errors::NostrKeypairError),
     CryptoError(wasm_bindgen::JsValue),
-    #[error("Nostr Relay Error: {0}")]
-    WasmSerde(#[from] serde_wasm_bindgen::Error),
-    #[error("No Identity Found")]
+    WasmSerde(serde_wasm_bindgen::Error),
     NoIdentityFound,
+}
+
+impl std::fmt::Display for MinionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Idb(e) => write!(f, "IDB error: {e}"),
+            Self::NoNostrKeyFound => write!(f, "Could not find Nostr key"),
+            Self::NostrError(e) => write!(f, "Nostr Error: {e}"),
+            Self::NostrKeypairError(e) => write!(f, "Nostr Keypair Error: {e}"),
+            Self::CryptoError(e) => write!(f, "Crypto Error: {e:?}"),
+            Self::WasmSerde(e) => write!(f, "Nostr Relay Error: {e}"),
+            Self::NoIdentityFound => write!(f, "No Identity Found"),
+        }
+    }
+}
+
+impl std::error::Error for MinionError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Idb(e) => Some(e),
+            Self::NostrError(e) => Some(e),
+            Self::NostrKeypairError(e) => Some(e),
+            Self::WasmSerde(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl From<idb::Error> for MinionError {
+    fn from(e: idb::Error) -> Self {
+        Self::Idb(e)
+    }
+}
+
+impl From<nostro2_signer::nostro2::errors::NostrErrors> for MinionError {
+    fn from(e: nostro2_signer::nostro2::errors::NostrErrors) -> Self {
+        Self::NostrError(e)
+    }
+}
+
+impl From<nostro2_signer::errors::NostrKeypairError> for MinionError {
+    fn from(e: nostro2_signer::errors::NostrKeypairError) -> Self {
+        Self::NostrKeypairError(e)
+    }
+}
+
+impl From<serde_wasm_bindgen::Error> for MinionError {
+    fn from(e: serde_wasm_bindgen::Error) -> Self {
+        Self::WasmSerde(e)
+    }
 }
 
 impl From<MinionError> for web_sys::wasm_bindgen::JsValue {

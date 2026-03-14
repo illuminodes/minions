@@ -1,6 +1,6 @@
 [package]
 name = "nostr-minions"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 license = "BSD-3-Clause"
 description = "A Yew-based framework for client side Nostr apps"
@@ -36,6 +36,4 @@ wasm-bindgen-futures = "0.4"
 yew = { version = "0.21.0" }
 wasm-bindgen = "0.2"
 idb = "0.6.4"
-thiserror = "2.0.16"
-uuid = { version = "1.0", features = ["v4", "wasm-bindgen"] }
 

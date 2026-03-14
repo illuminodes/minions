@@ -9,7 +9,15 @@ impl SubscriptionId {
     /// Create a new unique subscription ID
     #[must_use]
     pub fn new() -> Self {
-        Self(uuid::Uuid::new_v4().to_string())
+        let mut buf = [0u8; 16];
+        web_sys::window()
+            .expect("no global window")
+            .crypto()
+            .expect("no crypto on window")
+            .get_random_values_with_u8_array(&mut buf)
+            .expect("get_random_values failed");
+        let hex: String = buf.iter().map(|b| format!("{b:02x}")).collect();
+        Self(hex)
     }
 
     /// Get the subscription ID as a string slice

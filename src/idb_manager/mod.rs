@@ -40,9 +40,16 @@ pub fn idb_manager_provider(props: &yew::html::ChildrenProps) -> HtmlResult {
         crate::idb_manager::IdbManager::new().await
     })?;
     let Ok(db) = (db).as_ref().cloned() else {
-        return Ok(html! {
-            <yew::suspense::Suspense />
-        });
+        // Log the error so developers can diagnose IndexedDB failures
+        // (private browsing, storage quota, unsupported browser, etc.)
+        // Render children without context so downstream hooks return None
+        // and components can degrade gracefully instead of showing a blank screen.
+        if let Err(e) = db.as_ref() {
+            web_sys::console::error_1(
+                &format!("nostr-minions: IndexedDB unavailable: {e}").into(),
+            );
+        }
+        return Ok(html! { {props.children.clone()} });
     };
 
     let ctx = use_reducer(|| db);

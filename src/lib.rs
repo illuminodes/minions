@@ -93,7 +93,7 @@ impl std::fmt::Display for MinionError {
             Self::NostrError(e) => write!(f, "Nostr Error: {e}"),
             Self::NostrKeypairError(e) => write!(f, "Nostr Keypair Error: {e}"),
             Self::CryptoError(e) => write!(f, "Crypto Error: {e:?}"),
-            Self::WasmSerde(e) => write!(f, "Nostr Relay Error: {e}"),
+            Self::WasmSerde(e) => write!(f, "Serialization Error: {e}"),
             Self::NoIdentityFound => write!(f, "No Identity Found"),
         }
     }

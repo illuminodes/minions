@@ -2,6 +2,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 
 const MAX_RECONNECT_SECS: u32 = 120;
+const MAX_RETRIES: u32 = 10;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ReadyState {
@@ -11,21 +12,48 @@ pub enum ReadyState {
     CLOSED = 3,
 }
 
-/// WebSocket wrapper that properly manages closure lifecycle to prevent memory leaks
+impl ReadyState {
+    const fn from_web_sys(state: u16) -> Self {
+        match state {
+            0 => Self::CONNECTING,
+            1 => Self::OPEN,
+            2 => Self::CLOSING,
+            _ => Self::CLOSED,
+        }
+    }
+}
+
+/// Inner WebSocket state — cleaned up only when the last reference is dropped.
+/// This prevents the old bug where cloning `NostrWebSocket` and dropping the
+/// clone would detach handlers and close the shared underlying socket.
+struct WebSocketInner {
+    websocket: web_sys::WebSocket,
+    _onopen: Closure<dyn FnMut()>,
+    _onmessage: Closure<dyn FnMut(web_sys::MessageEvent)>,
+    _onclose: Closure<dyn FnMut(web_sys::CloseEvent)>,
+    _onerror: Closure<dyn FnMut(web_sys::ErrorEvent)>,
+}
+
+impl Drop for WebSocketInner {
+    fn drop(&mut self) {
+        self.websocket.set_onopen(None);
+        self.websocket.set_onmessage(None);
+        self.websocket.set_onclose(None);
+        self.websocket.set_onerror(None);
+        let _ = self.websocket.close();
+    }
+}
+
+/// WebSocket wrapper with proper lifecycle management.
+///
+/// Uses `Rc<WebSocketInner>` so clones share the underlying socket and
+/// cleanup only happens when the last clone is dropped.
 #[derive(Clone)]
 pub struct NostrWebSocket {
-    pub websocket: web_sys::WebSocket,
+    inner: std::rc::Rc<WebSocketInner>,
     pub url: String,
     pub ready_state: ReadyState,
     pub queue: std::rc::Rc<std::cell::RefCell<Vec<nostro2::NostrClientEvent>>>,
-
-    // Store closures to prevent memory leaks
-    // Wrapped in Rc so they can be cloned with the struct
-    // Will be automatically dropped when all clones are dropped
-    _onopen: std::rc::Rc<Closure<dyn FnMut()>>,
-    _onmessage: std::rc::Rc<Closure<dyn FnMut(web_sys::MessageEvent)>>,
-    _onclose: std::rc::Rc<Closure<dyn FnMut(web_sys::CloseEvent)>>,
-    _onerror: std::rc::Rc<Closure<dyn FnMut(web_sys::ErrorEvent)>>,
 }
 
 impl std::fmt::Debug for NostrWebSocket {
@@ -40,42 +68,50 @@ impl std::fmt::Debug for NostrWebSocket {
 
 impl PartialEq for NostrWebSocket {
     fn eq(&self, other: &Self) -> bool {
-        // Compare by URL as unique identifier
-        self.url == other.url
+        self.url == other.url && self.ready_state == other.ready_state
     }
 }
 
 impl Eq for NostrWebSocket {}
 
-impl Drop for NostrWebSocket {
-    fn drop(&mut self) {
-        // Detach all handlers BEFORE closing to prevent
-        // "closure invoked after being dropped" errors
-        self.websocket.set_onopen(None);
-        self.websocket.set_onmessage(None);
-        self.websocket.set_onclose(None);
-        self.websocket.set_onerror(None);
-        let _ = self.websocket.close();
-    }
-}
-
 impl NostrWebSocket {
-    /// Connect to a Nostr relay with automatic retry on failure
+    /// Get a reference to the underlying `web_sys::WebSocket`.
+    pub fn websocket(&self) -> &web_sys::WebSocket {
+        &self.inner.websocket
+    }
+
+    /// Read the actual ready state from the underlying WebSocket,
+    /// bypassing the cached `ready_state` field. Use this in `send()`
+    /// to avoid the race between `onopen` firing and the reducer
+    /// dispatch updating the cached field.
+    pub fn actual_ready_state(&self) -> ReadyState {
+        ReadyState::from_web_sys(self.inner.websocket.ready_state())
+    }
+
+    /// Connect to a Nostr relay with automatic retry on failure.
     ///
-    /// # Arguments
-    /// * `url` - WebSocket URL of the relay
-    /// * `dispatch` - Yew reducer dispatcher for state updates
-    /// * `note_dedup` - Bounded deduplication tracker for notes
-    /// * `timeout` - Initial timeout in seconds (doubles on each retry)
+    /// Creates a fresh retry counter. Reconnections on close will use
+    /// exponential backoff and give up after `MAX_RETRIES` attempts.
+    /// The counter resets on every successful open.
     ///
     /// # Errors
-    /// Returns error if WebSocket creation fails
-    #[allow(clippy::needless_pass_by_value, clippy::redundant_clone)]
-    pub fn connect_with_retry(
+    /// Returns error if WebSocket creation fails.
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn connect(
         url: String,
         dispatch: yew::UseReducerDispatcher<super::NostrRelayPool>,
         note_dedup: std::rc::Rc<std::cell::RefCell<super::BoundedDedup>>,
-        timeout: u32,
+    ) -> Result<Self, wasm_bindgen::JsValue> {
+        let retry_count = std::rc::Rc::new(std::cell::Cell::new(0_u32));
+        Self::connect_inner(url, dispatch, note_dedup, retry_count)
+    }
+
+    #[allow(clippy::needless_pass_by_value)]
+    fn connect_inner(
+        url: String,
+        dispatch: yew::UseReducerDispatcher<super::NostrRelayPool>,
+        note_dedup: std::rc::Rc<std::cell::RefCell<super::BoundedDedup>>,
+        retry_count: std::rc::Rc<std::cell::Cell<u32>>,
     ) -> Result<Self, wasm_bindgen::JsValue> {
         let ws = web_sys::WebSocket::new(&url)?;
         let queue = std::rc::Rc::new(std::cell::RefCell::new(vec![]));
@@ -86,8 +122,12 @@ impl NostrWebSocket {
             let url = url.clone();
             let sender = ws.clone();
             let queue = queue.clone();
+            let retry_count = retry_count.clone();
 
             Closure::wrap(Box::new(move || {
+                // Reset retry counter on successful connection
+                retry_count.set(0);
+
                 dispatch.dispatch(super::NostrRelayPoolAction::Open(url.clone()));
 
                 // Send all queued messages
@@ -117,39 +157,45 @@ impl NostrWebSocket {
                 // Dedup notes specifically
                 if let nostro2::NostrRelayEvent::NewNote(.., ref note) = data {
                     if let Some(ref note_id) = note.id {
-                        // Check and insert atomically - returns false if duplicate
                         if !note_dedup.borrow_mut().insert(note_id.clone()) {
                             return; // Skip duplicate
                         }
                     }
                 }
 
-                // Dispatch all relay events
                 dispatch.dispatch(super::NostrRelayPoolAction::RelayEvent(data));
             }) as Box<dyn FnMut(web_sys::MessageEvent)>)
         };
 
-        // Create onclose handler with reconnection logic
+        // Create onclose handler with bounded reconnection
+        #[allow(clippy::redundant_clone)]
         let onclose = {
             let url = url.clone();
             let dispatch = dispatch.clone();
             let note_dedup = note_dedup.clone();
+            let retry_count = retry_count.clone();
 
             Closure::wrap(Box::new(move |_e: web_sys::CloseEvent| {
                 dispatch.dispatch(super::NostrRelayPoolAction::CloseRelay(url.clone()));
 
-                // Always attempt reconnect with backoff
-                let next_timeout = timeout.saturating_mul(2).min(MAX_RECONNECT_SECS);
+                let retries = retry_count.get();
+                if retries >= MAX_RETRIES {
+                    return; // Give up after MAX_RETRIES attempts
+                }
+                retry_count.set(retries + 1);
+
+                let timeout_secs = 2_u32.saturating_pow(retries + 1).min(MAX_RECONNECT_SECS);
                 let url = url.clone();
                 let dispatch = dispatch.clone();
                 let note_dedup = note_dedup.clone();
+                let retry_count = retry_count.clone();
 
                 yew::platform::spawn_local(async move {
-                    yew::platform::time::sleep(std::time::Duration::from_secs(next_timeout.into()))
+                    yew::platform::time::sleep(std::time::Duration::from_secs(timeout_secs.into()))
                         .await;
 
                     if let Ok(ws) =
-                        Self::connect_with_retry(url, dispatch.clone(), note_dedup, next_timeout)
+                        Self::connect_inner(url, dispatch.clone(), note_dedup, retry_count)
                     {
                         dispatch.dispatch(super::NostrRelayPoolAction::Reconnected(ws));
                     }
@@ -171,15 +217,16 @@ impl NostrWebSocket {
         ws.set_onerror(Some(onerror.as_ref().unchecked_ref()));
 
         Ok(Self {
-            websocket: ws,
+            inner: std::rc::Rc::new(WebSocketInner {
+                websocket: ws,
+                _onopen: onopen,
+                _onmessage: onmessage,
+                _onclose: onclose,
+                _onerror: onerror,
+            }),
             url,
             ready_state: ReadyState::CONNECTING,
             queue,
-            // Store closures in Rc to prevent leaks while allowing Clone
-            _onopen: std::rc::Rc::new(onopen),
-            _onmessage: std::rc::Rc::new(onmessage),
-            _onclose: std::rc::Rc::new(onclose),
-            _onerror: std::rc::Rc::new(onerror),
         })
     }
 }

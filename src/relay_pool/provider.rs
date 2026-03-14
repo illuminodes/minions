@@ -54,6 +54,19 @@ impl PartialEq for NostrRelayPool {
 impl Eq for NostrRelayPool {}
 
 impl NostrRelayPool {
+    /// Create a new `Rc<Self>` that shares all interior state.
+    /// This triggers a Yew re-render without cloning actual data
+    /// (all fields are `Rc<RefCell<…>>` so only refcounts are bumped).
+    fn notify_change(self: &std::rc::Rc<Self>) -> std::rc::Rc<Self> {
+        std::rc::Rc::new(Self {
+            pool: self.pool.clone(),
+            note_dedup: self.note_dedup.clone(),
+            pending_relays: self.pending_relays.clone(),
+            subscriptions: self.subscriptions.clone(),
+            relay_event_subscribers: self.relay_event_subscribers.clone(),
+        })
+    }
+
     #[must_use]
     pub fn relay_health(&self) -> std::collections::HashMap<String, super::ReadyState> {
         let mut health = std::collections::HashMap::new();
@@ -167,12 +180,14 @@ impl NostrRelayPool {
         };
 
         for relay in self.pool.borrow().iter() {
-            match relay.ready_state {
+            // Use actual WebSocket state to avoid race between onopen
+            // firing and the reducer dispatch updating the cached field.
+            match relay.actual_ready_state() {
                 super::ReadyState::CONNECTING => {
                     relay.queue.borrow_mut().push(event.clone());
                 }
                 super::ReadyState::OPEN => {
-                    let _ = relay.websocket.send_with_str(&event_str);
+                    let _ = relay.websocket().send_with_str(&event_str);
                 }
                 _ => {}
             }
@@ -204,23 +219,11 @@ impl Reducible for NostrRelayPool {
         match action {
             NostrRelayPoolAction::AddRelay(relay) => {
                 self.pending_relays.borrow_mut().push(relay);
-                std::rc::Rc::new(Self {
-                    pool: self.pool.clone(),
-                    note_dedup: self.note_dedup.clone(),
-                    pending_relays: self.pending_relays.clone(),
-                    subscriptions: self.subscriptions.clone(),
-                    relay_event_subscribers: self.relay_event_subscribers.clone(),
-                })
+                self.notify_change()
             }
             NostrRelayPoolAction::RemoveRelay(relay) => {
                 self.pool.borrow_mut().retain(|r| r.url != relay.url);
-                std::rc::Rc::new(Self {
-                    pool: self.pool.clone(),
-                    note_dedup: self.note_dedup.clone(),
-                    pending_relays: self.pending_relays.clone(),
-                    subscriptions: self.subscriptions.clone(),
-                    relay_event_subscribers: self.relay_event_subscribers.clone(),
-                })
+                self.notify_change()
             }
             NostrRelayPoolAction::Open(url) => {
                 {
@@ -231,20 +234,12 @@ impl Reducible for NostrRelayPool {
                         }
                     }
                 }
-                std::rc::Rc::new(Self {
-                    pool: self.pool.clone(),
-                    note_dedup: self.note_dedup.clone(),
-                    pending_relays: self.pending_relays.clone(),
-                    subscriptions: self.subscriptions.clone(),
-                    relay_event_subscribers: self.relay_event_subscribers.clone(),
-                })
+                self.notify_change()
             }
             NostrRelayPoolAction::RelayEvent(ref event) => {
                 if let nostro2::NostrRelayEvent::NewNote(.., ref note) = event {
-                    // Notes go to note subscriptions only
                     self.dispatch_note(note);
                 } else {
-                    // All other relay events go to relay event subscribers
                     self.dispatch_relay_event(event);
                 }
                 self
@@ -258,13 +253,7 @@ impl Reducible for NostrRelayPool {
                         }
                     }
                 }
-                std::rc::Rc::new(Self {
-                    pool: self.pool.clone(),
-                    note_dedup: self.note_dedup.clone(),
-                    pending_relays: self.pending_relays.clone(),
-                    subscriptions: self.subscriptions.clone(),
-                    relay_event_subscribers: self.relay_event_subscribers.clone(),
-                })
+                self.notify_change()
             }
             NostrRelayPoolAction::Reconnected(ws) => {
                 {
@@ -272,13 +261,7 @@ impl Reducible for NostrRelayPool {
                     pool.retain(|r| r.url != ws.url);
                     pool.push(ws);
                 }
-                std::rc::Rc::new(Self {
-                    pool: self.pool.clone(),
-                    note_dedup: self.note_dedup.clone(),
-                    pending_relays: self.pending_relays.clone(),
-                    subscriptions: self.subscriptions.clone(),
-                    relay_event_subscribers: self.relay_event_subscribers.clone(),
-                })
+                self.notify_change()
             }
         }
     }
@@ -330,11 +313,10 @@ pub fn nostr_relay_pool_provider(props: &RelayContextProps) -> Html {
                 if pool.borrow().iter().any(|r| r.url == relay.url) {
                     continue;
                 }
-                let Ok(relay_ws) = super::NostrWebSocket::connect_with_retry(
+                let Ok(relay_ws) = super::NostrWebSocket::connect(
                     relay.url.clone(),
                     dispatch.clone(),
                     note_dedup.clone(),
-                    2,
                 ) else {
                     continue;
                 };
@@ -355,11 +337,10 @@ pub fn nostr_relay_pool_provider(props: &RelayContextProps) -> Html {
             if pool.borrow().iter().any(|r| r.url == relay.url) {
                 continue;
             }
-            let Ok(relay_ws) = super::NostrWebSocket::connect_with_retry(
+            let Ok(relay_ws) = super::NostrWebSocket::connect(
                 relay.url.clone(),
                 dispatch.clone(),
                 ctx.note_dedup.clone(),
-                2,
             ) else {
                 continue;
             };

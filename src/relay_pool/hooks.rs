@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use nostro2::{NostrNote, NostrSubscription};
 use yew::prelude::*;
 
@@ -21,7 +23,7 @@ use super::SubscriptionId;
 #[hook]
 pub fn use_nostr_notes(filter: NostrSubscription) -> Vec<NostrNote> {
     let pool = super::use_nostr_relay_pool();
-    let notes = use_mut_ref(Vec::<NostrNote>::new);
+    let notes = use_mut_ref(VecDeque::<NostrNote>::new);
     let force_update = use_force_update();
     let sub_id: std::rc::Rc<std::cell::RefCell<Option<SubscriptionId>>> = use_mut_ref(|| None);
 
@@ -50,7 +52,7 @@ pub fn use_nostr_notes(filter: NostrSubscription) -> Vec<NostrNote> {
                 Callback::from(move |note: NostrNote| {
                     {
                         let mut current = notes.borrow_mut();
-                        current.insert(0, note);
+                        current.push_front(note); // O(1) with VecDeque
 
                         // Respect limit from filter
                         if let Some(limit) = limit {
@@ -72,7 +74,7 @@ pub fn use_nostr_notes(filter: NostrSubscription) -> Vec<NostrNote> {
         }
     });
 
-    let result = notes.borrow().clone();
+    let result: Vec<_> = notes.borrow().iter().cloned().collect();
     result
 }
 
@@ -178,8 +180,12 @@ pub fn use_notes_by_kind(kind: u32, limit: Option<u32>) -> Vec<NostrNote> {
 /// ```
 #[hook]
 pub fn use_recent_notes(kinds: Vec<u32>, seconds: i64, limit: Option<u32>) -> Vec<NostrNote> {
+    // Round to 30-second intervals so the filter value doesn't change on
+    // every render, which would cause an unsubscribe/resubscribe storm
+    // hammering every relay with REQ + CLOSE on each render cycle.
+    const GRANULARITY: i64 = 30;
     #[allow(clippy::cast_sign_loss)] // `.max(0)` guarantees non-negative
-    let since = (NostrNote::now() - seconds).max(0) as u64;
+    let since = ((NostrNote::now() - seconds) / GRANULARITY * GRANULARITY).max(0) as u64;
 
     use_nostr_notes(NostrSubscription {
         kinds: Some(kinds),

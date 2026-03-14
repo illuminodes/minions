@@ -174,9 +174,6 @@ pub fn nostr_id_login_test() -> Html {
             <button onclick={create_local_key.reform(|_| nostro2_signer::keypair::NostrKeypair::generate(true))}>
                 {"New Local Identity"}
             </button>
-            <button onclick={Callback::from(move |_| {})}>
-                {"Reload Identity"}
-            </button>
             <button onclick={sign_onclick}>
                 {"Sign Note"}
             </button>

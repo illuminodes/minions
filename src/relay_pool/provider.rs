@@ -6,10 +6,16 @@ pub struct NostrRelayPool {
     // Store dedup tracker and pending relays for dynamic relay addition
     note_dedup: std::rc::Rc<std::cell::RefCell<super::BoundedDedup>>,
     pending_relays: std::rc::Rc<std::cell::RefCell<Vec<crate::relay_pool::UserRelay>>>,
-    // Subscription management
+    // Note subscription management
     subscriptions: std::rc::Rc<
         std::cell::RefCell<
             std::collections::HashMap<super::SubscriptionId, super::SubscriptionInfo>,
+        >,
+    >,
+    // Relay event subscription management
+    relay_event_subscribers: std::rc::Rc<
+        std::cell::RefCell<
+            std::collections::HashMap<super::SubscriptionId, super::RelayEventSubscription>,
         >,
     >,
 }
@@ -22,6 +28,10 @@ impl std::fmt::Debug for NostrRelayPool {
             .field("note_dedup_size", &self.note_dedup.borrow().len())
             .field("pending_relays", &self.pending_relays.borrow().len())
             .field("subscriptions", &self.subscriptions.borrow().len())
+            .field(
+                "relay_event_subscribers",
+                &self.relay_event_subscribers.borrow().len(),
+            )
             .finish()
     }
 }
@@ -42,8 +52,8 @@ impl PartialEq for NostrRelayPool {
 }
 
 impl Eq for NostrRelayPool {}
+
 impl NostrRelayPool {
-    #[inline]
     #[must_use]
     pub fn relay_health(&self) -> std::collections::HashMap<String, super::ReadyState> {
         let mut health = std::collections::HashMap::new();
@@ -89,6 +99,34 @@ impl NostrRelayPool {
         self.send(nostro2::NostrClientEvent::close_subscription(id.as_str()));
     }
 
+    /// Subscribe to relay events (EOSE, OK, NOTICE, AUTH, etc.)
+    ///
+    /// Returns a subscription ID that can be used to unsubscribe.
+    /// Note events are excluded — use `subscribe` for those.
+    #[must_use]
+    pub fn subscribe_relay_events(
+        &self,
+        callback: yew::Callback<nostro2::NostrRelayEvent>,
+    ) -> super::SubscriptionId {
+        let id = super::SubscriptionId::new();
+
+        let sub = super::RelayEventSubscription {
+            id: id.clone(),
+            callback,
+        };
+
+        self.relay_event_subscribers
+            .borrow_mut()
+            .insert(id.clone(), sub);
+
+        id
+    }
+
+    /// Unsubscribe from relay events
+    pub fn unsubscribe_relay_events(&self, id: &super::SubscriptionId) {
+        self.relay_event_subscribers.borrow_mut().remove(id);
+    }
+
     /// Get all active subscriptions
     #[must_use]
     pub fn active_subscriptions(&self) -> Vec<super::SubscriptionInfo> {
@@ -108,7 +146,15 @@ impl NostrRelayPool {
             }
         }
     }
-    #[inline]
+
+    /// Dispatch a relay event to all relay event subscribers
+    fn dispatch_relay_event(&self, event: &nostro2::NostrRelayEvent) {
+        let subs = self.relay_event_subscribers.borrow();
+        for sub in subs.values() {
+            sub.callback.emit(event.clone());
+        }
+    }
+
     pub fn send<T>(&self, event: T) -> nostro2::NostrClientEvent
     where
         T: Into<nostro2::NostrClientEvent> + Clone,
@@ -137,7 +183,7 @@ impl NostrRelayPool {
 
 pub enum NostrRelayPoolAction {
     Open(String),
-    NewNote(nostro2::NostrRelayEvent),
+    RelayEvent(nostro2::NostrRelayEvent),
     CloseRelay(String),
     AddRelay(crate::relay_pool::UserRelay),
     RemoveRelay(crate::relay_pool::UserRelay),
@@ -149,8 +195,8 @@ pub enum NostrRelayPoolAction {
 /// Actions that change pool composition or health (`Open`, `CloseRelay`, `Reconnected`,
 /// `AddRelay`, `RemoveRelay`) return a new `Rc<Self>` so the context re-renders consumers.
 ///
-/// `NewNote` intentionally returns `self` (no re-render) — note dispatch is handled
-/// by per-subscription callbacks via `dispatch_note`, avoiding global re-renders.
+/// `RelayEvent` intentionally returns `self` (no re-render) — event dispatch is handled
+/// by per-subscription callbacks, avoiding global re-renders.
 impl Reducible for NostrRelayPool {
     type Action = NostrRelayPoolAction;
 
@@ -163,6 +209,7 @@ impl Reducible for NostrRelayPool {
                     note_dedup: self.note_dedup.clone(),
                     pending_relays: self.pending_relays.clone(),
                     subscriptions: self.subscriptions.clone(),
+                    relay_event_subscribers: self.relay_event_subscribers.clone(),
                 })
             }
             NostrRelayPoolAction::RemoveRelay(relay) => {
@@ -172,6 +219,7 @@ impl Reducible for NostrRelayPool {
                     note_dedup: self.note_dedup.clone(),
                     pending_relays: self.pending_relays.clone(),
                     subscriptions: self.subscriptions.clone(),
+                    relay_event_subscribers: self.relay_event_subscribers.clone(),
                 })
             }
             NostrRelayPoolAction::Open(url) => {
@@ -188,12 +236,16 @@ impl Reducible for NostrRelayPool {
                     note_dedup: self.note_dedup.clone(),
                     pending_relays: self.pending_relays.clone(),
                     subscriptions: self.subscriptions.clone(),
+                    relay_event_subscribers: self.relay_event_subscribers.clone(),
                 })
             }
-            NostrRelayPoolAction::NewNote(event) => {
-                // Dispatch to matching subscription callbacks — no global re-render
+            NostrRelayPoolAction::RelayEvent(ref event) => {
                 if let nostro2::NostrRelayEvent::NewNote(.., ref note) = event {
+                    // Notes go to note subscriptions only
                     self.dispatch_note(note);
+                } else {
+                    // All other relay events go to relay event subscribers
+                    self.dispatch_relay_event(event);
                 }
                 self
             }
@@ -211,6 +263,7 @@ impl Reducible for NostrRelayPool {
                     note_dedup: self.note_dedup.clone(),
                     pending_relays: self.pending_relays.clone(),
                     subscriptions: self.subscriptions.clone(),
+                    relay_event_subscribers: self.relay_event_subscribers.clone(),
                 })
             }
             NostrRelayPoolAction::Reconnected(ws) => {
@@ -224,6 +277,7 @@ impl Reducible for NostrRelayPool {
                     note_dedup: self.note_dedup.clone(),
                     pending_relays: self.pending_relays.clone(),
                     subscriptions: self.subscriptions.clone(),
+                    relay_event_subscribers: self.relay_event_subscribers.clone(),
                 })
             }
         }
@@ -238,7 +292,7 @@ pub struct RelayContextProps {
 }
 
 #[function_component(NostrRelayPoolProvider)]
-pub fn key_handler(props: &RelayContextProps) -> Html {
+pub fn nostr_relay_pool_provider(props: &RelayContextProps) -> Html {
     let pool = use_mut_ref(Vec::new);
     // Use bounded deduplication to prevent memory leaks
     // Keeps track of last 10,000 note IDs (~ 1MB max)
@@ -249,15 +303,19 @@ pub fn key_handler(props: &RelayContextProps) -> Html {
 
     let subscriptions = use_mut_ref(std::collections::HashMap::new);
 
+    let relay_event_subscribers = use_mut_ref(std::collections::HashMap::new);
+
     #[allow(clippy::redundant_clone)]
     let ctx = use_reducer({
         let note_dedup = note_dedup.clone();
         let subscriptions = subscriptions.clone();
+        let relay_event_subscribers = relay_event_subscribers.clone();
         move || NostrRelayPool {
             pool: pool.clone(),
             note_dedup,
             pending_relays,
             subscriptions,
+            relay_event_subscribers,
         }
     });
     let dispatch = ctx.dispatcher();

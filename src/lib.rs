@@ -8,7 +8,7 @@
 )]
 #![allow(clippy::future_not_send, clippy::missing_errors_doc)]
 
-pub mod browser_api;
+mod crypto;
 mod idb_manager;
 mod key_manager;
 mod relay_pool;
@@ -20,7 +20,7 @@ pub use key_manager::{
 };
 pub use relay_pool::{
     use_live_note, use_nostr_notes, use_nostr_relay_pool, use_notes_by_authors, use_notes_by_kind,
-    use_recent_notes, use_text_notes,
+    use_recent_notes, use_relay_events, use_text_notes,
 };
 
 // Re-export providers/components
@@ -31,7 +31,9 @@ pub use relay_pool::{NostrRelayPoolProvider, NostrRelayPoolStore};
 // Re-export types
 pub use idb_manager::{IdbStore, NostrIdb};
 pub use key_manager::{IdbKeypairEntry, NostrId, NostrIdAction};
-pub use relay_pool::{NostrRelayPool, ReadyState, SubscriptionId, SubscriptionInfo, UserRelay};
+pub use relay_pool::{
+    NostrRelayPool, ReadyState, RelayEventSubscription, SubscriptionId, SubscriptionInfo, UserRelay,
+};
 
 // Re-export test components behind feature gate
 #[cfg(feature = "test-components")]

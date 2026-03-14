@@ -26,16 +26,24 @@ pub fn nostr_id_login_test_suspense() -> Html {
 
 #[function_component(NostrIdLoginTest)]
 pub fn nostr_id_login_test() -> Html {
-    let ctx = crate::use_nostr_id_ctx();
-    let relay_ctx = crate::use_nostr_relay_pool();
-    let create_local_key = crate::use_create_local_key();
+    let Some(ctx) = crate::use_nostr_id_ctx() else {
+        return html! { <p>{"No identity context available"}</p> };
+    };
+    let Some(relay_ctx) = crate::use_nostr_relay_pool() else {
+        return html! { <p>{"No relay pool context available"}</p> };
+    };
+    let Some(create_local_key) = crate::use_create_local_key() else {
+        return html! { <p>{"No IDB context available"}</p> };
+    };
     let sign_onclick = {
         let ctx = ctx.clone();
         let relay_ctx = relay_ctx.clone();
         Callback::from(move |_| {
             let relay_ctx = relay_ctx.clone();
 
-            let pubkey = ctx.get_pubkey().expect("No pubkey");
+            let Some(pubkey) = ctx.get_pubkey().map(str::to_string) else {
+                return;
+            };
             let mut note = nostro2::NostrNote {
                 content: "Test Note".to_string(),
                 pubkey,
@@ -57,7 +65,9 @@ pub fn nostr_id_login_test() -> Html {
             let ctx = ctx.clone();
             let relay_ctx = relay_ctx.clone();
             yew::platform::spawn_local(async move {
-                let pubkey = ctx.get_pubkey().expect("No pubkey");
+                let Some(pubkey) = ctx.get_pubkey().map(str::to_string) else {
+                    return;
+                };
                 let mut note = NostrNote {
                     content: "Test Note".to_string(),
                     pubkey: pubkey.clone(),
@@ -85,7 +95,9 @@ pub fn nostr_id_login_test() -> Html {
             let ctx = ctx.clone();
             let relay_ctx = relay_ctx.clone();
             yew::platform::spawn_local(async move {
-                let pubkey = ctx.get_pubkey().expect("No pubkey");
+                let Some(pubkey) = ctx.get_pubkey().map(str::to_string) else {
+                    return;
+                };
 
                 // Create an inner test note
                 let mut inner_note = NostrNote {

@@ -33,7 +33,6 @@ impl TryFrom<JsValue> for UserRelay {
 }
 impl From<UserRelay> for JsValue {
     fn from(val: UserRelay) -> Self {
-        let string = serde_json::to_string(&val).unwrap_or_default();
-        web_sys::js_sys::JSON::parse(&string).unwrap_or_default()
+        serde_wasm_bindgen::to_value(&val).unwrap_or_default()
     }
 }

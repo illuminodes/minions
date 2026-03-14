@@ -8,19 +8,21 @@ mod websocket;
 pub use bounded_dedup::BoundedDedup;
 pub use hooks::{
     use_live_note, use_nostr_notes, use_notes_by_authors, use_notes_by_kind, use_recent_notes,
-    use_text_notes,
+    use_relay_events, use_text_notes,
 };
 pub use nostr_relay::UserRelay;
 pub use provider::{
     NostrRelayPool, NostrRelayPoolAction, NostrRelayPoolProvider, NostrRelayPoolStore,
 };
-pub use subscription::{note_matches_filter, SubscriptionId, SubscriptionInfo};
+pub use subscription::{
+    note_matches_filter, RelayEventSubscription, SubscriptionId, SubscriptionInfo,
+};
 pub use websocket::NostrWebSocket;
 pub use websocket::ReadyState;
 
 #[yew::hook]
-pub fn use_nostr_relay_pool() -> provider::NostrRelayPoolStore {
-    yew::use_context::<provider::NostrRelayPoolStore>().expect("No Nostr Relay Pool context found")
+pub fn use_nostr_relay_pool() -> Option<provider::NostrRelayPoolStore> {
+    yew::use_context::<provider::NostrRelayPoolStore>()
 }
 
 #[cfg(feature = "test-components")]

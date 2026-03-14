@@ -9,7 +9,7 @@ pub struct IdbManager {
 }
 impl PartialEq for IdbManager {
     fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(self, other)
+        self.db == other.db
     }
 }
 impl IdbManager {
@@ -35,7 +35,7 @@ impl Reducible for IdbManager {
 pub type IdbStore = UseReducerHandle<IdbManager>;
 
 #[function_component(IdbManagerProvider)]
-pub fn key_handler(props: &yew::html::ChildrenProps) -> HtmlResult {
+pub fn idb_manager_provider(props: &yew::html::ChildrenProps) -> HtmlResult {
     let db = yew::suspense::use_future_with((), |_| async move {
         crate::idb_manager::IdbManager::new().await
     })?;
@@ -60,7 +60,7 @@ pub fn use_idb_manager() -> Option<IdbStore> {
 }
 
 #[hook]
-pub fn use_idb_database() -> db::NostrIdb {
-    let ctx = use_context::<IdbStore>().expect("No IdbStore context found");
-    ctx.db.clone()
+pub fn use_idb_database() -> Option<db::NostrIdb> {
+    let ctx = use_context::<IdbStore>()?;
+    Some(ctx.db.clone())
 }

@@ -14,9 +14,8 @@ impl IdbKeypairEntry {
     ) -> Result<Self, crate::MinionError> {
         let array = keypair.secret_key();
         let js_array = web_sys::js_sys::Uint8Array::from(array.as_slice());
-        let crypto_key: web_sys::CryptoKey = crate::browser_api::BrowserCrypto::new()?
-            .import_key_array(js_array.into())
-            .await?;
+        let crypto_key: web_sys::CryptoKey =
+            crate::crypto::import_key_array(js_array.into()).await?;
         Ok(Self {
             pubkey: keypair.public_key(),
             keypair: crypto_key,
@@ -30,12 +29,10 @@ pub struct NostrId {
     pubkey: Option<String>,
 }
 impl NostrId {
-    #[inline]
     #[must_use]
-    pub fn get_pubkey(&self) -> Option<String> {
-        self.pubkey.clone()
+    pub fn get_pubkey(&self) -> Option<&str> {
+        self.pubkey.as_deref()
     }
-    #[inline]
     pub fn sign_note(&self, note: &mut NostrNote) -> Result<(), crate::MinionError> {
         let id = self
             .identity
@@ -43,7 +40,6 @@ impl NostrId {
             .ok_or(crate::MinionError::NoNostrKeyFound)?;
         Ok(id.sign_nostr_note(note)?)
     }
-    #[inline]
     pub fn sign_encrypted_note(
         &self,
         note: &mut NostrNote,
@@ -59,7 +55,6 @@ impl NostrId {
             &nostro2_signer::keypair::EncryptionScheme::Nip44,
         )?)
     }
-    #[inline]
     pub fn decrypt_note(&self, event: &NostrNote) -> Result<String, crate::MinionError> {
         let id = self
             .identity
@@ -73,12 +68,10 @@ impl NostrId {
             )?
             .to_string())
     }
-    #[inline]
     #[must_use]
     pub const fn get_nostr_key(&self) -> Option<&nostro2_signer::keypair::NostrKeypair> {
         self.identity.as_ref()
     }
-    #[inline]
     pub fn create_giftwrap(
         &self,
         inner_note: &mut NostrNote,
@@ -116,10 +109,14 @@ impl Reducible for NostrId {
 pub type NostrIdStore = UseReducerHandle<NostrId>;
 
 #[function_component(NostrIdProvider)]
-pub fn key_handler(props: &yew::html::ChildrenProps) -> HtmlResult {
+pub fn nostr_id_provider(props: &yew::html::ChildrenProps) -> HtmlResult {
     let idb = crate::idb_manager::use_idb_database();
-    let identity =
-        yew::suspense::use_future_with((), |_| async move { idb.load_identity().await })?;
+    let identity = yew::suspense::use_future_with((), |_| async move {
+        match idb {
+            Some(idb) => idb.load_identity().await,
+            None => Ok(None),
+        }
+    })?;
     let ctx = use_reducer(|| NostrId {
         identity: identity.as_ref().cloned().ok().flatten(),
         pubkey: identity.as_ref().ok().and_then(|id| {

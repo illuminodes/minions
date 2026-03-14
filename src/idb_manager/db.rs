@@ -20,7 +20,7 @@ pub struct NostrIdb {
 }
 impl PartialEq for NostrIdb {
     fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(self, other)
+        std::rc::Rc::ptr_eq(&self.db, &other.db)
     }
 }
 impl NostrIdb {
@@ -41,7 +41,8 @@ impl NostrIdb {
             db: std::rc::Rc::new(db),
         })
     }
-    /// Upgrades the database to the latest version. This upgrade creates the necessary stores for the database.
+    /// Upgrades the database to the latest version. Checks for existing stores
+    /// before creating them to support upgrades from any previous version.
     ///
     /// Stores:
     /// - `user_identity`: Stores the user's identity information, including their public key and private key.
@@ -55,15 +56,30 @@ impl NostrIdb {
     /// Returns an error if the database fails.
     fn upgrade(event: &idb::event::VersionChangeEvent) -> Result<(), crate::MinionError> {
         let database = idb::DatabaseEvent::database(event)?;
-        let mut store_params_identity = idb::ObjectStoreParams::new();
-        store_params_identity.key_path(Some(idb::KeyPath::new_single("pubkey")));
-        database.create_object_store(
-            NostrDbStoreName::UserIdentity.as_ref(),
-            store_params_identity,
-        )?;
-        let mut store_params_relay = idb::ObjectStoreParams::new();
-        store_params_relay.key_path(Some(idb::KeyPath::new_single("url")));
-        database.create_object_store(NostrDbStoreName::UserRelay.as_ref(), store_params_relay)?;
+        let existing_stores = database.store_names();
+
+        if !existing_stores
+            .iter()
+            .any(|n| n == NostrDbStoreName::UserIdentity.as_ref())
+        {
+            let mut store_params_identity = idb::ObjectStoreParams::new();
+            store_params_identity.key_path(Some(idb::KeyPath::new_single("pubkey")));
+            database.create_object_store(
+                NostrDbStoreName::UserIdentity.as_ref(),
+                store_params_identity,
+            )?;
+        }
+
+        if !existing_stores
+            .iter()
+            .any(|n| n == NostrDbStoreName::UserRelay.as_ref())
+        {
+            let mut store_params_relay = idb::ObjectStoreParams::new();
+            store_params_relay.key_path(Some(idb::KeyPath::new_single("url")));
+            database
+                .create_object_store(NostrDbStoreName::UserRelay.as_ref(), store_params_relay)?;
+        }
+
         Ok(())
     }
 
@@ -178,8 +194,7 @@ impl NostrIdb {
             return Ok(None);
         };
 
-        let crypto = crate::browser_api::BrowserCrypto::new()?;
-        let secret_array = crypto.export_raw_key(keys.keypair).await?;
+        let secret_array = crate::crypto::export_raw_key(keys.keypair).await?;
         let secret_slice = web_sys::js_sys::Uint8Array::new(&secret_array);
         let mut keypair =
             nostro2_signer::keypair::NostrKeypair::try_from(secret_slice.to_vec().as_slice())?;

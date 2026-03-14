@@ -100,7 +100,7 @@ impl NostrWebSocket {
             }) as Box<dyn FnMut()>)
         };
 
-        // Create onmessage handler
+        // Create onmessage handler — dispatches ALL relay events, not just notes
         let onmessage = {
             let dispatch = dispatch.clone();
             let note_dedup = note_dedup.clone();
@@ -114,7 +114,7 @@ impl NostrWebSocket {
                     return;
                 };
 
-                // Handle notes with deduplication
+                // Dedup notes specifically
                 if let nostro2::NostrRelayEvent::NewNote(.., ref note) = data {
                     if let Some(ref note_id) = note.id {
                         // Check and insert atomically - returns false if duplicate
@@ -122,8 +122,10 @@ impl NostrWebSocket {
                             return; // Skip duplicate
                         }
                     }
-                    dispatch.dispatch(super::NostrRelayPoolAction::NewNote(data));
                 }
+
+                // Dispatch all relay events
+                dispatch.dispatch(super::NostrRelayPoolAction::RelayEvent(data));
             }) as Box<dyn FnMut(web_sys::MessageEvent)>)
         };
 
@@ -133,32 +135,25 @@ impl NostrWebSocket {
             let dispatch = dispatch.clone();
             let note_dedup = note_dedup.clone();
 
-            Closure::wrap(Box::new(move |e: web_sys::CloseEvent| {
+            Closure::wrap(Box::new(move |_e: web_sys::CloseEvent| {
                 dispatch.dispatch(super::NostrRelayPoolAction::CloseRelay(url.clone()));
 
-                // Reconnect if not a clean close
-                if !e.was_clean() {
-                    let next_timeout = timeout.saturating_mul(2).min(MAX_RECONNECT_SECS);
-                    let url = url.clone();
-                    let dispatch = dispatch.clone();
-                    let note_dedup = note_dedup.clone();
+                // Always attempt reconnect with backoff
+                let next_timeout = timeout.saturating_mul(2).min(MAX_RECONNECT_SECS);
+                let url = url.clone();
+                let dispatch = dispatch.clone();
+                let note_dedup = note_dedup.clone();
 
-                    yew::platform::spawn_local(async move {
-                        yew::platform::time::sleep(std::time::Duration::from_secs(
-                            next_timeout.into(),
-                        ))
+                yew::platform::spawn_local(async move {
+                    yew::platform::time::sleep(std::time::Duration::from_secs(next_timeout.into()))
                         .await;
 
-                        if let Ok(ws) = Self::connect_with_retry(
-                            url,
-                            dispatch.clone(),
-                            note_dedup,
-                            next_timeout,
-                        ) {
-                            dispatch.dispatch(super::NostrRelayPoolAction::Reconnected(ws));
-                        }
-                    });
-                }
+                    if let Ok(ws) =
+                        Self::connect_with_retry(url, dispatch.clone(), note_dedup, next_timeout)
+                    {
+                        dispatch.dispatch(super::NostrRelayPoolAction::Reconnected(ws));
+                    }
+                });
             }) as Box<dyn FnMut(web_sys::CloseEvent)>)
         };
 

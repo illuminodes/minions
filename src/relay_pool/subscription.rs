@@ -25,7 +25,7 @@ impl Default for SubscriptionId {
     }
 }
 
-/// Information about an active subscription
+/// Information about an active note subscription
 #[derive(Clone)]
 pub struct SubscriptionInfo {
     pub id: SubscriptionId,
@@ -42,6 +42,21 @@ impl std::fmt::Debug for SubscriptionInfo {
             .field("filter", &self.filter)
             .field("created_at", &self.created_at)
             .field("note_count", &self.note_count)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Information about a relay event subscription
+#[derive(Clone)]
+pub struct RelayEventSubscription {
+    pub id: SubscriptionId,
+    pub callback: Callback<nostro2::NostrRelayEvent>,
+}
+
+impl std::fmt::Debug for RelayEventSubscription {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RelayEventSubscription")
+            .field("id", &self.id)
             .finish_non_exhaustive()
     }
 }

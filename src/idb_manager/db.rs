@@ -33,9 +33,7 @@ impl NostrIdb {
         let mut open_request = factory.open(NOSTR_DB_NAME, Some(NOSTR_DB_VERSION))?;
 
         open_request.on_upgrade_needed(|event| {
-            if let Err(e) = Self::upgrade(&event) {
-                web_sys::console::error_1(&e.to_string().into());
-            }
+            let _ = Self::upgrade(&event);
         });
 
         let db = open_request.await?;
@@ -183,8 +181,10 @@ impl NostrIdb {
         let crypto = crate::browser_api::BrowserCrypto::default();
         let secret_array = crypto.export_raw_key(keys.keypair).await?;
         let secret_slice = web_sys::js_sys::Uint8Array::new(&secret_array);
-        Ok(Some(nostro2_signer::keypair::NostrKeypair::try_from(
-            secret_slice.to_vec().as_slice(),
-        )?))
+        let mut keypair =
+            nostro2_signer::keypair::NostrKeypair::try_from(secret_slice.to_vec().as_slice())?;
+        // Keys loaded from storage should be extractable for backup/recovery
+        keypair.set_extractable(true);
+        Ok(Some(keypair))
     }
 }

@@ -40,7 +40,6 @@ pub fn key_handler(props: &yew::html::ChildrenProps) -> HtmlResult {
         crate::idb_manager::IdbManager::new().await
     })?;
     let Ok(db) = (db).as_ref().cloned() else {
-        web_sys::console::error_1(&"No Idb Manager".into());
         return Ok(html! {
             <yew::suspense::Suspense />
         });

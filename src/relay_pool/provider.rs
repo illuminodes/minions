@@ -95,24 +95,8 @@ impl NostrRelayPool {
     fn dispatch_note(&self, note: &nostro2::NostrNote) {
         let mut subs = self.subscriptions.borrow_mut();
 
-        web_sys::console::log_1(
-            &format!(
-                "Dispatching note kind:{} to {} subscriptions",
-                note.kind,
-                subs.len()
-            )
-            .into(),
-        );
-
         for sub in subs.values_mut() {
             let matches = super::note_matches_filter(note, &sub.filter);
-            web_sys::console::log_1(
-                &format!(
-                    "  Sub filter kinds:{:?} - matches: {}",
-                    sub.filter.kinds, matches
-                )
-                .into(),
-            );
 
             if matches {
                 sub.note_count += 1;
@@ -128,12 +112,8 @@ impl NostrRelayPool {
         let event = event.into();
 
         // Serialize once instead of per-relay
-        let event_str = match serde_json::to_string(&event) {
-            Ok(s) => s,
-            Err(e) => {
-                web_sys::console::error_1(&format!("Failed to serialize event: {e}").into());
-                return event;
-            }
+        let Ok(event_str) = serde_json::to_string(&event) else {
+            return event;
         };
 
         for relay in self.pool.borrow().iter() {
@@ -142,9 +122,7 @@ impl NostrRelayPool {
                     relay.queue.borrow_mut().push(event.clone());
                 }
                 super::ReadyState::OPEN => {
-                    if let Err(e) = relay.websocket.send_with_str(&event_str) {
-                        web_sys::console::error_1(&e);
-                    }
+                    let _ = relay.websocket.send_with_str(&event_str);
                 }
                 _ => {}
             }
@@ -160,6 +138,7 @@ pub enum NostrRelayPoolAction {
     CloseRelay(String),
     AddRelay(crate::relay_pool::UserRelay),
     RemoveRelay(crate::relay_pool::UserRelay),
+    Reconnected(super::NostrWebSocket),
 }
 impl Reducible for NostrRelayPool {
     type Action = NostrRelayPoolAction;
@@ -212,6 +191,15 @@ impl Reducible for NostrRelayPool {
                         }
                     }
                 } // Drop borrow before returning self
+                self
+            }
+            NostrRelayPoolAction::Reconnected(ws) => {
+                {
+                    let mut pool = self.pool.borrow_mut();
+                    // Replace the old entry for this URL, or push new
+                    pool.retain(|r| r.url != ws.url);
+                    pool.push(ws);
+                }
                 self
             }
         }

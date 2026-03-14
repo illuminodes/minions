@@ -47,8 +47,12 @@ impl Eq for NostrWebSocket {}
 
 impl Drop for NostrWebSocket {
     fn drop(&mut self) {
-        // Close websocket when dropped
-        // Closures are automatically cleaned up via Rc<Closure>
+        // Detach all handlers BEFORE closing to prevent
+        // "closure invoked after being dropped" errors
+        self.websocket.set_onopen(None);
+        self.websocket.set_onmessage(None);
+        self.websocket.set_onclose(None);
+        self.websocket.set_onerror(None);
         let _ = self.websocket.close();
     }
 }
@@ -82,15 +86,12 @@ impl NostrWebSocket {
             let queue = queue.clone();
 
             Closure::wrap(Box::new(move || {
-                web_sys::console::log_1(&format!("Connected to relay: {url}").into());
                 dispatch.dispatch(super::NostrRelayPoolAction::Open(url.clone()));
 
                 // Send all queued messages
                 for event in queue.borrow().iter() {
                     if let Ok(event_str) = serde_json::to_string(event) {
-                        if let Err(e) = sender.send_with_str(&event_str) {
-                            web_sys::console::error_1(&e);
-                        }
+                        let _ = sender.send_with_str(&event_str);
                     }
                 }
                 queue.borrow_mut().clear();
@@ -108,7 +109,6 @@ impl NostrWebSocket {
                     .as_string()
                     .and_then(|s| s.parse::<nostro2::NostrRelayEvent>().ok())
                 else {
-                    web_sys::console::error_1(&format!("Invalid message: {e:?}").into());
                     return;
                 };
 
@@ -134,9 +134,6 @@ impl NostrWebSocket {
             let note_dedup = note_dedup.clone();
 
             Closure::wrap(Box::new(move |e: web_sys::CloseEvent| {
-                web_sys::console::log_1(
-                    &format!("Relay closed: {} (clean: {})", url, e.was_clean()).into(),
-                );
                 dispatch.dispatch(super::NostrRelayPoolAction::CloseRelay(url.clone()));
 
                 // Reconnect if not a clean close
@@ -146,18 +143,20 @@ impl NostrWebSocket {
                     let dispatch = dispatch.clone();
                     let note_dedup = note_dedup.clone();
 
-                    web_sys::console::log_1(
-                        &format!("Scheduling reconnect to {url} in {next_timeout}s").into(),
-                    );
-
                     yew::platform::spawn_local(async move {
                         yew::platform::time::sleep(std::time::Duration::from_secs(
                             next_timeout.into(),
                         ))
                         .await;
 
-                        web_sys::console::log_1(&format!("Reconnecting to {url}...").into());
-                        let _ = Self::connect_with_retry(url, dispatch, note_dedup, next_timeout);
+                        if let Ok(ws) = Self::connect_with_retry(
+                            url,
+                            dispatch.clone(),
+                            note_dedup,
+                            next_timeout,
+                        ) {
+                            dispatch.dispatch(super::NostrRelayPoolAction::Reconnected(ws));
+                        }
                     });
                 }
             }) as Box<dyn FnMut(web_sys::CloseEvent)>)
@@ -165,10 +164,9 @@ impl NostrWebSocket {
 
         // Create onerror handler
         let onerror = {
-            let url = url.clone();
-            Closure::wrap(Box::new(move |e: web_sys::ErrorEvent| {
-                web_sys::console::error_1(&format!("Relay error on {url}: {e:?}").into());
-            }) as Box<dyn FnMut(web_sys::ErrorEvent)>)
+            Closure::wrap(
+                Box::new(move |_e: web_sys::ErrorEvent| {}) as Box<dyn FnMut(web_sys::ErrorEvent)>
+            )
         };
 
         // Attach handlers to websocket

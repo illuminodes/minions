@@ -58,7 +58,6 @@ pub fn relay_pool_test() -> yew::Html {
 
     let _note_sender = relay_ctx.clone();
     let send_note_onclick = yew::Callback::from(move |_| {
-        web_sys::console::log_1(&"Sending note".into());
         // let new_keys = nostro2_signer::keypair::NostrKeypair::generate(false);
         // let mut new_note = NostrNote {
         //     content: "Minion Note".to_string(),
@@ -69,7 +68,6 @@ pub fn relay_pool_test() -> yew::Html {
         // if new_keys.sign_nostr_note(&mut new_note).is_ok() {
         //     note_sender.send(new_note);
         // }
-        // web_sys::console::log_1(&"Sent note".into());
     });
 
     subscription_id.as_ref().map_or_else(

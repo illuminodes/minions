@@ -39,17 +39,8 @@ pub fn use_nostr_notes(filter: NostrSubscription) -> Vec<NostrNote> {
             let id = pool.subscribe(filter.clone(), {
                 let notes = notes.clone();
                 let limit = filter.limit;
-                let filter_kinds = filter.kinds.clone();
 
                 Callback::from(move |note: NostrNote| {
-                    web_sys::console::log_1(
-                        &format!(
-                            "Callback fired! Filter kinds:{:?}, Note kind:{}",
-                            filter_kinds, note.kind
-                        )
-                        .into(),
-                    );
-
                     // Prepend new note (newest first)
                     let mut current = (*notes).clone();
                     current.insert(0, note);

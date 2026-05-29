@@ -73,13 +73,26 @@ pub enum RelayCommand {
     },
 }
 
+/// What the reactor sends OUT to the app.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum WorkerOut {
+    /// A matched note.
+    Note(NostrNote),
+    /// Worker-side queue depth: notes that have been matched + enqueued but not
+    /// yet shipped across the bridge. This is the "hidden" backlog that the
+    /// app's own backlog metric can't see — when it climbs under load, the
+    /// bridge (serialize + postMessage) is the bottleneck, which is what drives
+    /// rising end-to-end latency at large payloads.
+    QueueDepth(u64),
+}
+
 /// The reactor: connects to relays inside the worker, dedups + filters notes,
 /// and streams matches back to the bridge.
 ///
 /// Input  = [`RelayCommand`]
-/// Output = [`NostrNote`]
+/// Output = [`WorkerOut`]
 #[reactor]
-pub async fn RelayReactor(mut scope: ReactorScope<RelayCommand, NostrNote>) {
+pub async fn RelayReactor(mut scope: ReactorScope<RelayCommand, WorkerOut>) {
     // Bounded dedup, shared with each socket's onmessage closure.
     let dedup = Rc::new(RefCell::new(nostr_minions::BoundedDedup::new(10_000)));
 
@@ -95,6 +108,12 @@ pub async fn RelayReactor(mut scope: ReactorScope<RelayCommand, NostrNote>) {
     // back out to the bridge below. An mpsc channel lets the sync JS callback
     // hand work to the async reactor loop.
     let (note_tx, mut note_rx) = mpsc::unbounded::<NostrNote>();
+
+    // Queue-depth accounting: `enqueued` is bumped wherever a note is pushed
+    // into note_tx (flood + sockets); `shipped` is bumped after each successful
+    // scope.send. depth = enqueued - shipped = notes waiting in the bridge.
+    let enqueued = Rc::new(std::cell::Cell::new(0_u64));
+    let mut shipped = 0_u64;
 
     loop {
         futures::select! {
@@ -136,6 +155,7 @@ pub async fn RelayReactor(mut scope: ReactorScope<RelayCommand, NostrNote>) {
                             dedup.clone(),
                             filters.clone(),
                             note_tx.clone(),
+                            enqueued.clone(),
                         );
                     }
                     // Bridge closed — application dropped the subscription.
@@ -146,8 +166,18 @@ pub async fn RelayReactor(mut scope: ReactorScope<RelayCommand, NostrNote>) {
             note = note_rx.next() => {
                 if let Some(note) = note {
                     // If the bridge is gone, stop.
-                    if scope.send(note).await.is_err() {
+                    if scope.send(WorkerOut::Note(note)).await.is_err() {
                         break;
+                    }
+                    shipped += 1;
+                    // Report the bridge queue depth every 64 notes (cheap, and
+                    // frequent enough to watch it climb without spamming the
+                    // bridge with depth reports that would themselves queue).
+                    if shipped % 64 == 0 {
+                        let depth = enqueued.get().saturating_sub(shipped);
+                        if scope.send(WorkerOut::QueueDepth(depth)).await.is_err() {
+                            break;
+                        }
                     }
                 }
             }
@@ -162,6 +192,7 @@ pub async fn RelayReactor(mut scope: ReactorScope<RelayCommand, NostrNote>) {
 /// Notes are emitted in ~16ms ticks (one animation frame) so they spread over
 /// wall-clock time rather than arriving as a single blocking burst — matching
 /// how a real high-rate feed behaves.
+#[allow(clippy::too_many_arguments)] // benchmark plumbing; not a public API
 fn spawn_flood(
     rate: u32,
     secs: u32,
@@ -170,6 +201,7 @@ fn spawn_flood(
     dedup: Rc<RefCell<nostr_minions::BoundedDedup>>,
     filters: Rc<RefCell<Vec<NostrSubscription>>>,
     note_tx: mpsc::UnboundedSender<NostrNote>,
+    enqueued: Rc<std::cell::Cell<u64>>,
 ) {
     yew::platform::spawn_local(async move {
         const TICK_MS: u32 = 16;
@@ -197,8 +229,11 @@ fn spawn_flood(
                     .borrow()
                     .iter()
                     .any(|f| nostr_minions::note_matches_filter(&note, f));
-                if matched && note_tx.unbounded_send(note).is_err() {
-                    return; // bridge gone
+                if matched {
+                    if note_tx.unbounded_send(note).is_err() {
+                        return; // bridge gone
+                    }
+                    enqueued.set(enqueued.get() + 1);
                 }
             }
             yew::platform::time::sleep(Duration::from_millis(u64::from(TICK_MS))).await;

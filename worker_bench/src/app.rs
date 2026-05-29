@@ -66,6 +66,9 @@ struct Metrics {
     throughput: Throughput,
     latency_samples: Option<Latency>,
     label: &'static str,
+    /// Worker-side bridge queue depth (notes matched but not yet shipped
+    /// across the bridge). Reported by the worker; always 0 for in-thread.
+    worker_queue: u64,
 }
 
 // The metrics cell is a singleton shared by reference across the app, so all
@@ -89,6 +92,7 @@ impl Metrics {
         self.throughput = Throughput::default();
         self.latency_samples = Some(Latency::new(4096));
         self.label = label;
+        self.worker_queue = 0;
     }
 }
 
@@ -328,16 +332,24 @@ fn worker_panel(props: &PathProps) -> Html {
         let pending = pending.clone();
         let metrics = props.metrics.clone();
         use_reactor_bridge::<RelayReactor, _>(move |ev| {
-            if let yew_agent::reactor::ReactorEvent::Output(note) = ev {
-                // Per-note work only — no render here.
-                if let Some(em) = metrics::emit_ms_from_content(&note.content) {
-                    metrics
-                        .borrow_mut()
-                        .latency()
-                        .record(metrics::wall_ms() - em);
+            if let yew_agent::reactor::ReactorEvent::Output(out) = ev {
+                match out {
+                    relay_worker::WorkerOut::Note(note) => {
+                        // Per-note work only — no render here.
+                        if let Some(em) = metrics::emit_ms_from_content(&note.content) {
+                            metrics
+                                .borrow_mut()
+                                .latency()
+                                .record(metrics::wall_ms() - em);
+                        }
+                        metrics.borrow_mut().throughput.produce(1);
+                        pending.borrow_mut().push_back(note);
+                    }
+                    // The hidden bridge backlog the app's own metric can't see.
+                    relay_worker::WorkerOut::QueueDepth(depth) => {
+                        metrics.borrow_mut().worker_queue = depth;
+                    }
                 }
-                metrics.borrow_mut().throughput.produce(1);
-                pending.borrow_mut().push_back(note);
             }
         })
     };
@@ -509,6 +521,8 @@ fn metrics_panel(props: &MetricsProps) -> Html {
                 { cell("out /s", t.per_sec_out.to_string(), "#16a34a") }
                 { cell("backlog", t.backlog().to_string(),
                     if t.backlog() > 1000 { "#dc2626" } else { "#111827" }) }
+                { cell("wkr queue", m.worker_queue.to_string(),
+                    if m.worker_queue > 1000 { "#dc2626" } else { "#111827" }) }
                 { cell("lat p50", format!("{p50:.1}ms"), "#111827") }
                 { cell("lat p95", format!("{p95:.1}ms"), "#d97706") }
                 { cell("lat p99", format!("{p99:.1}ms"), "#dc2626") }
@@ -641,6 +655,7 @@ fn use_bench_sampler(metrics: SharedMetrics) {
                 f64::from(u32::try_from(m.throughput.per_sec_out).unwrap_or(u32::MAX)).into(),
             );
             set("backlog", (m.throughput.backlog() as f64).into());
+            set("worker_queue", (m.worker_queue as f64).into());
             set("lat_p50_ms", p50.into());
             set("lat_p95_ms", p95.into());
             set("lat_p99_ms", p99.into());

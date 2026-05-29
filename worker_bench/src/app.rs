@@ -167,6 +167,7 @@ fn app() -> Html {
                 </span>
             </div>
 
+            <SmoothnessMeter />
             <MetricsPanel metrics={metrics.clone()} />
 
             <div style="max-width:680px; margin:0 auto;">
@@ -222,14 +223,20 @@ fn in_thread_panel(props: &PathProps) -> Html {
             let dedup = dedup.clone();
             let filter = kind1_filter();
             yew::platform::spawn_local(async move {
-                const TICK_MS: u32 = 16;
-                let ticks = FLOOD_SECS * (1000 / TICK_MS);
-                let per_tick = (rate * TICK_MS / 1000).max(1);
-                for _ in 0..ticks {
+                // Coarse burst cadence (NOT per-frame): a real relay socket
+                // hands you a whole batch in one onmessage call, and ALL of
+                // that parse+dedup+filter runs synchronously on the main thread
+                // before the event loop can paint. 100ms bursts make that block
+                // visible as dropped frames — the cost the worker avoids.
+                const BURST_MS: u32 = 100;
+                let bursts = FLOOD_SECS * (1000 / BURST_MS);
+                let per_burst = (rate * BURST_MS / 1000).max(1);
+                for _ in 0..bursts {
                     let emit = metrics::wall_ms();
                     let mut produced = 0u64;
                     let mut rendered = 0u64;
-                    for _ in 0..per_tick {
+                    // Tight, non-yielding loop — blocks the main thread.
+                    for _ in 0..per_burst {
                         let s = *seq.borrow();
                         *seq.borrow_mut() += 1;
                         produced += 1;
@@ -265,7 +272,7 @@ fn in_thread_panel(props: &PathProps) -> Html {
                         m.throughput.render(rendered);
                     }
                     force.force_update();
-                    yew::platform::time::sleep(Duration::from_millis(u64::from(TICK_MS))).await;
+                    yew::platform::time::sleep(Duration::from_millis(u64::from(BURST_MS))).await;
                 }
             });
         })
@@ -491,6 +498,69 @@ fn metrics_panel(props: &MetricsProps) -> Html {
                 { cell("worst", format!("{:.0}ms", j.worst), "#dc2626") }
                 { cell("jank %", format!("{:.1}", j.jank_pct()), "#dc2626") }
             </div>
+        </div>
+    }
+}
+
+/// A main-thread-driven smoothness indicator. A JS `requestAnimationFrame`
+/// loop advances a rotating bar and computes a rolling FPS. Because it runs ON
+/// the main thread, it visibly FREEZES when the main thread is blocked (the
+/// in-thread flood's parse bursts) and stays smooth when work is off-thread
+/// (the worker). This is the human-visible version of the jank histogram.
+#[function_component(SmoothnessMeter)]
+fn smoothness_meter() -> Html {
+    let angle = use_state(|| 0f64);
+    let fps = use_state(|| 0f64);
+
+    use_effect_with((), {
+        let angle = angle.clone();
+        let fps = fps.clone();
+        move |()| {
+            let last = Rc::new(RefCell::new(0f64));
+            let cb: RafClosure = Rc::new(RefCell::new(None));
+            let cb2 = cb.clone();
+            *cb.borrow_mut() = Some(Closure::wrap(Box::new(move |ts: f64| {
+                let prev = *last.borrow();
+                if prev > 0.0 {
+                    let dt = ts - prev;
+                    if dt > 0.0 {
+                        // Smooth the FPS a little so the number is readable.
+                        let inst = 1000.0 / dt;
+                        fps.set((*fps).mul_add(0.8, inst * 0.2));
+                    }
+                }
+                *last.borrow_mut() = ts;
+                angle.set((*angle + 6.0) % 360.0);
+                if let (Some(win), Some(c)) = (web_sys::window(), cb2.borrow().as_ref()) {
+                    let _ = win.request_animation_frame(c.as_ref().unchecked_ref());
+                }
+            }) as Box<dyn FnMut(f64)>));
+            if let (Some(win), Some(c)) = (web_sys::window(), cb.borrow().as_ref()) {
+                let _ = win.request_animation_frame(c.as_ref().unchecked_ref());
+            }
+            move || drop(cb)
+        }
+    });
+
+    let fps_now = *fps;
+    let fps_color = if fps_now >= 50.0 {
+        "#16a34a"
+    } else if fps_now >= 30.0 {
+        "#d97706"
+    } else {
+        "#dc2626"
+    };
+    html! {
+        <div style="display:flex; align-items:center; justify-content:center; gap:.75rem; margin:.4rem;">
+            <div style={format!(
+                "width:28px; height:28px; border:4px solid #d1d5db; border-top-color:#2563eb; \
+                 border-radius:50%; transform:rotate({}deg);", *angle
+            )}></div>
+            <span style="font-size:.85rem; color:#6b7280;">{"main-thread animation — "}</span>
+            <span style={format!("font-size:.95rem; font-weight:700; color:{fps_color};")}>
+                {format!("{fps_now:.0} fps")}
+            </span>
+            <span style="font-size:.75rem; color:#9ca3af;">{"(stutters when the UI thread blocks)"}</span>
         </div>
     }
 }

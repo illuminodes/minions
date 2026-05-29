@@ -1,32 +1,43 @@
 //! Benchmark application (UI thread / `data-type="main"`).
 //!
-//! Renders two panels side by side, each subscribed to the SAME relays and the
-//! SAME kind-1 filter, so the only difference is WHERE the work happens:
+//! Compares two relay-ingestion architectures under a controlled synthetic
+//! load, with quantitative instrumentation — because at live-relay rates both
+//! are trivially fast and indistinguishable by eye.
 //!
-//! - In-thread panel: `nostr-minions` pool. JSON parse + dedup + filter all run
-//!   on the UI thread.
-//! - Worker panel: `RelayReactor` in a Web Worker. That work runs off the UI
-//!   thread; matched notes cross the bridge (bincode + postMessage) before
-//!   rendering.
+//! - **In-thread**: parse + dedup + filter run on the UI thread (what the
+//!   `nostr-minions` pool does in its socket `onmessage`). The flood feeder
+//!   runs that same work on the main thread.
+//! - **Worker**: the `RelayReactor` does that work off-thread and streams
+//!   matched notes back across the bridge (JSON encode + postMessage).
 //!
-//! Each panel shows its render count and notes-received count. A shared
-//! main-thread "jank meter" samples requestAnimationFrame deltas so you can
-//! watch UI-thread responsiveness while notes stream in.
+//! Instrumentation (see `metrics.rs`), all sampled identically for both paths:
+//! - main-thread jank histogram (rAF frame intervals)
+//! - throughput (produced vs rendered per second, + backlog)
+//! - per-note end-to-end latency (p50/p95/p99), via a timestamp embedded in
+//!   each synthetic note's content so it survives the worker round-trip
+//! - a once-per-second `[BENCH]` `console.table` dump
 
 #[path = "relay_worker.rs"]
 mod relay_worker;
+// Reuse the metrics module already loaded by relay_worker; loading metrics.rs
+// a second time via #[path] would define it twice in this bin.
+use relay_worker::metrics;
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
+use std::time::Duration;
 
-use nostro2::{NostrNote, NostrSubscription};
-use relay_worker::{RelayCommand, RelayReactor};
+use metrics::{JankHistogram, Latency, Throughput};
+use nostro2::{NostrNote, NostrRelayEvent, NostrSubscription};
+use relay_worker::{JsonCodec, RelayCommand, RelayReactor};
+use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
 use yew::prelude::*;
 use yew_agent::reactor::{use_reactor_subscription, ReactorProvider};
 
-const RELAYS: [&str; 2] = ["wss://relay.damus.io", "wss://relay.nostr.band"];
 const LIMIT: u32 = 50;
+const FLOOD_SECS: u32 = 5;
 
 fn kind1_filter() -> NostrSubscription {
     NostrSubscription {
@@ -40,103 +51,299 @@ fn main() {
     yew::Renderer::<App>::new().render();
 }
 
+/// Self-rescheduling `requestAnimationFrame` callback handle.
+type RafClosure = Rc<RefCell<Option<Closure<dyn FnMut(f64)>>>>;
+
+/// Shared, mutable benchmark state. One instance lives at the app root and is
+/// updated by whichever path is active and read by the metrics UI.
+#[derive(Default)]
+struct Metrics {
+    jank: JankHistogram,
+    throughput: Throughput,
+    latency_samples: Option<Latency>,
+    label: &'static str,
+}
+
+// The metrics cell is a singleton shared by reference across the app, so all
+// props referencing it are equal. This satisfies the `Properties` PartialEq
+// bound without diffing the interior (which mutates constantly); components
+// re-render from their own state/timers, not from prop changes here.
+impl PartialEq for Metrics {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
+impl Metrics {
+    fn latency(&mut self) -> &mut Latency {
+        self.latency_samples
+            .get_or_insert_with(|| Latency::new(4096))
+    }
+    /// Reset everything except keep the latency buffer allocated.
+    fn reset(&mut self, label: &'static str) {
+        self.jank = JankHistogram::default();
+        self.throughput = Throughput::default();
+        self.latency_samples = Some(Latency::new(4096));
+        self.label = label;
+    }
+}
+
+type SharedMetrics = Rc<RefCell<Metrics>>;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Path {
+    None,
+    InThread,
+    Worker,
+}
+
 #[function_component(App)]
 fn app() -> Html {
+    let path = use_state(|| Path::None);
+    let rate = use_state(|| 2000u32);
+    let metrics: SharedMetrics = use_mut_ref(Metrics::default);
+
+    // Continuous jank sampling + once-per-second throughput sample & console
+    // dump. Runs for the lifetime of the app, regardless of active path.
+    use_bench_sampler(metrics.clone());
+
+    let switch = {
+        let path = path.clone();
+        let metrics = metrics.clone();
+        move |target: Path, label: &'static str| {
+            let path = path.clone();
+            let metrics = metrics.clone();
+            Callback::from(move |_| {
+                metrics.borrow_mut().reset(label);
+                path.set(target);
+            })
+        }
+    };
+
+    let btn = |label: &'static str, target: Path, on: Callback<MouseEvent>, color: &str| {
+        let active = *path == target;
+        let bg = if active { color } else { "#e5e7eb" };
+        let fg = if active { "white" } else { "#374151" };
+        html! {
+            <button onclick={on} style={format!(
+                "padding:.5rem 1rem; margin:0 .25rem; border:none; border-radius:6px; \
+                 cursor:pointer; font-weight:600; background:{bg}; color:{fg};"
+            )}>{label}</button>
+        }
+    };
+
+    let on_rate = {
+        let rate = rate.clone();
+        Callback::from(move |e: InputEvent| {
+            let v = e
+                .target_unchecked_into::<web_sys::HtmlInputElement>()
+                .value();
+            if let Ok(n) = v.parse::<u32>() {
+                rate.set(n);
+            }
+        })
+    };
+
     html! {
-        <div style="font-family: system-ui; padding: 1rem; background:#f3f4f6; min-height:100vh;">
-            <h1 style="text-align:center;">{"Relay Pool: In-Thread vs Web Worker"}</h1>
-            <JankMeter />
-            <div style="display:flex; gap:1rem; align-items:flex-start;">
-                <div style="flex:1; min-width:0;">
-                    // In-thread path uses nostr-minions' own provider stack.
-                    <nostr_minions::NostrAppProvider
-                        relays={RELAYS.iter().map(|u| nostr_minions::UserRelay{
-                            url: (*u).to_string(), read:true, write:true
-                        }).collect::<Vec<_>>()}
-                        fallback={html!(<p>{"loading…"}</p>)}
-                    >
-                        <InThreadPanel />
-                    </nostr_minions::NostrAppProvider>
-                </div>
-                <div style="flex:1; min-width:0;">
-                    // Worker path: reactor provider points at the worker bundle.
-                    <ReactorProvider<RelayReactor> path="/worker.js">
-                        <WorkerPanel />
-                    </ReactorProvider<RelayReactor>>
-                </div>
+        <div style="font-family:system-ui; padding:1rem; background:#f3f4f6; min-height:100vh;">
+            <h1 style="text-align:center; margin:.2rem;">{"Relay Pool Benchmark"}</h1>
+            <p style="text-align:center; font-size:.8rem; color:#6b7280; margin:.2rem;">
+                {"One path at a time. Flood injects synthetic notes through the same parse+dedup+filter path each architecture really uses."}
+            </p>
+
+            <div style="text-align:center; margin:.5rem;">
+                { btn("In-Thread", Path::InThread, switch(Path::InThread, "in-thread"), "#2563eb") }
+                { btn("Web Worker", Path::Worker, switch(Path::Worker, "worker"), "#16a34a") }
+                { btn("Stop", Path::None, switch(Path::None, "idle"), "#6b7280") }
+                <span style="margin-left:1rem; font-size:.85rem;">
+                    {"rate (notes/sec): "}
+                    <input type="number" min="100" max="20000" step="100"
+                        value={rate.to_string()} oninput={on_rate}
+                        style="width:6rem; padding:.2rem;" />
+                </span>
+            </div>
+
+            <MetricsPanel metrics={metrics.clone()} />
+
+            <div style="max-width:680px; margin:0 auto;">
+                { match *path {
+                    Path::None => html!{
+                        <p style="text-align:center; color:#9ca3af; font-style:italic; padding:2rem;">
+                            {"Pick a path, then click Flood inside it."}
+                        </p>
+                    },
+                    Path::InThread => html!{
+                        <InThreadPanel key="in-thread" metrics={metrics.clone()} rate={*rate} />
+                    },
+                    Path::Worker => html!{
+                        <ReactorProvider<RelayReactor, JsonCodec> key="worker" path="/worker.js">
+                            <WorkerPanel metrics={metrics.clone()} rate={*rate} />
+                        </ReactorProvider<RelayReactor, JsonCodec>>
+                    },
+                }}
             </div>
         </div>
     }
 }
 
-/// Panel backed by the in-thread `nostr-minions` pool.
-#[function_component(InThreadPanel)]
-fn in_thread_panel() -> Html {
-    let notes = nostr_minions::use_text_notes(Some(LIMIT));
-    let renders = use_mut_ref(|| 0usize);
-    *renders.borrow_mut() += 1;
-    let render_count = *renders.borrow();
+#[derive(Properties, PartialEq)]
+struct PathProps {
+    metrics: SharedMetrics,
+    rate: u32,
+}
 
+/// In-thread path: the flood feeder generates raw relay-message JSON and runs
+/// parse + dedup + filter ON THE MAIN THREAD (mirroring the pool's onmessage),
+/// then renders. This is exactly the work the worker offloads.
+#[function_component(InThreadPanel)]
+fn in_thread_panel(props: &PathProps) -> Html {
+    let notes = use_mut_ref(VecDeque::<NostrNote>::new);
+    let renders = use_mut_ref(|| 0usize);
+    let force = use_force_update();
+    let seq = use_mut_ref(|| 0u64);
+    let dedup = use_mut_ref(|| nostr_minions::BoundedDedup::new(10_000));
+
+    let flood = {
+        let metrics = props.metrics.clone();
+        let rate = props.rate;
+        let notes = notes.clone();
+        let force = force.clone();
+        let seq = seq.clone();
+        let dedup = dedup.clone();
+        Callback::from(move |_| {
+            let metrics = metrics.clone();
+            let notes = notes.clone();
+            let force = force.clone();
+            let seq = seq.clone();
+            let dedup = dedup.clone();
+            let filter = kind1_filter();
+            yew::platform::spawn_local(async move {
+                const TICK_MS: u32 = 16;
+                let ticks = FLOOD_SECS * (1000 / TICK_MS);
+                let per_tick = (rate * TICK_MS / 1000).max(1);
+                for _ in 0..ticks {
+                    let emit = metrics::now_ms();
+                    let mut produced = 0u64;
+                    let mut rendered = 0u64;
+                    for _ in 0..per_tick {
+                        let s = *seq.borrow();
+                        *seq.borrow_mut() += 1;
+                        produced += 1;
+                        let raw = metrics::synthetic_event(s, emit);
+                        // SAME work the worker does — just on the UI thread.
+                        let Ok(NostrRelayEvent::NewNote(.., note)) = raw.parse::<NostrRelayEvent>()
+                        else {
+                            continue;
+                        };
+                        if let Some(ref id) = note.id {
+                            if !dedup.borrow_mut().insert(id.clone()) {
+                                continue;
+                            }
+                        }
+                        if !nostr_minions::note_matches_filter(&note, &filter) {
+                            continue;
+                        }
+                        // Latency: arrival is now; emit is embedded in content.
+                        if let Some(em) = metrics::emit_ms_from_content(&note.content) {
+                            metrics
+                                .borrow_mut()
+                                .latency()
+                                .record(metrics::now_ms() - em);
+                        }
+                        let mut buf = notes.borrow_mut();
+                        buf.push_front(note);
+                        buf.truncate(LIMIT as usize);
+                        rendered += 1;
+                    }
+                    {
+                        let mut m = metrics.borrow_mut();
+                        m.throughput.produce(produced);
+                        m.throughput.render(rendered);
+                    }
+                    force.force_update();
+                    yew::platform::time::sleep(Duration::from_millis(u64::from(TICK_MS))).await;
+                }
+            });
+        })
+    };
+
+    *renders.borrow_mut() += 1;
+    let snapshot: Vec<NostrNote> = notes.borrow().iter().cloned().collect();
     html! {
-        <Panel
-            title="In-Thread (nostr-minions)"
-            color="#2563eb"
-            render_count={render_count}
-            notes={notes}
-        />
+        <Panel title="In-Thread (main-thread parse)" color="#2563eb"
+            render_count={*renders.borrow()} notes={snapshot} on_flood={flood} />
     }
 }
 
-/// Panel backed by the worker `RelayReactor`.
+/// Worker path: the flood runs inside the worker; matched notes stream back.
 #[function_component(WorkerPanel)]
-fn worker_panel() -> Html {
-    // Bridge to the worker. The handle is a stream of NostrNote outputs and a
-    // sink for RelayCommand inputs.
+fn worker_panel(props: &PathProps) -> Html {
     let sub = use_reactor_subscription::<RelayReactor>();
-
-    // Accumulate streamed notes locally (most-recent-first, bounded by LIMIT).
     let notes = use_mut_ref(VecDeque::<NostrNote>::new);
     let renders = use_mut_ref(|| 0usize);
+    let consumed = use_mut_ref(|| 0usize);
+    let seq = use_mut_ref(|| 1u64);
 
-    // On mount: tell the worker which relays to connect and what to subscribe.
+    // Establish the filter once so the worker matches our synthetic notes.
     use_effect_with((), {
         let sub = sub.clone();
         move |()| {
-            sub.send(RelayCommand::Connect(
-                RELAYS.iter().map(|u| (*u).to_string()).collect(),
-            ));
             sub.send(RelayCommand::Subscribe(kind1_filter()));
             || ()
         }
     });
 
-    // Drain newly streamed notes from the subscription into our buffer.
-    // `sub` collects outputs into a slice; we mirror the tail we haven't seen.
+    let flood = {
+        let sub = sub.clone();
+        let rate = props.rate;
+        let seq = seq.clone();
+        Callback::from(move |_| {
+            let start = *seq.borrow();
+            // Reserve the id range this flood will consume.
+            *seq.borrow_mut() += u64::from(rate) * u64::from(FLOOD_SECS) + 1;
+            sub.send(RelayCommand::Flood {
+                rate,
+                secs: FLOOD_SECS,
+                start_seq: start,
+            });
+        })
+    };
+
+    // Drain newly streamed notes; record latency + throughput per note.
     {
         let notes = notes.clone();
-        use_effect_with(sub.len(), move |_| {
-            // The subscription exposes received outputs as an indexable slice.
-            // Rebuild our bounded, newest-first view from it.
-            let mut buf = notes.borrow_mut();
-            buf.clear();
-            for note in sub.iter().rev().take(LIMIT as usize) {
-                buf.push_back((**note).clone());
+        let consumed = consumed.clone();
+        let metrics = props.metrics.clone();
+        use_effect_with(sub.len(), move |&total| {
+            let mut seen = consumed.borrow_mut();
+            if total > *seen {
+                let mut buf = notes.borrow_mut();
+                let mut m = metrics.borrow_mut();
+                let arrived = total - *seen;
+                for i in *seen..total {
+                    let note = (*sub[i]).clone();
+                    if let Some(em) = metrics::emit_ms_from_content(&note.content) {
+                        m.latency().record(metrics::now_ms() - em);
+                    }
+                    buf.push_front(note);
+                }
+                buf.truncate(LIMIT as usize);
+                // For the worker, produced == rendered from the app's POV (the
+                // worker already dropped non-matching/duplicate notes); the
+                // ingestion backlog lives off-thread.
+                m.throughput.produce(arrived as u64);
+                m.throughput.render(arrived as u64);
+                *seen = total;
             }
             || ()
         });
     }
 
     *renders.borrow_mut() += 1;
-    let render_count = *renders.borrow();
     let snapshot: Vec<NostrNote> = notes.borrow().iter().cloned().collect();
-
     html! {
-        <Panel
-            title="Web Worker (RelayReactor)"
-            color="#16a34a"
-            render_count={render_count}
-            notes={snapshot}
-        />
+        <Panel title="Web Worker (off-thread parse)" color="#16a34a"
+            render_count={*renders.borrow()} notes={snapshot} on_flood={flood} />
     }
 }
 
@@ -146,28 +353,30 @@ struct PanelProps {
     color: &'static str,
     render_count: usize,
     notes: Vec<NostrNote>,
+    on_flood: Callback<MouseEvent>,
 }
 
-/// Shared presentation for both panels so the only measured difference is the
-/// data source, not the rendering work.
 #[function_component(Panel)]
 fn panel(props: &PanelProps) -> Html {
     html! {
-        <div style="background:white; border-radius:8px; padding:1rem; box-shadow:0 1px 3px rgba(0,0,0,.1); display:flex; flex-direction:column; height:70vh;">
-            <div style="display:flex; justify-content:space-between; align-items:baseline;">
-                <h2 style={format!("color:{}; margin:0;", props.color)}>{props.title}</h2>
-                <div style="text-align:right; font-size:.8rem; color:#6b7280;">
-                    <div>{format!("renders: {}", props.render_count)}</div>
-                    <div style={format!("color:{}; font-weight:600;", props.color)}>
-                        {format!("notes: {}", props.notes.len())}
-                    </div>
+        <div style="background:white; border-radius:8px; padding:1rem; box-shadow:0 1px 3px rgba(0,0,0,.1); display:flex; flex-direction:column; height:55vh;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h2 style={format!("color:{}; margin:0; font-size:1.1rem;", props.color)}>{props.title}</h2>
+                <div style="display:flex; gap:.75rem; align-items:center;">
+                    <span style="font-size:.75rem; color:#6b7280;">
+                        {format!("renders: {} · notes: {}", props.render_count, props.notes.len())}
+                    </span>
+                    <button onclick={props.on_flood.clone()} style={format!(
+                        "padding:.4rem .8rem; border:none; border-radius:6px; cursor:pointer; \
+                         font-weight:700; background:{}; color:white;", props.color
+                    )}>{format!("Flood {FLOOD_SECS}s")}</button>
                 </div>
             </div>
             <div style="overflow-y:auto; margin-top:.5rem; flex:1; min-height:0;">
                 { if props.notes.is_empty() {
-                    html!{ <p style="color:#9ca3af; font-style:italic;">{"waiting for notes…"}</p> }
+                    html!{ <p style="color:#9ca3af; font-style:italic;">{"no notes yet — click Flood"}</p> }
                 } else {
-                    html!{ <> { for props.notes.iter().map(render_note) } </> }
+                    html!{ <> { for props.notes.iter().take(LIMIT as usize).map(render_note) } </> }
                 }}
             </div>
         </div>
@@ -177,71 +386,164 @@ fn panel(props: &PanelProps) -> Html {
 fn render_note(note: &NostrNote) -> Html {
     let from = note.pubkey.get(..12).unwrap_or(&note.pubkey);
     html! {
-        <div style="padding:.5rem; background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px; margin-bottom:.4rem;">
-            <div style="font-size:.7rem; color:#6b7280; font-family:monospace;">{format!("{from}…")}</div>
-            <div style="font-size:.85rem; color:#111827; overflow:hidden; text-overflow:ellipsis;">
-                { note.content.chars().take(140).collect::<String>() }
+        <div style="padding:.35rem; background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px; margin-bottom:.3rem;">
+            <div style="font-size:.65rem; color:#6b7280; font-family:monospace;">{format!("{from}…")}</div>
+            <div style="font-size:.8rem; color:#111827; overflow:hidden;">
+                { note.content.chars().take(80).collect::<String>() }
             </div>
         </div>
     }
 }
 
-/// Samples requestAnimationFrame deltas to expose main-thread jank. A smooth
-/// 60fps thread holds ~16.7ms; spikes mean the UI thread is blocked (e.g. by
-/// JSON parsing a burst of relay messages in the in-thread path).
-#[function_component(JankMeter)]
-fn jank_meter() -> Html {
-    let worst = use_mut_ref(|| 0f64);
-    let last = use_mut_ref(|| 0f64);
-    let display = use_state(|| (0f64, 0f64)); // (last delta, worst delta)
+#[derive(Properties, PartialEq)]
+struct MetricsProps {
+    metrics: SharedMetrics,
+}
 
+/// Live metrics readout. Re-renders on a timer driven by the sampler.
+#[function_component(MetricsPanel)]
+fn metrics_panel(props: &MetricsProps) -> Html {
+    let tick = use_state(|| 0u32);
+    // Re-render 4×/sec so numbers update smoothly without thrashing.
     use_effect_with((), {
-        let worst = worst.clone();
-        let last = last.clone();
-        let display = display.clone();
+        let tick = tick.clone();
         move |()| {
-            // Self-rescheduling rAF loop measuring frame intervals.
+            let handle = gloo_like_interval(250, move || tick.set(*tick + 1));
+            move || drop(handle)
+        }
+    });
+
+    let m = props.metrics.borrow();
+    let (p50, p95, p99) = m
+        .latency_samples
+        .as_ref()
+        .map_or((0.0, 0.0, 0.0), Latency::percentiles);
+    let j = &m.jank;
+    let t = &m.throughput;
+
+    let cell = |label: &str, value: String, color: &str| {
+        html! {
+            <div style="text-align:center; padding:.3rem .6rem;">
+                <div style={format!("font-size:1.1rem; font-weight:700; color:{color};")}>{value}</div>
+                <div style="font-size:.65rem; color:#6b7280; text-transform:uppercase;">{label}</div>
+            </div>
+        }
+    };
+
+    html! {
+        <div style="max-width:680px; margin:0 auto .8rem; background:white; border-radius:8px; padding:.6rem; box-shadow:0 1px 3px rgba(0,0,0,.1);">
+            <div style="display:flex; justify-content:space-around; flex-wrap:wrap;">
+                { cell("path", m.label.to_string(), "#111827") }
+                { cell("in /s", t.per_sec_in.to_string(), "#2563eb") }
+                { cell("out /s", t.per_sec_out.to_string(), "#16a34a") }
+                { cell("backlog", t.backlog().to_string(),
+                    if t.backlog() > 1000 { "#dc2626" } else { "#111827" }) }
+                { cell("lat p50", format!("{p50:.1}ms"), "#111827") }
+                { cell("lat p95", format!("{p95:.1}ms"), "#d97706") }
+                { cell("lat p99", format!("{p99:.1}ms"), "#dc2626") }
+            </div>
+            <div style="display:flex; justify-content:space-around; flex-wrap:wrap; border-top:1px solid #f3f4f6; margin-top:.3rem; padding-top:.3rem;">
+                { cell("frames", j.total.to_string(), "#6b7280") }
+                { cell("<17ms", j.under_17.to_string(), "#16a34a") }
+                { cell("17-50", j.b17_50.to_string(), "#d97706") }
+                { cell("50-100", j.b50_100.to_string(), "#ea580c") }
+                { cell("100ms+", j.over_100.to_string(), "#dc2626") }
+                { cell("worst", format!("{:.0}ms", j.worst), "#dc2626") }
+                { cell("jank %", format!("{:.1}", j.jank_pct()), "#dc2626") }
+            </div>
+        </div>
+    }
+}
+
+/// Drives jank sampling (every animation frame) and a 1Hz throughput sample +
+/// `[BENCH]` console dump. Independent of the active path.
+#[hook]
+fn use_bench_sampler(metrics: SharedMetrics) {
+    // rAF loop → jank histogram.
+    {
+        let metrics = metrics.clone();
+        use_effect_with((), move |()| {
+            let last = Rc::new(RefCell::new(0f64));
             let cb: RafClosure = Rc::new(RefCell::new(None));
             let cb2 = cb.clone();
             *cb.borrow_mut() = Some(Closure::wrap(Box::new(move |ts: f64| {
                 let prev = *last.borrow();
                 if prev > 0.0 {
-                    let delta = ts - prev;
-                    if delta > *worst.borrow() {
-                        *worst.borrow_mut() = delta;
-                    }
-                    display.set((delta, *worst.borrow()));
+                    metrics.borrow_mut().jank.record(ts - prev);
                 }
                 *last.borrow_mut() = ts;
-                if let Some(window) = web_sys::window() {
-                    if let Some(closure) = cb2.borrow().as_ref() {
-                        let _ = window.request_animation_frame(closure.as_ref().unchecked_ref());
-                    }
+                if let (Some(win), Some(c)) = (web_sys::window(), cb2.borrow().as_ref()) {
+                    let _ = win.request_animation_frame(c.as_ref().unchecked_ref());
                 }
             }) as Box<dyn FnMut(f64)>));
-            if let Some(window) = web_sys::window() {
-                if let Some(closure) = cb.borrow().as_ref() {
-                    let _ = window.request_animation_frame(closure.as_ref().unchecked_ref());
-                }
+            if let (Some(win), Some(c)) = (web_sys::window(), cb.borrow().as_ref()) {
+                let _ = win.request_animation_frame(c.as_ref().unchecked_ref());
             }
-            // Keep the closure alive for the lifetime of the component.
             move || drop(cb)
-        }
-    });
-
-    let (delta, worst_v) = *display;
-    html! {
-        <div style="text-align:center; margin-bottom:1rem; font-family:monospace; font-size:.85rem;">
-            <span style="color:#6b7280;">{"main-thread frame: "}</span>
-            <span style="font-weight:700;">{format!("{delta:.1}ms")}</span>
-            <span style="color:#6b7280;">{"  worst: "}</span>
-            <span style="font-weight:700; color:#dc2626;">{format!("{worst_v:.1}ms")}</span>
-        </div>
+        });
     }
+
+    // 1Hz throughput sample + structured console dump.
+    use_effect_with((), move |()| {
+        let handle = gloo_like_interval(1000, move || {
+            let mut m = metrics.borrow_mut();
+            m.throughput.sample();
+            let (p50, p95, p99) = m
+                .latency_samples
+                .as_ref()
+                .map_or((0.0, 0.0, 0.0), Latency::percentiles);
+            // Structured dump — copyable from the console.
+            let dump = web_sys::js_sys::Object::new();
+            let set = |k: &str, v: JsValue| {
+                let _ = web_sys::js_sys::Reflect::set(&dump, &k.into(), &v);
+            };
+            set("path", m.label.into());
+            set(
+                "in_per_s",
+                f64::from(u32::try_from(m.throughput.per_sec_in).unwrap_or(u32::MAX)).into(),
+            );
+            set(
+                "out_per_s",
+                f64::from(u32::try_from(m.throughput.per_sec_out).unwrap_or(u32::MAX)).into(),
+            );
+            set("backlog", (m.throughput.backlog() as f64).into());
+            set("lat_p50_ms", p50.into());
+            set("lat_p95_ms", p95.into());
+            set("lat_p99_ms", p99.into());
+            set("jank_pct", m.jank.jank_pct().into());
+            set("worst_frame_ms", m.jank.worst.into());
+            web_sys::console::log_2(&"[BENCH]".into(), &dump);
+        });
+        move || drop(handle)
+    });
 }
 
-use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
-
-/// Self-rescheduling `requestAnimationFrame` callback handle.
-type RafClosure = Rc<RefCell<Option<Closure<dyn FnMut(f64)>>>>;
+/// Minimal setInterval wrapper returning a guard that clears the interval and
+/// drops the closure on drop. (Avoids pulling in gloo-timers for one call.)
+struct IntervalHandle {
+    id: i32,
+    _closure: Closure<dyn FnMut()>,
+}
+impl Drop for IntervalHandle {
+    fn drop(&mut self) {
+        if let Some(win) = web_sys::window() {
+            win.clear_interval_with_handle(self.id);
+        }
+    }
+}
+fn gloo_like_interval(ms: i32, f: impl FnMut() + 'static) -> IntervalHandle {
+    let closure = Closure::wrap(Box::new(f) as Box<dyn FnMut()>);
+    let id = web_sys::window()
+        .and_then(|w| {
+            w.set_interval_with_callback_and_timeout_and_arguments_0(
+                closure.as_ref().unchecked_ref(),
+                ms,
+            )
+            .ok()
+        })
+        .unwrap_or(-1);
+    IntervalHandle {
+        id,
+        _closure: closure,
+    }
+}

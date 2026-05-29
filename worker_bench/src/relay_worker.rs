@@ -6,12 +6,16 @@
 //!
 //! Compared to `nostr-minions`' in-thread pool, the tradeoff is explicit:
 //! we move JSON parsing + dedup + filter-matching off the UI thread, but pay
-//! a bincode (de)serialization + postMessage cost per note crossing the
-//! worker boundary. The benchmark exists to measure whether that trade is a
-//! net win under load.
+//! a (de)serialization + postMessage cost per note crossing the worker
+//! boundary. The benchmark exists to measure whether that trade is a net win
+//! under load.
+
+#[path = "metrics.rs"]
+pub mod metrics;
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::time::Duration;
 
 use futures::channel::mpsc;
 use futures::{SinkExt, StreamExt};
@@ -21,13 +25,50 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use yew_agent::prelude::*;
 
+/// JSON codec for the worker bridge.
+///
+/// yew-agent's default `Bincode` codec panics on the `nostro2` types
+/// (`SequenceMustHaveLength`) — their serde representation uses patterns
+/// bincode can't encode without an up-front length (e.g. flattened/sequence
+/// fields). JSON has no such requirement, so both the provider and the
+/// registrar use this codec. (JSON is also closer to what the in-thread path
+/// already parses, keeping the comparison honest.)
+pub struct JsonCodec;
+
+impl yew_agent::Codec for JsonCodec {
+    fn encode<I>(input: I) -> JsValue
+    where
+        I: Serialize,
+    {
+        let s = serde_json::to_string(&input).expect("worker message: serialize");
+        JsValue::from_str(&s)
+    }
+
+    fn decode<O>(input: JsValue) -> O
+    where
+        O: for<'de> Deserialize<'de>,
+    {
+        let s = input.as_string().expect("worker message: expected string");
+        serde_json::from_str(&s).expect("worker message: deserialize")
+    }
+}
+
 /// Messages the application sends INTO the worker.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum RelayCommand {
     /// Connect the pool to this set of relay URLs. Sent once on startup.
     Connect(Vec<String>),
     /// Begin matching/streaming notes for this subscription filter.
     Subscribe(NostrSubscription),
+    /// Synthetic load: generate `rate` notes/sec for `secs` seconds, parsing
+    /// each through the SAME path as real relay messages (dedup + filter), so
+    /// the cost being measured is the worker's real ingestion work — not a
+    /// shortcut. `start_seq` keeps note ids unique across runs.
+    Flood {
+        rate: u32,
+        secs: u32,
+        start_seq: u64,
+    },
 }
 
 /// The reactor: connects to relays inside the worker, dedups + filters notes,
@@ -81,6 +122,19 @@ pub async fn RelayReactor(mut scope: ReactorScope<RelayCommand, NostrNote>) {
                         }
                         filters.borrow_mut().push(filter);
                     }
+                    Some(RelayCommand::Flood { rate, secs, start_seq }) => {
+                        // Run the flood as a detached task feeding the SAME
+                        // channel, so the reactor loop stays responsive and
+                        // notes arrive spread over time (not one giant burst).
+                        spawn_flood(
+                            rate,
+                            secs,
+                            start_seq,
+                            dedup.clone(),
+                            filters.clone(),
+                            note_tx.clone(),
+                        );
+                    }
                     // Bridge closed — application dropped the subscription.
                     None => break,
                 }
@@ -96,6 +150,54 @@ pub async fn RelayReactor(mut scope: ReactorScope<RelayCommand, NostrNote>) {
             }
         }
     }
+}
+
+/// Detached synthetic-load task. Generates `rate` notes/sec for `secs` seconds,
+/// parsing each through the SAME `NostrRelayEvent` parse + dedup + filter path
+/// as a real relay message, then feeding matches into `note_tx`.
+///
+/// Notes are emitted in ~16ms ticks (one animation frame) so they spread over
+/// wall-clock time rather than arriving as a single blocking burst — matching
+/// how a real high-rate feed behaves.
+fn spawn_flood(
+    rate: u32,
+    secs: u32,
+    start_seq: u64,
+    dedup: Rc<RefCell<nostr_minions::BoundedDedup>>,
+    filters: Rc<RefCell<Vec<NostrSubscription>>>,
+    note_tx: mpsc::UnboundedSender<NostrNote>,
+) {
+    yew::platform::spawn_local(async move {
+        const TICK_MS: u32 = 16;
+        let ticks = secs * (1000 / TICK_MS);
+        let per_tick = (rate * TICK_MS / 1000).max(1);
+        let mut seq = start_seq;
+
+        for _ in 0..ticks {
+            let emit = metrics::now_ms();
+            for _ in 0..per_tick {
+                let raw = metrics::synthetic_event(seq, emit);
+                seq += 1;
+                // Same ingestion path as onmessage: parse → dedup → filter.
+                let Ok(NostrRelayEvent::NewNote(.., note)) = raw.parse::<NostrRelayEvent>() else {
+                    continue;
+                };
+                if let Some(ref id) = note.id {
+                    if !dedup.borrow_mut().insert(id.clone()) {
+                        continue;
+                    }
+                }
+                let matched = filters
+                    .borrow()
+                    .iter()
+                    .any(|f| nostr_minions::note_matches_filter(&note, f));
+                if matched && note_tx.unbounded_send(note).is_err() {
+                    return; // bridge gone
+                }
+            }
+            yew::platform::time::sleep(Duration::from_millis(u64::from(TICK_MS))).await;
+        }
+    });
 }
 
 /// A raw WebSocket living inside the worker. Keeps its closures alive and

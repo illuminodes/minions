@@ -8,9 +8,11 @@
 #[path = "relay_worker.rs"]
 mod relay_worker;
 
-use relay_worker::RelayReactor;
+use relay_worker::{JsonCodec, RelayReactor};
 use yew_agent::Registrable;
 
 fn main() {
-    RelayReactor::registrar().register();
+    // Must match the codec on the provider side (app.rs), or the two ends
+    // won't agree on the wire format.
+    RelayReactor::registrar().encoding::<JsonCodec>().register();
 }

@@ -43,15 +43,26 @@ pub fn wall_ms() -> f64 {
 /// `BENCH:<ms>:<filler>` so end-to-end latency survives the JSON round-trip and
 /// the worker boundary. `seq` makes each note id unique (so dedup doesn't drop
 /// them) and is also embedded for sanity.
+///
+/// `payload_bytes` pads the `content` field with that many extra ASCII bytes,
+/// to test how message SIZE (not just rate) shifts the in-thread-vs-worker
+/// balance: bigger payloads mean more JSON to parse AND more bytes to
+/// serialize + structured-clone across the worker boundary.
 #[must_use]
-pub fn synthetic_event(seq: u64, emit_ms: f64) -> String {
+pub fn synthetic_event(seq: u64, emit_ms: f64, payload_bytes: usize) -> String {
     // 64-hex id/pubkey/sig so nostro2 parses it as a well-formed note.
     let id = format!("{seq:064x}");
     let pubkey = format!("{:064x}", seq.wrapping_mul(2_654_435_761));
     let sig = format!("{seq:0128x}");
     // created_at in seconds (coarse); real latency rides in the content marker.
     let created_at = (emit_ms / 1000.0) as u64;
-    let content = format!("BENCH:{emit_ms}:{seq} lorem ipsum dolor sit amet consectetur");
+    let mut content = format!("BENCH:{emit_ms}:{seq} ");
+    // Pad with a JSON-safe ASCII char (no quotes/backslashes/control chars) so
+    // nostro2 still parses the note. Reserve to avoid repeated reallocation.
+    if payload_bytes > 0 {
+        content.reserve(payload_bytes);
+        content.extend(std::iter::repeat_n('a', payload_bytes));
+    }
     format!(
         r#"["EVENT","bench",{{"id":"{id}","pubkey":"{pubkey}","created_at":{created_at},"kind":1,"tags":[],"content":"{content}","sig":"{sig}"}}]"#
     )

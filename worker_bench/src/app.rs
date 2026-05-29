@@ -105,6 +105,8 @@ enum Path {
 fn app() -> Html {
     let path = use_state(|| Path::None);
     let rate = use_state(|| 2000u32);
+    // Extra bytes padded into each note's content — the message-SIZE axis.
+    let payload = use_state(|| 0u32);
     let metrics: SharedMetrics = use_mut_ref(Metrics::default);
 
     // Continuous jank sampling + once-per-second throughput sample & console
@@ -148,6 +150,18 @@ fn app() -> Html {
         })
     };
 
+    let on_payload = {
+        let payload = payload.clone();
+        Callback::from(move |e: InputEvent| {
+            let v = e
+                .target_unchecked_into::<web_sys::HtmlInputElement>()
+                .value();
+            if let Ok(n) = v.parse::<u32>() {
+                payload.set(n);
+            }
+        })
+    };
+
     html! {
         <div style="font-family:system-ui; padding:1rem; background:#f3f4f6; min-height:100vh;">
             <h1 style="text-align:center; margin:.2rem;">{"Relay Pool Benchmark"}</h1>
@@ -165,6 +179,12 @@ fn app() -> Html {
                         value={rate.to_string()} oninput={on_rate}
                         style="width:6rem; padding:.2rem;" />
                 </span>
+                <span style="margin-left:1rem; font-size:.85rem;">
+                    {"payload (bytes/note): "}
+                    <input type="number" min="0" max="1000000" step="500"
+                        value={payload.to_string()} oninput={on_payload}
+                        style="width:7rem; padding:.2rem;" />
+                </span>
             </div>
 
             <SmoothnessMeter />
@@ -178,11 +198,11 @@ fn app() -> Html {
                         </p>
                     },
                     Path::InThread => html!{
-                        <InThreadPanel key="in-thread" metrics={metrics.clone()} rate={*rate} />
+                        <InThreadPanel key="in-thread" metrics={metrics.clone()} rate={*rate} payload={*payload} />
                     },
                     Path::Worker => html!{
                         <ReactorProvider<RelayReactor, JsonCodec> key="worker" path="/worker.js">
-                            <WorkerPanel metrics={metrics.clone()} rate={*rate} />
+                            <WorkerPanel metrics={metrics.clone()} rate={*rate} payload={*payload} />
                         </ReactorProvider<RelayReactor, JsonCodec>>
                     },
                 }}
@@ -195,6 +215,7 @@ fn app() -> Html {
 struct PathProps {
     metrics: SharedMetrics,
     rate: u32,
+    payload: u32,
 }
 
 /// In-thread path: the flood feeder generates raw relay-message JSON and runs
@@ -211,6 +232,7 @@ fn in_thread_panel(props: &PathProps) -> Html {
     let flood = {
         let metrics = props.metrics.clone();
         let rate = props.rate;
+        let payload = props.payload as usize;
         let notes = notes.clone();
         let force = force.clone();
         let seq = seq.clone();
@@ -240,7 +262,7 @@ fn in_thread_panel(props: &PathProps) -> Html {
                         let s = *seq.borrow();
                         *seq.borrow_mut() += 1;
                         produced += 1;
-                        let raw = metrics::synthetic_event(s, emit);
+                        let raw = metrics::synthetic_event(s, emit, payload);
                         // SAME work the worker does — just on the UI thread.
                         let Ok(NostrRelayEvent::NewNote(.., note)) = raw.parse::<NostrRelayEvent>()
                         else {
@@ -332,6 +354,7 @@ fn worker_panel(props: &PathProps) -> Html {
     let flood = {
         let bridge = bridge.clone();
         let rate = props.rate;
+        let payload = props.payload as usize;
         let seq = seq.clone();
         Callback::from(move |_| {
             let start = *seq.borrow();
@@ -340,6 +363,7 @@ fn worker_panel(props: &PathProps) -> Html {
                 rate,
                 secs: FLOOD_SECS,
                 start_seq: start,
+                payload_bytes: payload,
             });
         })
     };

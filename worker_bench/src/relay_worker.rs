@@ -68,6 +68,8 @@ pub enum RelayCommand {
         rate: u32,
         secs: u32,
         start_seq: u64,
+        /// Extra bytes padded into each note's content (message-size axis).
+        payload_bytes: usize,
     },
 }
 
@@ -122,7 +124,7 @@ pub async fn RelayReactor(mut scope: ReactorScope<RelayCommand, NostrNote>) {
                         }
                         filters.borrow_mut().push(filter);
                     }
-                    Some(RelayCommand::Flood { rate, secs, start_seq }) => {
+                    Some(RelayCommand::Flood { rate, secs, start_seq, payload_bytes }) => {
                         // Run the flood as a detached task feeding the SAME
                         // channel, so the reactor loop stays responsive and
                         // notes arrive spread over time (not one giant burst).
@@ -130,6 +132,7 @@ pub async fn RelayReactor(mut scope: ReactorScope<RelayCommand, NostrNote>) {
                             rate,
                             secs,
                             start_seq,
+                            payload_bytes,
                             dedup.clone(),
                             filters.clone(),
                             note_tx.clone(),
@@ -163,6 +166,7 @@ fn spawn_flood(
     rate: u32,
     secs: u32,
     start_seq: u64,
+    payload_bytes: usize,
     dedup: Rc<RefCell<nostr_minions::BoundedDedup>>,
     filters: Rc<RefCell<Vec<NostrSubscription>>>,
     note_tx: mpsc::UnboundedSender<NostrNote>,
@@ -178,7 +182,7 @@ fn spawn_flood(
             // the timestamp must be cross-context comparable (see metrics::wall_ms).
             let emit = metrics::wall_ms();
             for _ in 0..per_tick {
-                let raw = metrics::synthetic_event(seq, emit);
+                let raw = metrics::synthetic_event(seq, emit, payload_bytes);
                 seq += 1;
                 // Same ingestion path as onmessage: parse → dedup → filter.
                 let Ok(NostrRelayEvent::NewNote(.., note)) = raw.parse::<NostrRelayEvent>() else {

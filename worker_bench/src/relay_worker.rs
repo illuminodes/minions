@@ -174,7 +174,9 @@ fn spawn_flood(
         let mut seq = start_seq;
 
         for _ in 0..ticks {
-            let emit = metrics::now_ms();
+            // Wall-clock epoch: the app reads it back on a DIFFERENT thread, so
+            // the timestamp must be cross-context comparable (see metrics::wall_ms).
+            let emit = metrics::wall_ms();
             for _ in 0..per_tick {
                 let raw = metrics::synthetic_event(seq, emit);
                 seq += 1;

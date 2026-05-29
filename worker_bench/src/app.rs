@@ -222,7 +222,7 @@ fn in_thread_panel(props: &PathProps) -> Html {
                 let ticks = FLOOD_SECS * (1000 / TICK_MS);
                 let per_tick = (rate * TICK_MS / 1000).max(1);
                 for _ in 0..ticks {
-                    let emit = metrics::now_ms();
+                    let emit = metrics::wall_ms();
                     let mut produced = 0u64;
                     let mut rendered = 0u64;
                     for _ in 0..per_tick {
@@ -248,7 +248,7 @@ fn in_thread_panel(props: &PathProps) -> Html {
                             metrics
                                 .borrow_mut()
                                 .latency()
-                                .record(metrics::now_ms() - em);
+                                .record(metrics::wall_ms() - em);
                         }
                         let mut buf = notes.borrow_mut();
                         buf.push_front(note);
@@ -323,7 +323,7 @@ fn worker_panel(props: &PathProps) -> Html {
                 for i in *seen..total {
                     let note = (*sub[i]).clone();
                     if let Some(em) = metrics::emit_ms_from_content(&note.content) {
-                        m.latency().record(metrics::now_ms() - em);
+                        m.latency().record(metrics::wall_ms() - em);
                     }
                     buf.push_front(note);
                 }

@@ -8,26 +8,38 @@
 //! generator + clock), so allow dead code rather than split the module.
 #![allow(dead_code)]
 
-/// High-resolution monotonic clock in milliseconds.
+/// High-resolution monotonic clock in milliseconds, for SAME-context timing
+/// only (e.g. the jank meter, which runs entirely on the main thread).
 ///
-/// Uses `performance.now()`, which is available on BOTH `Window` (main thread)
-/// and `WorkerGlobalScope` (worker thread). We grab it via the global `self`
-/// so the same code works in either context.
+/// Uses `performance.now()` — available on both `Window` and
+/// `WorkerGlobalScope`, BUT each context has its OWN time origin, so values
+/// are NOT comparable across the worker boundary. Use [`wall_ms`] for that.
 #[must_use]
 pub fn now_ms() -> f64 {
     use wasm_bindgen::JsCast;
     let global: web_sys::js_sys::Object = web_sys::js_sys::global();
-    // `performance` exists on both Window and WorkerGlobalScope.
     let perf = web_sys::js_sys::Reflect::get(&global, &"performance".into())
         .ok()
         .and_then(|p| p.dyn_into::<web_sys::Performance>().ok());
     perf.map_or(0.0, |p| p.now())
 }
 
+/// Wall-clock (UNIX epoch) milliseconds. Unlike [`now_ms`], `Date.now()` shares
+/// the same epoch in the worker and on the main thread, so a timestamp stamped
+/// in one context can be subtracted from one read in the other. This is what
+/// end-to-end latency must use to survive the worker round-trip.
+///
+/// Lower resolution than `performance.now()` (often 1ms, sometimes coarsened),
+/// but correct across threads — which matters far more here.
+#[must_use]
+pub fn wall_ms() -> f64 {
+    web_sys::js_sys::Date::now()
+}
+
 /// A synthetic relay message: a NIP-01 `["EVENT", <sub>, {note}]` JSON string,
 /// shaped like what a real relay sends so both paths exercise the same parse.
 ///
-/// The emit timestamp (ms, from [`now_ms`]) is embedded in the note content as
+/// The emit timestamp (ms, from [`wall_ms`]) is embedded in the note content as
 /// `BENCH:<ms>:<filler>` so end-to-end latency survives the JSON round-trip and
 /// the worker boundary. `seq` makes each note id unique (so dedup doesn't drop
 /// them) and is also embedded for sanity.

@@ -38,6 +38,10 @@ use yew_agent::reactor::{use_reactor_subscription, ReactorProvider};
 
 const LIMIT: u32 = 50;
 const FLOOD_SECS: u32 = 5;
+/// Max notes the worker panel pulls off the bridge per animation frame. Caps
+/// per-frame main-thread work so a fast worker stream can't block the UI in one
+/// synchronous burst — the rest waits for the next frame.
+const DRAIN_PER_FRAME: usize = 200;
 
 fn kind1_filter() -> NostrSubscription {
     NostrSubscription {
@@ -309,33 +313,61 @@ fn worker_panel(props: &PathProps) -> Html {
         })
     };
 
-    // Drain newly streamed notes; record latency + throughput per note.
+    // Hold the latest subscription handle in a ref so the rAF drain loop
+    // (created once, on mount) always reads the current one. The handle's
+    // identity changes each render, but its accumulated outputs do not.
+    let sub_ref =
+        use_mut_ref(|| None::<yew_agent::reactor::UseReactorSubscriptionHandle<RelayReactor>>);
+    *sub_ref.borrow_mut() = Some(sub.clone());
+
+    // Drain the bridge on an rAF loop, capped at DRAIN_PER_FRAME per frame, so
+    // a fast worker stream is spread across frames instead of blocking the main
+    // thread in one synchronous burst. Re-renders at most once per frame.
     {
         let notes = notes.clone();
         let consumed = consumed.clone();
         let metrics = props.metrics.clone();
-        use_effect_with(sub.len(), move |&total| {
-            let mut seen = consumed.borrow_mut();
-            if total > *seen {
-                let mut buf = notes.borrow_mut();
-                let mut m = metrics.borrow_mut();
-                let arrived = total - *seen;
-                for i in *seen..total {
-                    let note = (*sub[i]).clone();
-                    if let Some(em) = metrics::emit_ms_from_content(&note.content) {
-                        m.latency().record(metrics::wall_ms() - em);
+        let force = use_force_update();
+        use_effect_with((), move |()| {
+            let cb: RafClosure = Rc::new(RefCell::new(None));
+            let cb2 = cb.clone();
+            *cb.borrow_mut() = Some(Closure::wrap(Box::new(move |_ts: f64| {
+                if let Some(sub) = sub_ref.borrow().as_ref() {
+                    let total = sub.len();
+                    let mut seen = consumed.borrow_mut();
+                    if total > *seen {
+                        let take = (total - *seen).min(DRAIN_PER_FRAME);
+                        let end = *seen + take;
+                        {
+                            let mut buf = notes.borrow_mut();
+                            let mut m = metrics.borrow_mut();
+                            for i in *seen..end {
+                                let note = (*sub[i]).clone();
+                                if let Some(em) = metrics::emit_ms_from_content(&note.content) {
+                                    m.latency().record(metrics::wall_ms() - em);
+                                }
+                                buf.push_front(note);
+                            }
+                            buf.truncate(LIMIT as usize);
+                            // produced = everything the worker has handed us so
+                            // far; rendered = what we've actually drained. The
+                            // gap is the on-thread render backlog.
+                            m.throughput.produce(take as u64);
+                            m.throughput.render(take as u64);
+                        }
+                        *seen = end;
+                        drop(seen);
+                        force.force_update();
                     }
-                    buf.push_front(note);
                 }
-                buf.truncate(LIMIT as usize);
-                // For the worker, produced == rendered from the app's POV (the
-                // worker already dropped non-matching/duplicate notes); the
-                // ingestion backlog lives off-thread.
-                m.throughput.produce(arrived as u64);
-                m.throughput.render(arrived as u64);
-                *seen = total;
+                if let (Some(win), Some(c)) = (web_sys::window(), cb2.borrow().as_ref()) {
+                    let _ = win.request_animation_frame(c.as_ref().unchecked_ref());
+                }
+            }) as Box<dyn FnMut(f64)>));
+            if let (Some(win), Some(c)) = (web_sys::window(), cb.borrow().as_ref()) {
+                let _ = win.request_animation_frame(c.as_ref().unchecked_ref());
             }
-            || ()
+            move || drop(cb)
         });
     }
 

@@ -32,7 +32,8 @@ pub use relay_pool::{NostrRelayPoolProvider, NostrRelayPoolStore};
 pub use idb_manager::{IdbStore, NostrIdb};
 pub use key_manager::{IdbKeypairEntry, NostrId, NostrIdAction};
 pub use relay_pool::{
-    NostrRelayPool, ReadyState, RelayEventSubscription, SubscriptionId, SubscriptionInfo, UserRelay,
+    note_matches_filter, BoundedDedup, NostrRelayPool, ReadyState, RelayEventSubscription,
+    SubscriptionId, SubscriptionInfo, UserRelay,
 };
 
 // Re-export test components behind feature gate

@@ -1,0 +1,40 @@
+[package]
+name = "worker_bench"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Two binaries built from this crate:
+#  - `app`    : the UI thread (main document)
+#  - `worker` : the Web Worker entry point that registers the relay reactor
+# Trunk builds both via the data-trunk links in index.html.
+[[bin]]
+name = "app"
+path = "src/app.rs"
+
+[[bin]]
+name = "worker"
+path = "src/worker.rs"
+
+[dependencies]
+# Pull the in-thread relay pool implementation we are benchmarking against.
+nostr-minions = { path = "../" }
+
+yew = { version = "0.23.0", features = ["csr"] }
+yew-agent = "0.5.0"
+
+# nostro2 note/filter types travel across the worker boundary; they are
+# already Serialize/Deserialize. We depend on it directly so the worker and
+# app agree on the exact same types (re-exported by nostr-minions too).
+nostro2 = "0.4.2"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+futures = "0.3"
+
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = [
+    "WebSocket", "MessageEvent", "CloseEvent", "ErrorEvent",
+    "Window", "Crypto", "Performance",
+] }

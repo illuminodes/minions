@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Relay Pool Benchmark — In-Thread vs Web Worker</title>
+
+    <!-- Main UI thread binary -->
+    <link data-trunk rel="rust" href="Cargo.toml" data-bin="app" data-type="main" data-weak-refs />
+
+    <!-- Web Worker binary. Trunk emits `/worker.js` (+ `worker_bg.wasm`) but
+         does NOT inject a reference here; the worker is loaded at runtime by
+         the ReactorProvider `path="/worker.js"` in app.rs. -->
+    <link data-trunk rel="rust" href="Cargo.toml" data-bin="worker" data-type="worker" data-weak-refs />
+  </head>
+  <body></body>
+</html>

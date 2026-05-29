@@ -34,7 +34,7 @@ use relay_worker::{JsonCodec, RelayCommand, RelayReactor};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use yew::prelude::*;
-use yew_agent::reactor::{use_reactor_subscription, ReactorProvider};
+use yew_agent::reactor::{use_reactor_bridge, ReactorProvider};
 
 const LIMIT: u32 = 50;
 const FLOOD_SECS: u32 = 5;
@@ -280,32 +280,56 @@ fn in_thread_panel(props: &PathProps) -> Html {
 }
 
 /// Worker path: the flood runs inside the worker; matched notes stream back.
+///
+/// Uses `use_reactor_bridge` (callback per output) — NOT
+/// `use_reactor_subscription`, which accumulates every output into a Vec and
+/// forces a re-render on EVERY message (thousands/sec under load, each cloning
+/// the growing history). The callback approach mirrors the in-thread path: push
+/// into a local buffer, and re-render once per frame via our own rAF loop.
 #[function_component(WorkerPanel)]
 fn worker_panel(props: &PathProps) -> Html {
-    let sub = use_reactor_subscription::<RelayReactor>();
     let notes = use_mut_ref(VecDeque::<NostrNote>::new);
     let renders = use_mut_ref(|| 0usize);
-    let consumed = use_mut_ref(|| 0usize);
     let seq = use_mut_ref(|| 1u64);
+    // Notes land here from the bridge callback; the rAF loop moves them into
+    // `notes` and renders once per frame. Decouples arrival rate from renders.
+    let pending = use_mut_ref(VecDeque::<NostrNote>::new);
+
+    let bridge = {
+        let pending = pending.clone();
+        let metrics = props.metrics.clone();
+        use_reactor_bridge::<RelayReactor, _>(move |ev| {
+            if let yew_agent::reactor::ReactorEvent::Output(note) = ev {
+                // Per-note work only — no render here.
+                if let Some(em) = metrics::emit_ms_from_content(&note.content) {
+                    metrics
+                        .borrow_mut()
+                        .latency()
+                        .record(metrics::wall_ms() - em);
+                }
+                metrics.borrow_mut().throughput.produce(1);
+                pending.borrow_mut().push_back(note);
+            }
+        })
+    };
 
     // Establish the filter once so the worker matches our synthetic notes.
     use_effect_with((), {
-        let sub = sub.clone();
+        let bridge = bridge.clone();
         move |()| {
-            sub.send(RelayCommand::Subscribe(kind1_filter()));
+            bridge.send(RelayCommand::Subscribe(kind1_filter()));
             || ()
         }
     });
 
     let flood = {
-        let sub = sub.clone();
+        let bridge = bridge.clone();
         let rate = props.rate;
         let seq = seq.clone();
         Callback::from(move |_| {
             let start = *seq.borrow();
-            // Reserve the id range this flood will consume.
             *seq.borrow_mut() += u64::from(rate) * u64::from(FLOOD_SECS) + 1;
-            sub.send(RelayCommand::Flood {
+            bridge.send(RelayCommand::Flood {
                 rate,
                 secs: FLOOD_SECS,
                 start_seq: start,
@@ -313,52 +337,36 @@ fn worker_panel(props: &PathProps) -> Html {
         })
     };
 
-    // Hold the latest subscription handle in a ref so the rAF drain loop
-    // (created once, on mount) always reads the current one. The handle's
-    // identity changes each render, but its accumulated outputs do not.
-    let sub_ref =
-        use_mut_ref(|| None::<yew_agent::reactor::UseReactorSubscriptionHandle<RelayReactor>>);
-    *sub_ref.borrow_mut() = Some(sub.clone());
-
-    // Drain the bridge on an rAF loop, capped at DRAIN_PER_FRAME per frame, so
-    // a fast worker stream is spread across frames instead of blocking the main
-    // thread in one synchronous burst. Re-renders at most once per frame.
+    // rAF loop: move up to DRAIN_PER_FRAME pending notes into the render buffer
+    // and re-render ONCE per frame, only when something arrived.
     {
         let notes = notes.clone();
-        let consumed = consumed.clone();
+        let pending = pending.clone();
         let metrics = props.metrics.clone();
         let force = use_force_update();
         use_effect_with((), move |()| {
             let cb: RafClosure = Rc::new(RefCell::new(None));
             let cb2 = cb.clone();
             *cb.borrow_mut() = Some(Closure::wrap(Box::new(move |_ts: f64| {
-                if let Some(sub) = sub_ref.borrow().as_ref() {
-                    let total = sub.len();
-                    let mut seen = consumed.borrow_mut();
-                    if total > *seen {
-                        let take = (total - *seen).min(DRAIN_PER_FRAME);
-                        let end = *seen + take;
-                        {
-                            let mut buf = notes.borrow_mut();
-                            let mut m = metrics.borrow_mut();
-                            for i in *seen..end {
-                                let note = (*sub[i]).clone();
-                                if let Some(em) = metrics::emit_ms_from_content(&note.content) {
-                                    m.latency().record(metrics::wall_ms() - em);
-                                }
+                let drained = {
+                    let mut pend = pending.borrow_mut();
+                    if pend.is_empty() {
+                        0usize
+                    } else {
+                        let take = pend.len().min(DRAIN_PER_FRAME);
+                        let mut buf = notes.borrow_mut();
+                        for _ in 0..take {
+                            if let Some(note) = pend.pop_front() {
                                 buf.push_front(note);
                             }
-                            buf.truncate(LIMIT as usize);
-                            // produced = everything the worker has handed us so
-                            // far; rendered = what we've actually drained. The
-                            // gap is the on-thread render backlog.
-                            m.throughput.produce(take as u64);
-                            m.throughput.render(take as u64);
                         }
-                        *seen = end;
-                        drop(seen);
-                        force.force_update();
+                        buf.truncate(LIMIT as usize);
+                        take
                     }
+                };
+                if drained > 0 {
+                    metrics.borrow_mut().throughput.render(drained as u64);
+                    force.force_update();
                 }
                 if let (Some(win), Some(c)) = (web_sys::window(), cb2.borrow().as_ref()) {
                     let _ = win.request_animation_frame(c.as_ref().unchecked_ref());

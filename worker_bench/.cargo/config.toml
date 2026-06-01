@@ -1,0 +1,28 @@
+# Atomics-enabled shared-memory WebAssembly build.
+#
+# Two distinct things are required and easy to conflate:
+#   1. `target-feature=+atomics,+bulk-memory,+mutable-globals` enables the
+#      atomic *instructions* the quetzalcoatl ring relies on.
+#   2. The linker flags `--shared-memory --import-memory --max-memory=...`
+#      make the module's linear memory an IMPORTED, SHARED memory — i.e. a
+#      `SharedArrayBuffer` supplied at instantiation. WITHOUT these the module
+#      defines its own private (non-shared) memory and the worker cannot attach
+#      to the main thread's memory. (`+atomics` alone is NOT enough — verified.)
+# `build-std` recompiles std/panic_abort with the same target-features (std's
+# prebuilt artifacts aren't atomics-enabled). nightly-only — see rust-toolchain.toml.
+[target.wasm32-unknown-unknown]
+rustflags = [
+    "-C", "target-feature=+atomics,+bulk-memory,+mutable-globals",
+    # --shared-memory/--import-memory: imported SharedArrayBuffer (see above).
+    # --export=__wasm_init_tls + the __tls_* symbols: wasm-bindgen's threading
+    # transform needs to initialize thread-local storage per spawned thread; it
+    # looks these up by name and errors ("failed to find __wasm_init_tls")
+    # without them. This is the standard wasm-threads linker incantation.
+    "-C", "link-args=--shared-memory --import-memory --max-memory=1073741824 --export=__wasm_init_tls --export=__tls_size --export=__tls_align --export=__tls_base",
+]
+
+[unstable]
+build-std = ["std", "panic_abort"]
+
+[build]
+target = "wasm32-unknown-unknown"

@@ -1,0 +1,7 @@
+# Shared-memory wasm (atomics + threads) needs `-Z build-std`, which is
+# nightly-only. Pin a known-good nightly with the rust-src component so
+# build-std can recompile std with the atomics target-features.
+[toolchain]
+channel = "nightly-2026-02-20"
+components = ["rust-src"]
+targets = ["wasm32-unknown-unknown"]

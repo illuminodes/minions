@@ -3,14 +3,18 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Relay Pool Benchmark — In-Thread vs Web Worker</title>
+    <title>Shared-memory worker — Phase 1 gate</title>
 
-    <!-- Main UI thread binary -->
+    <!-- Single wasm module (data-type="main"). Shared-memory threading requires
+         the worker to run THIS SAME module/memory, so there is no separate
+         worker bin; the worker entry is a #[wasm_bindgen] export reached through
+         this one emitted glue file. The worker is spawned at runtime from Rust
+         (see src/shared.rs) by re-importing the emitted app-<hash>.js glue. -->
     <link data-trunk rel="rust" href="Cargo.toml" data-bin="app" data-type="main" data-weak-refs />
 
-    <!-- Web Worker binary. Trunk emits `/worker.js` (+ `worker_bg.wasm`) but
-         does NOT inject a reference here; the worker is loaded at runtime by
-         the ReactorProvider `path="/worker.js"` in app.rs. -->
+    <!-- The yew-agent Reactor path's worker (separate module + own memory). The
+         shared-ring path does NOT use this; its worker is the `app` module
+         re-instantiated against shared memory (see src/shared.rs). -->
     <link data-trunk rel="rust" href="Cargo.toml" data-bin="worker" data-type="worker" data-weak-refs />
   </head>
   <body></body>

@@ -1,0 +1,7 @@
+# Cross-origin isolation is REQUIRED for SharedArrayBuffer (and therefore for
+# the shared-memory wasm threading this bench uses). Without these two headers
+# the browser reports `crossOriginIsolated === false` and refuses to hand out
+# shared memory. In production these go on the web server / CDN instead.
+[serve.headers]
+"Cross-Origin-Opener-Policy" = "same-origin"
+"Cross-Origin-Embedder-Policy" = "require-corp"

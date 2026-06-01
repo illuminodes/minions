@@ -4,10 +4,15 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
-# Two binaries built from this crate:
-#  - `app`    : the UI thread (main document)
-#  - `worker` : the Web Worker entry point that registers the relay reactor
-# Trunk builds both via the data-trunk links in index.html.
+# Two bins:
+#  - `app`    : the main UI module. ALSO hosts the shared-memory ring worker
+#               entry (`ring_worker_main`, a #[wasm_bindgen] export); that
+#               worker runs THIS same module against the same WebAssembly.Memory
+#               (shared memory), spawned at runtime from src/shared.rs.
+#  - `worker` : a SEPARATE module for the yew-agent Reactor path (its own,
+#               non-shared memory — that's the postMessage-bridge model we're
+#               benchmarking against). Built with the same atomics flags, which
+#               it simply doesn't exercise.
 [[bin]]
 name = "app"
 path = "src/app.rs"
@@ -28,6 +33,11 @@ yew-agent = "0.5.0"
 # app agree on the exact same types (re-exported by nostr-minions too).
 nostro2 = "0.4.2"
 
+# Lock-free ring buffer used for zero-copy IPC across the shared-memory worker
+# boundary (raw-pointer handle seam added in 0.11.x+). Local path during the
+# spike; publish + switch to a version dep once proven.
+quetzalcoatl = { path = "../../../tooling/quetzalcoatl" }
+
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 futures = "0.3"
@@ -36,5 +46,6 @@ wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3", features = [
     "WebSocket", "MessageEvent", "CloseEvent", "ErrorEvent",
-    "Window", "Crypto", "Performance",
+    "Window", "Worker", "WorkerOptions", "WorkerType", "DedicatedWorkerGlobalScope",
+    "Crypto", "Performance", "Blob", "BlobPropertyBag", "Url",
 ] }

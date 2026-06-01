@@ -1,26 +1,28 @@
-//! Benchmark application (UI thread / `data-type="main"`).
+//! Three-way relay-ingestion benchmark, instrumented identically across paths:
 //!
-//! Compares two relay-ingestion architectures under a controlled synthetic
-//! load, with quantitative instrumentation — because at live-relay rates both
-//! are trivially fast and indistinguishable by eye.
+//! - **In-thread**: parse + dedup + filter on the UI thread (what the
+//!   `nostr-minions` pool does in its socket `onmessage`). Flood feeder runs
+//!   that work on the main thread, in coarse bursts (like a real socket).
+//! - **Reactor (postMessage)**: a `yew-agent` worker does the work off-thread
+//!   and streams matched notes back across the bridge (JSON encode +
+//!   postMessage per note).
+//! - **Shared ring (SharedArrayBuffer)**: a hand-spawned worker shares the wasm
+//!   linear memory and pushes matched `NostrNote`s into a `quetzalcoatl` SPSC
+//!   ring; the main thread pops them. Zero serialization, zero per-note
+//!   postMessage (only a one-time startup handshake).
 //!
-//! - **In-thread**: parse + dedup + filter run on the UI thread (what the
-//!   `nostr-minions` pool does in its socket `onmessage`). The flood feeder
-//!   runs that same work on the main thread.
-//! - **Worker**: the `RelayReactor` does that work off-thread and streams
-//!   matched notes back across the bridge (JSON encode + postMessage).
-//!
-//! Instrumentation (see `metrics.rs`), all sampled identically for both paths:
-//! - main-thread jank histogram (rAF frame intervals)
-//! - throughput (produced vs rendered per second, + backlog)
-//! - per-note end-to-end latency (p50/p95/p99), via a timestamp embedded in
-//!   each synthetic note's content so it survives the worker round-trip
-//! - a once-per-second `[BENCH]` `console.table` dump
+//! Metrics (see `metrics.rs`): main-thread jank histogram, throughput
+//! (produced/rendered per sec + backlog), per-note end-to-end latency
+//! (p50/p95/p99, via a timestamp embedded in each synthetic note's content so
+//! it survives the boundary), and a 1 Hz `[BENCH]` console dump. The
+//! `SmoothnessMeter` is the human-visible version of the jank histogram.
 
 #[path = "relay_worker.rs"]
 mod relay_worker;
-// Reuse the metrics module already loaded by relay_worker; loading metrics.rs
-// a second time via #[path] would define it twice in this bin.
+mod ring;
+mod shared;
+// Reuse the single metrics module loaded by relay_worker; loading metrics.rs
+// again via #[path] would define it twice in this bin.
 use relay_worker::metrics;
 
 use std::cell::RefCell;
@@ -38,9 +40,8 @@ use yew_agent::reactor::{use_reactor_bridge, ReactorProvider};
 
 const LIMIT: u32 = 50;
 const FLOOD_SECS: u32 = 5;
-/// Max notes the worker panel pulls off the bridge per animation frame. Caps
-/// per-frame main-thread work so a fast worker stream can't block the UI in one
-/// synchronous burst — the rest waits for the next frame.
+/// Max notes drained per animation frame (reactor + ring), so a fast stream
+/// can't block the UI in one synchronous burst — the rest waits for next frame.
 const DRAIN_PER_FRAME: usize = 200;
 
 fn kind1_filter() -> NostrSubscription {
@@ -52,6 +53,9 @@ fn kind1_filter() -> NostrSubscription {
 }
 
 fn main() {
+    std::panic::set_hook(Box::new(|info| {
+        web_sys::console::error_1(&format!("panic: {info}").into());
+    }));
     yew::Renderer::<App>::new().render();
 }
 
@@ -66,9 +70,14 @@ struct Metrics {
     throughput: Throughput,
     latency_samples: Option<Latency>,
     label: &'static str,
-    /// Worker-side bridge queue depth (notes matched but not yet shipped
-    /// across the bridge). Reported by the worker; always 0 for in-thread.
+    /// Worker-side bridge queue depth (reactor path only): notes matched but not
+    /// yet shipped across the postMessage bridge — the hidden backlog the app's
+    /// own metric can't see. 0 for in-thread and ring paths.
     worker_queue: u64,
+    /// Notes dropped because the shared ring was full (ring path only). Honest
+    /// overload signal: the ring is bounded, so when the consumer can't keep up
+    /// the producer drops rather than growing memory unbounded.
+    dropped: u64,
 }
 
 // The metrics cell is a singleton shared by reference across the app, so all
@@ -93,6 +102,7 @@ impl Metrics {
         self.latency_samples = Some(Latency::new(4096));
         self.label = label;
         self.worker_queue = 0;
+        self.dropped = 0;
     }
 }
 
@@ -102,7 +112,8 @@ type SharedMetrics = Rc<RefCell<Metrics>>;
 enum Path {
     None,
     InThread,
-    Worker,
+    Reactor,
+    Ring,
 }
 
 #[function_component(App)]
@@ -112,6 +123,14 @@ fn app() -> Html {
     // Extra bytes padded into each note's content — the message-SIZE axis.
     let payload = use_state(|| 0u32);
     let metrics: SharedMetrics = use_mut_ref(Metrics::default);
+
+    let isolated = web_sys::window()
+        .and_then(|w| {
+            web_sys::js_sys::Reflect::get(&w, &"crossOriginIsolated".into())
+                .ok()
+                .and_then(|v| v.as_bool())
+        })
+        .unwrap_or(false);
 
     // Continuous jank sampling + once-per-second throughput sample & console
     // dump. Runs for the lifetime of the app, regardless of active path.
@@ -153,7 +172,6 @@ fn app() -> Html {
             }
         })
     };
-
     let on_payload = {
         let payload = payload.clone();
         Callback::from(move |e: InputEvent| {
@@ -166,25 +184,29 @@ fn app() -> Html {
         })
     };
 
+    let iso_color = if isolated { "#16a34a" } else { "#dc2626" };
     html! {
         <div style="font-family:system-ui; padding:1rem; background:#f3f4f6; min-height:100vh;">
-            <h1 style="text-align:center; margin:.2rem;">{"Relay Pool Benchmark"}</h1>
+            <h1 style="text-align:center; margin:.2rem;">{"Relay Pool Benchmark — 3 architectures"}</h1>
             <p style="text-align:center; font-size:.8rem; color:#6b7280; margin:.2rem;">
-                {"One path at a time. Flood injects synthetic notes through the same parse+dedup+filter path each architecture really uses."}
+                {"One path at a time. Same synthetic flood through the same parse+dedup+filter for all three. "}
+                {"crossOriginIsolated: "}<b style={format!("color:{iso_color}")}>{ if isolated {"true"} else {"false"} }</b>
+                {" (shared-ring path needs true)"}
             </p>
 
             <div style="text-align:center; margin:.5rem;">
                 { btn("In-Thread", Path::InThread, switch(Path::InThread, "in-thread"), "#2563eb") }
-                { btn("Web Worker", Path::Worker, switch(Path::Worker, "worker"), "#16a34a") }
+                { btn("Reactor (postMessage)", Path::Reactor, switch(Path::Reactor, "reactor"), "#d97706") }
+                { btn("Shared Ring (SAB)", Path::Ring, switch(Path::Ring, "ring"), "#16a34a") }
                 { btn("Stop", Path::None, switch(Path::None, "idle"), "#6b7280") }
                 <span style="margin-left:1rem; font-size:.85rem;">
-                    {"rate (notes/sec): "}
-                    <input type="number" min="100" max="20000" step="100"
+                    {"rate: "}
+                    <input type="number" min="100" max="50000" step="100"
                         value={rate.to_string()} oninput={on_rate}
                         style="width:6rem; padding:.2rem;" />
                 </span>
                 <span style="margin-left:1rem; font-size:.85rem;">
-                    {"payload (bytes/note): "}
+                    {"payload bytes: "}
                     <input type="number" min="0" max="1000000" step="500"
                         value={payload.to_string()} oninput={on_payload}
                         style="width:7rem; padding:.2rem;" />
@@ -198,16 +220,19 @@ fn app() -> Html {
                 { match *path {
                     Path::None => html!{
                         <p style="text-align:center; color:#9ca3af; font-style:italic; padding:2rem;">
-                            {"Pick a path, then click Flood inside it."}
+                            {"Pick a path, then click Flood inside it. Compare jank %, latency, and the smoothness FPS across all three."}
                         </p>
                     },
                     Path::InThread => html!{
                         <InThreadPanel key="in-thread" metrics={metrics.clone()} rate={*rate} payload={*payload} />
                     },
-                    Path::Worker => html!{
-                        <ReactorProvider<RelayReactor, JsonCodec> key="worker" path="/worker.js">
-                            <WorkerPanel metrics={metrics.clone()} rate={*rate} payload={*payload} />
+                    Path::Reactor => html!{
+                        <ReactorProvider<RelayReactor, JsonCodec> key="reactor" path="/worker.js">
+                            <ReactorPanel metrics={metrics.clone()} rate={*rate} payload={*payload} />
                         </ReactorProvider<RelayReactor, JsonCodec>>
+                    },
+                    Path::Ring => html!{
+                        <RingPanel key="ring" metrics={metrics.clone()} rate={*rate} payload={*payload} />
                     },
                 }}
             </div>
@@ -222,9 +247,8 @@ struct PathProps {
     payload: u32,
 }
 
-/// In-thread path: the flood feeder generates raw relay-message JSON and runs
-/// parse + dedup + filter ON THE MAIN THREAD (mirroring the pool's onmessage),
-/// then renders. This is exactly the work the worker offloads.
+/// In-thread path: flood feeder runs parse + dedup + filter ON THE MAIN THREAD
+/// in coarse non-yielding bursts (like a real socket `onmessage`), then renders.
 #[function_component(InThreadPanel)]
 fn in_thread_panel(props: &PathProps) -> Html {
     let notes = use_mut_ref(VecDeque::<NostrNote>::new);
@@ -249,11 +273,6 @@ fn in_thread_panel(props: &PathProps) -> Html {
             let dedup = dedup.clone();
             let filter = kind1_filter();
             yew::platform::spawn_local(async move {
-                // Coarse burst cadence (NOT per-frame): a real relay socket
-                // hands you a whole batch in one onmessage call, and ALL of
-                // that parse+dedup+filter runs synchronously on the main thread
-                // before the event loop can paint. 100ms bursts make that block
-                // visible as dropped frames — the cost the worker avoids.
                 const BURST_MS: u32 = 100;
                 let bursts = FLOOD_SECS * (1000 / BURST_MS);
                 let per_burst = (rate * BURST_MS / 1000).max(1);
@@ -261,13 +280,11 @@ fn in_thread_panel(props: &PathProps) -> Html {
                     let emit = metrics::wall_ms();
                     let mut produced = 0u64;
                     let mut rendered = 0u64;
-                    // Tight, non-yielding loop — blocks the main thread.
                     for _ in 0..per_burst {
                         let s = *seq.borrow();
                         *seq.borrow_mut() += 1;
                         produced += 1;
                         let raw = metrics::synthetic_event(s, emit, payload);
-                        // SAME work the worker does — just on the UI thread.
                         let Ok(NostrRelayEvent::NewNote(.., note)) = raw.parse::<NostrRelayEvent>()
                         else {
                             continue;
@@ -280,7 +297,6 @@ fn in_thread_panel(props: &PathProps) -> Html {
                         if !nostr_minions::note_matches_filter(&note, &filter) {
                             continue;
                         }
-                        // Latency: arrival is now; emit is embedded in content.
                         if let Some(em) = metrics::emit_ms_from_content(&note.content) {
                             metrics
                                 .borrow_mut()
@@ -312,20 +328,13 @@ fn in_thread_panel(props: &PathProps) -> Html {
     }
 }
 
-/// Worker path: the flood runs inside the worker; matched notes stream back.
-///
-/// Uses `use_reactor_bridge` (callback per output) — NOT
-/// `use_reactor_subscription`, which accumulates every output into a Vec and
-/// forces a re-render on EVERY message (thousands/sec under load, each cloning
-/// the growing history). The callback approach mirrors the in-thread path: push
-/// into a local buffer, and re-render once per frame via our own rAF loop.
-#[function_component(WorkerPanel)]
-fn worker_panel(props: &PathProps) -> Html {
+/// Reactor path: flood runs in a yew-agent worker; matched notes stream back
+/// over the postMessage bridge (JSON-coded per note).
+#[function_component(ReactorPanel)]
+fn reactor_panel(props: &PathProps) -> Html {
     let notes = use_mut_ref(VecDeque::<NostrNote>::new);
     let renders = use_mut_ref(|| 0usize);
     let seq = use_mut_ref(|| 1u64);
-    // Notes land here from the bridge callback; the rAF loop moves them into
-    // `notes` and renders once per frame. Decouples arrival rate from renders.
     let pending = use_mut_ref(VecDeque::<NostrNote>::new);
 
     let bridge = {
@@ -335,7 +344,6 @@ fn worker_panel(props: &PathProps) -> Html {
             if let yew_agent::reactor::ReactorEvent::Output(out) = ev {
                 match out {
                     relay_worker::WorkerOut::Note(note) => {
-                        // Per-note work only — no render here.
                         if let Some(em) = metrics::emit_ms_from_content(&note.content) {
                             metrics
                                 .borrow_mut()
@@ -345,7 +353,6 @@ fn worker_panel(props: &PathProps) -> Html {
                         metrics.borrow_mut().throughput.produce(1);
                         pending.borrow_mut().push_back(note);
                     }
-                    // The hidden bridge backlog the app's own metric can't see.
                     relay_worker::WorkerOut::QueueDepth(depth) => {
                         metrics.borrow_mut().worker_queue = depth;
                     }
@@ -354,7 +361,6 @@ fn worker_panel(props: &PathProps) -> Html {
         })
     };
 
-    // Establish the filter once so the worker matches our synthetic notes.
     use_effect_with((), {
         let bridge = bridge.clone();
         move |()| {
@@ -380,12 +386,213 @@ fn worker_panel(props: &PathProps) -> Html {
         })
     };
 
-    // rAF loop: move up to DRAIN_PER_FRAME pending notes into the render buffer
-    // and re-render ONCE per frame, only when something arrived.
+    drain_loop(notes.clone(), pending, props.metrics.clone());
+
+    *renders.borrow_mut() += 1;
+    let snapshot: Vec<NostrNote> = notes.borrow().iter().cloned().collect();
+    html! {
+        <Panel title="Reactor (postMessage bridge)" color="#d97706"
+            render_count={*renders.borrow()} notes={snapshot} on_flood={flood} />
+    }
+}
+
+/// Shared-ring path: a hand-spawned worker shares the wasm memory and pushes
+/// matched notes into a quetzalcoatl SPSC ring; we pop from it. Zero
+/// serialization, no per-note postMessage.
+#[function_component(RingPanel)]
+fn ring_panel(props: &PathProps) -> Html {
+    let notes = use_mut_ref(VecDeque::<NostrNote>::new);
+    let renders = use_mut_ref(|| 0usize);
+    let ring_ptr = use_mut_ref(|| 0usize);
+    let dropped_ptr = use_mut_ref(|| 0usize);
+    // Shared "flood running" flag address. We gate new floods on it so the SPSC
+    // ring never has two concurrent producers. We deliberately do NOT keep a
+    // worker handle to terminate(): hard-killing a thread that shares the wasm
+    // allocator can orphan the dlmalloc lock mid-`malloc` and hang every later
+    // allocation ("page unresponsive"). Each flood worker exits cooperatively
+    // after its run and clears the flag itself.
+    let running_ptr = use_mut_ref(|| 0usize);
+    let status = use_state(|| "ready".to_string());
+
+    // rAF loop: lazily build the consumer once the ring exists, then pop up to
+    // DRAIN_PER_FRAME notes/frame into the view, recording latency + throughput.
     {
         let notes = notes.clone();
-        let pending = pending.clone();
+        let ring_ptr = ring_ptr.clone();
+        let dropped_ptr = dropped_ptr.clone();
         let metrics = props.metrics.clone();
+        let force = use_force_update();
+        use_effect_with((), move |()| {
+            // The consumer is bound to ONE ring pointer. Each flood allocates a
+            // FRESH ring (see `flood`), so when `ring_ptr` changes we must drop
+            // the old consumer and build a new one against the new ring. A
+            // quetzalcoatl `Producer` starts its write cursor at 0 regardless of
+            // the ring's current `tail`, so reusing a ring across floods would
+            // rewind `tail` under a consumer whose `head` is still at the old
+            // high-water mark — the consumer would then read uninitialized slots
+            // (`assume_init_read` on stale memory), producing `NostrNote`s with
+            // garbage `String` pointers and corrupting the shared dlmalloc heap.
+            // That heap corruption is the "page unresponsive on the 2nd flood".
+            // Binding the consumer to the live pointer makes each flood a clean,
+            // fresh producer/consumer pair on its own ring.
+            let consumer: Rc<RefCell<Option<_>>> = Rc::new(RefCell::new(None));
+            let bound_ptr = Rc::new(RefCell::new(0usize));
+            let cb: RafClosure = Rc::new(RefCell::new(None));
+            let cb2 = cb.clone();
+            *cb.borrow_mut() = Some(Closure::wrap(Box::new(move |_ts: f64| {
+                let ptr = *ring_ptr.borrow();
+                // Reflect the worker's shared drop counter into metrics each frame.
+                let dropped = unsafe { ring::dropped_count(*dropped_ptr.borrow()) };
+                if dropped > 0 {
+                    metrics.borrow_mut().dropped = dropped;
+                }
+                if ptr != 0 {
+                    if *bound_ptr.borrow() != ptr {
+                        // New ring (first flood, or a fresh ring for this flood):
+                        // (re)build the consumer against the current pointer.
+                        // SAFETY: ptr from ring::alloc_ring (leaked, 'static);
+                        // single consumer (here), single producer (worker).
+                        *consumer.borrow_mut() = Some(unsafe { ring::consumer(ptr) });
+                        *bound_ptr.borrow_mut() = ptr;
+                    }
+                    let mut drained = 0u64;
+                    if let Some(c) = consumer.borrow_mut().as_mut() {
+                        let mut buf = notes.borrow_mut();
+                        let mut m = metrics.borrow_mut();
+                        for _ in 0..DRAIN_PER_FRAME {
+                            let Some(note) = c.pop() else { break };
+                            if let Some(em) = metrics::emit_ms_from_content(&note.content) {
+                                m.latency().record(metrics::wall_ms() - em);
+                            }
+                            buf.push_front(note);
+                            drained += 1;
+                        }
+                        buf.truncate(LIMIT as usize);
+                    }
+                    if drained > 0 {
+                        let mut m = metrics.borrow_mut();
+                        // worker pushed = we popped (it dropped non-matches itself).
+                        m.throughput.produce(drained);
+                        m.throughput.render(drained);
+                        drop(m);
+                        force.force_update();
+                    }
+                }
+                if let (Some(win), Some(c)) = (web_sys::window(), cb2.borrow().as_ref()) {
+                    let _ = win.request_animation_frame(c.as_ref().unchecked_ref());
+                }
+            }) as Box<dyn FnMut(f64)>));
+            if let (Some(win), Some(c)) = (web_sys::window(), cb.borrow().as_ref()) {
+                let _ = win.request_animation_frame(c.as_ref().unchecked_ref());
+            }
+            // Stop the self-rescheduling rAF chain on unmount: clear the cell so
+            // the next already-scheduled frame finds `None` and does NOT
+            // reschedule. Just dropping the outer `cb` would NOT cancel the
+            // in-flight frame (the browser still holds `cb2`), leaking an
+            // immortal loop per mount — which compounded across path switches
+            // and exploded after a tab background/resume requeued them.
+            move || {
+                *cb.borrow_mut() = None;
+            }
+        });
+    }
+
+    let flood = {
+        let ring_ptr = ring_ptr.clone();
+        let dropped_ptr = dropped_ptr.clone();
+        let running_ptr = running_ptr.clone();
+        let rate = props.rate;
+        let payload = props.payload as usize;
+        let status = status.clone();
+        Callback::from(move |_| {
+            web_sys::console::log_1(&"[ring] flood click: start".into());
+            // Refuse to start a second flood while one is running — two
+            // producers would violate the SPSC ring's single-producer contract.
+            if unsafe { ring::is_running(*running_ptr.borrow()) } {
+                status.set("flood already running — wait for it to finish".to_string());
+                return;
+            }
+            // Allocate a FRESH ring per flood. A quetzalcoatl `Producer` always
+            // starts its write cursor at 0, ignoring the ring's existing `tail`;
+            // reusing a ring across floods would rewind `tail` under a consumer
+            // whose `head` is at the previous high-water mark, so the consumer
+            // would read uninitialized slots and corrupt the shared heap (the
+            // 2nd-flood "page unresponsive"). The old ring is `Box::leak`ed
+            // (process-lifetime) and simply abandoned — no double-producer, and
+            // the rAF loop rebinds its consumer to this new pointer.
+            web_sys::console::log_1(&"[ring] alloc_ring…".into());
+            let (rp, dp, runp) = ring::alloc_ring();
+            web_sys::console::log_1(&"[ring] alloc_ring done".into());
+            *ring_ptr.borrow_mut() = rp;
+            *dropped_ptr.borrow_mut() = dp;
+            *running_ptr.borrow_mut() = runp;
+            let ptr = *ring_ptr.borrow();
+            let dptr = *dropped_ptr.borrow();
+            let runp = *running_ptr.borrow();
+            let Some(glue) = shared::find_glue_url() else {
+                status.set("no glue URL".to_string());
+                return;
+            };
+            let filter_json = serde_json::to_string(&kind1_filter()).unwrap_or_default();
+            let args = [
+                JsValue::from_f64(ptr as f64),
+                JsValue::from_f64(dptr as f64),
+                JsValue::from_f64(runp as f64),
+                JsValue::from_f64(f64::from(rate)),
+                JsValue::from_f64(f64::from(FLOOD_SECS)),
+                JsValue::from_f64(payload as f64),
+                JsValue::from_str(&filter_json),
+            ];
+            match shared::spawn_worker(&glue, "ring_worker_main", &args) {
+                Ok(worker) => {
+                    let status = status.clone();
+                    let onmsg = Closure::wrap(Box::new(move |e: web_sys::MessageEvent| {
+                        if let Some(s) = e.data().as_string() {
+                            web_sys::console::log_1(&format!("[ring] {s}").into());
+                            status.set(s);
+                        }
+                    })
+                        as Box<dyn FnMut(web_sys::MessageEvent)>);
+                    worker.set_onmessage(Some(onmsg.as_ref().unchecked_ref()));
+                    onmsg.forget();
+                    // The worker exits cooperatively after its run (clearing the
+                    // running flag); we never terminate() it. Forgetting it here
+                    // is fine — it's a one-shot flood that ends on its own, and a
+                    // dead worker frees itself. (One worker per flood; gated by
+                    // the running flag so they never overlap.)
+                    std::mem::forget(worker);
+                }
+                Err(e) => status.set(format!("spawn failed: {e:?}")),
+            }
+        })
+    };
+
+    *renders.borrow_mut() += 1;
+    let snapshot: Vec<NostrNote> = notes.borrow().iter().cloned().collect();
+    html! {
+        <>
+            <p style="text-align:center; font-size:.75rem; color:#6b7280; margin:.2rem;">
+                {"ring status: "}<code>{ (*status).clone() }</code>
+            </p>
+            <Panel title="Shared Ring (zero-copy, no postMessage)" color="#16a34a"
+                render_count={*renders.borrow()} notes={snapshot} on_flood={flood} />
+        </>
+    }
+}
+
+/// Shared rAF drain loop for the reactor path: move up to DRAIN_PER_FRAME
+/// pending notes into the render buffer, render once per frame when non-empty.
+fn drain_loop(
+    notes: Rc<RefCell<VecDeque<NostrNote>>>,
+    pending: Rc<RefCell<VecDeque<NostrNote>>>,
+    metrics: SharedMetrics,
+) {
+    #[hook]
+    fn use_drain(
+        notes: Rc<RefCell<VecDeque<NostrNote>>>,
+        pending: Rc<RefCell<VecDeque<NostrNote>>>,
+        metrics: SharedMetrics,
+    ) {
         let force = use_force_update();
         use_effect_with((), move |()| {
             let cb: RafClosure = Rc::new(RefCell::new(None));
@@ -418,16 +625,18 @@ fn worker_panel(props: &PathProps) -> Html {
             if let (Some(win), Some(c)) = (web_sys::window(), cb.borrow().as_ref()) {
                 let _ = win.request_animation_frame(c.as_ref().unchecked_ref());
             }
-            move || drop(cb)
+            // Stop the self-rescheduling rAF chain on unmount: clear the cell so
+            // the next already-scheduled frame finds `None` and does NOT
+            // reschedule. Just dropping the outer `cb` would NOT cancel the
+            // in-flight frame (the browser still holds `cb2`), leaking an
+            // immortal loop per mount — which compounded across path switches
+            // and exploded after a tab background/resume requeued them.
+            move || {
+                *cb.borrow_mut() = None;
+            }
         });
     }
-
-    *renders.borrow_mut() += 1;
-    let snapshot: Vec<NostrNote> = notes.borrow().iter().cloned().collect();
-    html! {
-        <Panel title="Web Worker (off-thread parse)" color="#16a34a"
-            render_count={*renders.borrow()} notes={snapshot} on_flood={flood} />
-    }
+    use_drain(notes, pending, metrics);
 }
 
 #[derive(Properties, PartialEq)]
@@ -442,9 +651,9 @@ struct PanelProps {
 #[function_component(Panel)]
 fn panel(props: &PanelProps) -> Html {
     html! {
-        <div style="background:white; border-radius:8px; padding:1rem; box-shadow:0 1px 3px rgba(0,0,0,.1); display:flex; flex-direction:column; height:55vh;">
+        <div style="background:white; border-radius:8px; padding:1rem; box-shadow:0 1px 3px rgba(0,0,0,.1); display:flex; flex-direction:column; height:52vh;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
-                <h2 style={format!("color:{}; margin:0; font-size:1.1rem;", props.color)}>{props.title}</h2>
+                <h2 style={format!("color:{}; margin:0; font-size:1.05rem;", props.color)}>{props.title}</h2>
                 <div style="display:flex; gap:.75rem; align-items:center;">
                     <span style="font-size:.75rem; color:#6b7280;">
                         {format!("renders: {} · notes: {}", props.render_count, props.notes.len())}
@@ -487,7 +696,6 @@ struct MetricsProps {
 #[function_component(MetricsPanel)]
 fn metrics_panel(props: &MetricsProps) -> Html {
     let tick = use_state(|| 0u32);
-    // Re-render 4×/sec so numbers update smoothly without thrashing.
     use_effect_with((), {
         let tick = tick.clone();
         move |()| {
@@ -523,6 +731,8 @@ fn metrics_panel(props: &MetricsProps) -> Html {
                     if t.backlog() > 1000 { "#dc2626" } else { "#111827" }) }
                 { cell("wkr queue", m.worker_queue.to_string(),
                     if m.worker_queue > 1000 { "#dc2626" } else { "#111827" }) }
+                { cell("dropped", m.dropped.to_string(),
+                    if m.dropped > 0 { "#dc2626" } else { "#111827" }) }
                 { cell("lat p50", format!("{p50:.1}ms"), "#111827") }
                 { cell("lat p95", format!("{p95:.1}ms"), "#d97706") }
                 { cell("lat p99", format!("{p99:.1}ms"), "#dc2626") }
@@ -540,11 +750,9 @@ fn metrics_panel(props: &MetricsProps) -> Html {
     }
 }
 
-/// A main-thread-driven smoothness indicator. A JS `requestAnimationFrame`
-/// loop advances a rotating bar and computes a rolling FPS. Because it runs ON
-/// the main thread, it visibly FREEZES when the main thread is blocked (the
-/// in-thread flood's parse bursts) and stays smooth when work is off-thread
-/// (the worker). This is the human-visible version of the jank histogram.
+/// Main-thread-driven smoothness indicator: a rAF-spun bar + rolling FPS. It
+/// freezes when the UI thread blocks (in-thread bursts) and stays smooth when
+/// work is off-thread (reactor / ring). Human-visible version of jank %.
 #[function_component(SmoothnessMeter)]
 fn smoothness_meter() -> Html {
     let angle = use_state(|| 0f64);
@@ -562,7 +770,6 @@ fn smoothness_meter() -> Html {
                 if prev > 0.0 {
                     let dt = ts - prev;
                     if dt > 0.0 {
-                        // Smooth the FPS a little so the number is readable.
                         let inst = 1000.0 / dt;
                         fps.set((*fps).mul_add(0.8, inst * 0.2));
                     }
@@ -576,7 +783,15 @@ fn smoothness_meter() -> Html {
             if let (Some(win), Some(c)) = (web_sys::window(), cb.borrow().as_ref()) {
                 let _ = win.request_animation_frame(c.as_ref().unchecked_ref());
             }
-            move || drop(cb)
+            // Stop the self-rescheduling rAF chain on unmount: clear the cell so
+            // the next already-scheduled frame finds `None` and does NOT
+            // reschedule. Just dropping the outer `cb` would NOT cancel the
+            // in-flight frame (the browser still holds `cb2`), leaking an
+            // immortal loop per mount — which compounded across path switches
+            // and exploded after a tab background/resume requeued them.
+            move || {
+                *cb.borrow_mut() = None;
+            }
         }
     });
 
@@ -607,7 +822,6 @@ fn smoothness_meter() -> Html {
 /// `[BENCH]` console dump. Independent of the active path.
 #[hook]
 fn use_bench_sampler(metrics: SharedMetrics) {
-    // rAF loop → jank histogram.
     {
         let metrics = metrics.clone();
         use_effect_with((), move |()| {
@@ -627,11 +841,18 @@ fn use_bench_sampler(metrics: SharedMetrics) {
             if let (Some(win), Some(c)) = (web_sys::window(), cb.borrow().as_ref()) {
                 let _ = win.request_animation_frame(c.as_ref().unchecked_ref());
             }
-            move || drop(cb)
+            // Stop the self-rescheduling rAF chain on unmount: clear the cell so
+            // the next already-scheduled frame finds `None` and does NOT
+            // reschedule. Just dropping the outer `cb` would NOT cancel the
+            // in-flight frame (the browser still holds `cb2`), leaking an
+            // immortal loop per mount — which compounded across path switches
+            // and exploded after a tab background/resume requeued them.
+            move || {
+                *cb.borrow_mut() = None;
+            }
         });
     }
 
-    // 1Hz throughput sample + structured console dump.
     use_effect_with((), move |()| {
         let handle = gloo_like_interval(1000, move || {
             let mut m = metrics.borrow_mut();
@@ -640,7 +861,6 @@ fn use_bench_sampler(metrics: SharedMetrics) {
                 .latency_samples
                 .as_ref()
                 .map_or((0.0, 0.0, 0.0), Latency::percentiles);
-            // Structured dump — copyable from the console.
             let dump = web_sys::js_sys::Object::new();
             let set = |k: &str, v: JsValue| {
                 let _ = web_sys::js_sys::Reflect::set(&dump, &k.into(), &v);
@@ -656,6 +876,7 @@ fn use_bench_sampler(metrics: SharedMetrics) {
             );
             set("backlog", (m.throughput.backlog() as f64).into());
             set("worker_queue", (m.worker_queue as f64).into());
+            set("dropped", (m.dropped as f64).into());
             set("lat_p50_ms", p50.into());
             set("lat_p95_ms", p95.into());
             set("lat_p99_ms", p99.into());
@@ -667,8 +888,8 @@ fn use_bench_sampler(metrics: SharedMetrics) {
     });
 }
 
-/// Minimal setInterval wrapper returning a guard that clears the interval and
-/// drops the closure on drop. (Avoids pulling in gloo-timers for one call.)
+/// Minimal `setInterval` wrapper; clears the interval and drops the closure on
+/// drop. (Avoids pulling in gloo-timers for one call.)
 struct IntervalHandle {
     id: i32,
     _closure: Closure<dyn FnMut()>,

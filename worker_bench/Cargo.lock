@@ -846,6 +846,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "quetzalcoatl"
+version = "0.11.1"
+
+[[package]]
 name = "quote"
 version = "1.0.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1403,6 +1407,7 @@ dependencies = [
  "futures",
  "nostr-minions",
  "nostro2",
+ "quetzalcoatl",
  "serde",
  "serde_json",
  "wasm-bindgen",

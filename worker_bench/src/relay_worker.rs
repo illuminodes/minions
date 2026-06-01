@@ -173,7 +173,7 @@ pub async fn RelayReactor(mut scope: ReactorScope<RelayCommand, WorkerOut>) {
                     // Report the bridge queue depth every 64 notes (cheap, and
                     // frequent enough to watch it climb without spamming the
                     // bridge with depth reports that would themselves queue).
-                    if shipped % 64 == 0 {
+                    if shipped.is_multiple_of(64) {
                         let depth = enqueued.get().saturating_sub(shipped);
                         if scope.send(WorkerOut::QueueDepth(depth)).await.is_err() {
                             break;

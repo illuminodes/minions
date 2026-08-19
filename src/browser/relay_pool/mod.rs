@@ -1,19 +1,19 @@
+mod app_link;
 mod bounded_dedup;
 #[cfg(feature = "sab-transport")]
 mod endpoint;
 #[cfg(feature = "bench-harness")]
 mod flood;
+mod handshake;
 mod hooks;
 mod ingest;
 mod ingested;
-mod message_bridge;
 #[cfg(feature = "sab-transport")]
 mod isolation;
+mod message_bridge;
 mod nostr_relay;
-mod pool_transport;
-mod app_link;
-mod handshake;
 mod pool_event;
+mod pool_transport;
 mod provider;
 mod relay_set;
 #[cfg(feature = "sab-transport")]
@@ -33,13 +33,11 @@ mod worker_sink;
 pub use bounded_dedup::BoundedDedup;
 #[cfg(feature = "bench-harness")]
 pub use flood::{FloodRunner, FloodSpec, SyntheticFrame};
-pub use ingest::NoteIngestor;
-pub use worker::{JsonCodec, RelayCommand, RelayReactor, WorkerOut};
-pub use worker_boot::{relay_worker_main, spawn_relay_bridge};
 pub use hooks::{
     use_live_note, use_nostr_notes, use_notes_by_authors, use_notes_by_kind, use_recent_notes,
     use_relay_events, use_text_notes,
 };
+pub use ingest::NoteIngestor;
 pub use nostr_relay::UserRelay;
 pub use provider::{
     NostrRelayPool, NostrRelayPoolAction, NostrRelayPoolProvider, NostrRelayPoolStore,
@@ -47,7 +45,9 @@ pub use provider::{
 pub use subscription::{RelayEventSubscription, SubscriptionId, SubscriptionInfo};
 pub use transport_status::TransportStatus;
 pub use websocket::ReadyState;
+pub use worker::{JsonCodec, RelayCommand, RelayReactor, WorkerOut};
 pub use worker_boot::is_relay_worker;
+pub use worker_boot::{relay_worker_main, spawn_relay_bridge};
 
 #[yew::hook]
 pub fn use_nostr_relay_pool() -> Option<provider::NostrRelayPoolStore> {

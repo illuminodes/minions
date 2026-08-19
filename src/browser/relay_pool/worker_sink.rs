@@ -86,7 +86,10 @@ impl WorkerSink {
     /// Not yet reported to the application. Sending it needs a metrics frame in
     /// [`wire_envelope`], which is a wire change with its own tests, so the
     /// benchmark's queue-depth readout stays at zero until then.
-    #[allow(dead_code, reason = "reporting it needs a metrics frame in wire_envelope")]
+    #[allow(
+        dead_code,
+        reason = "reporting it needs a metrics frame in wire_envelope"
+    )]
     #[must_use]
     pub fn backlog(&self) -> usize {
         self.transport.backlog()
@@ -96,7 +99,10 @@ impl WorkerSink {
     ///
     /// The momentary backlog is almost always zero even when the reader stalled
     /// badly, so this is the honest number to report.
-    #[allow(dead_code, reason = "reporting it needs a metrics frame in wire_envelope")]
+    #[allow(
+        dead_code,
+        reason = "reporting it needs a metrics frame in wire_envelope"
+    )]
     #[must_use]
     pub fn peak_backlog(&self) -> usize {
         self.transport.peak_backlog()

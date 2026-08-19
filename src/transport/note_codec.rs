@@ -148,7 +148,7 @@ impl NoteCodec {
 
 #[cfg(test)]
 mod tests {
-    use super::{NoteCodec, NostrNote, NostrTags};
+    use super::{NostrNote, NostrTags, NoteCodec};
 
     struct NoteBuilder;
 
@@ -168,7 +168,8 @@ mod tests {
         fn tagged() -> NostrNote {
             let mut note = Self::plain();
             note.tags.add_event_tag(&"d".repeat(64));
-            note.tags.add_pubkey_tag(&"e".repeat(64), Some("wss://r.io"));
+            note.tags
+                .add_pubkey_tag(&"e".repeat(64), Some("wss://r.io"));
             note.tags
                 .add_row(vec!["custom".into(), "1".into(), "2".into()]);
             note
@@ -248,7 +249,7 @@ mod tests {
     fn absurd_length_prefix_is_rejected() {
         let mut frame = NoteCodec::encode(&NoteBuilder::plain());
         let pubkey_len_at = 8 + 4;
-        frame[pubkey_len_at..pubkey_len_at + 4].copy_from_slice(&1_000_000u32.to_le_bytes());
+        frame[pubkey_len_at..pubkey_len_at + 4].copy_from_slice(&1_000_000_u32.to_le_bytes());
         assert_eq!(NoteCodec::decode(&frame), None);
     }
 }

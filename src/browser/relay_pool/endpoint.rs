@@ -71,7 +71,10 @@ impl Endpoint {
 
     /// The largest backlog ever reached. Non-zero means the peer fell behind;
     /// it never means data was lost.
-    #[allow(dead_code, reason = "reporting it needs a metrics frame; see worker_sink")]
+    #[allow(
+        dead_code,
+        reason = "reporting it needs a metrics frame; see worker_sink"
+    )]
     pub fn peak_backlog(&self) -> usize {
         self.pending.borrow().peak()
     }

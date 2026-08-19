@@ -69,7 +69,8 @@ impl Drop for RingPoller {
         let Some(handle) = self.handle.borrow_mut().take() else {
             return;
         };
-        if let Ok(scope) = web_sys::js_sys::global().dyn_into::<web_sys::DedicatedWorkerGlobalScope>()
+        if let Ok(scope) =
+            web_sys::js_sys::global().dyn_into::<web_sys::DedicatedWorkerGlobalScope>()
         {
             scope.clear_interval_with_handle(handle);
         }

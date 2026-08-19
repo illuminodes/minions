@@ -68,7 +68,8 @@ impl WorkerRings {
             return;
         };
         let frame = super::handshake::RingHandshake::frame(&handles);
-        if let Ok(scope) = web_sys::js_sys::global().dyn_into::<web_sys::DedicatedWorkerGlobalScope>()
+        if let Ok(scope) =
+            web_sys::js_sys::global().dyn_into::<web_sys::DedicatedWorkerGlobalScope>()
         {
             let _ = scope.post_message(&frame);
         }

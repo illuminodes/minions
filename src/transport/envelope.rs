@@ -397,7 +397,7 @@ mod tests {
     #[test]
     fn corrupt_length_prefix_is_rejected() {
         let mut frame = Envelope::encode_inbound(&Inbound::Close("sub-1".to_string()));
-        frame[1..5].copy_from_slice(&1_000_000u32.to_le_bytes());
+        frame[1..5].copy_from_slice(&1_000_000_u32.to_le_bytes());
         assert_eq!(Envelope::decode_inbound(&frame), None);
     }
 }

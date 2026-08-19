@@ -64,14 +64,11 @@ impl RingPump {
                     state.borrow_mut().take();
                     return;
                 }
-                let next = state
-                    .borrow()
-                    .as_ref()
-                    .and_then(|cb| {
-                        window
-                            .request_animation_frame(cb.as_ref().unchecked_ref())
-                            .ok()
-                    });
+                let next = state.borrow().as_ref().and_then(|cb| {
+                    window
+                        .request_animation_frame(cb.as_ref().unchecked_ref())
+                        .ok()
+                });
                 *handle.borrow_mut() = next;
             }) as Box<dyn FnMut(f64)>)
         };

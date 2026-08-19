@@ -28,12 +28,12 @@ impl RingIndex {
     /// Panics if `cap` is not a power of two, or is smaller than one word.
     #[must_use]
     pub const fn new(cap: u32) -> Self {
-        assert!(cap.is_power_of_two(), "ring capacity must be a power of two");
+        assert!(
+            cap.is_power_of_two(),
+            "ring capacity must be a power of two"
+        );
         assert!(cap >= 4, "ring capacity must hold at least one length word");
-        Self {
-            cap,
-            mask: cap - 1,
-        }
+        Self { cap, mask: cap - 1 }
     }
 
     /// Total bytes a frame occupies: a 4-byte length word plus the payload,
@@ -130,8 +130,8 @@ mod tests {
     #[test]
     fn reserve_skips_a_short_tail_run() {
         let ix = index();
-        let head = (CAP / 2) as i32;
-        let tail = (CAP - 8) as i32;
+        let head = (CAP / 2).cast_signed();
+        let tail = (CAP - 8).cast_signed();
         let reservation = ix.reserve(head, tail, 8).expect("should wrap");
         assert_eq!(reservation.skip_at, Some(CAP - 8));
         assert_eq!(reservation.at, 0);
@@ -141,15 +141,15 @@ mod tests {
     #[test]
     fn reserve_refuses_to_wrap_when_the_skip_would_pass_the_head() {
         let ix = index();
-        let tail = (CAP - 8) as i32;
+        let tail = (CAP - 8).cast_signed();
         assert_eq!(ix.reserve(0, tail, 8), None);
     }
 
     #[test]
     fn reserve_counts_skipped_bytes_against_free_space() {
         let ix = index();
-        let head = (CAP - 8) as i32;
-        let tail = (2 * CAP - 8) as i32;
+        let head = (CAP - 8).cast_signed();
+        let tail = (2 * CAP - 8).cast_signed();
         assert_eq!(ix.used(head, tail), CAP);
         assert_eq!(ix.reserve(head, tail, 0), None);
     }
@@ -157,7 +157,7 @@ mod tests {
     #[test]
     fn reserve_fails_when_full() {
         let ix = index();
-        assert_eq!(ix.reserve(0, CAP as i32, 0), None);
+        assert_eq!(ix.reserve(0, CAP.cast_signed(), 0), None);
     }
 
     #[test]
@@ -172,15 +172,15 @@ mod tests {
     #[test]
     fn drain_and_refill_returns_every_offset_in_range() {
         let ix = index();
-        let mut head = 0i32;
-        let mut tail = 0i32;
+        let mut head = 0_i32;
+        let mut tail = 0_i32;
         for _ in 0..256 {
             let Some(reservation) = ix.reserve(head, tail, 5) else {
                 head = tail;
                 continue;
             };
             assert!(reservation.at + ix.frame_bytes(5) <= CAP);
-            tail = tail.wrapping_add(reservation.advance as i32);
+            tail = tail.wrapping_add(reservation.advance.cast_signed());
             assert!(ix.used(head, tail) <= CAP);
         }
     }

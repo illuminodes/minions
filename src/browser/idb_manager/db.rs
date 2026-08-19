@@ -90,8 +90,8 @@ impl NostrIdb {
             &[crate::browser::idb_manager::NostrDbStoreName::UserRelay.as_ref()],
             idb::TransactionMode::ReadOnly,
         )?;
-        let store =
-            transaction.object_store(crate::browser::idb_manager::NostrDbStoreName::UserRelay.as_ref())?;
+        let store = transaction
+            .object_store(crate::browser::idb_manager::NostrDbStoreName::UserRelay.as_ref())?;
         let relays = store
             .get_all(None, None)?
             .await?
@@ -108,8 +108,8 @@ impl NostrIdb {
             &[crate::browser::idb_manager::NostrDbStoreName::UserRelay.as_ref()],
             idb::TransactionMode::ReadWrite,
         )?;
-        let store =
-            transaction.object_store(crate::browser::idb_manager::NostrDbStoreName::UserRelay.as_ref())?;
+        let store = transaction
+            .object_store(crate::browser::idb_manager::NostrDbStoreName::UserRelay.as_ref())?;
         store
             .put(&serde_wasm_bindgen::to_value(&relay)?, None)?
             .await?;
@@ -121,8 +121,8 @@ impl NostrIdb {
             &[crate::browser::idb_manager::NostrDbStoreName::UserRelay.as_ref()],
             idb::TransactionMode::ReadWrite,
         )?;
-        let store =
-            transaction.object_store(crate::browser::idb_manager::NostrDbStoreName::UserRelay.as_ref())?;
+        let store = transaction
+            .object_store(crate::browser::idb_manager::NostrDbStoreName::UserRelay.as_ref())?;
         store
             .delete(wasm_bindgen::JsValue::from_str(relay_url.as_str()))?
             .await?;

@@ -269,10 +269,8 @@ impl WorkerSocket {
                     let _ = sender.send_with_str(msg);
                 }
                 queue.borrow_mut().clear();
-                let _ = bus_tx.unbounded_send(Internal::Health(vec![(
-                    url.clone(),
-                    ReadyState::OPEN,
-                )]));
+                let _ =
+                    bus_tx.unbounded_send(Internal::Health(vec![(url.clone(), ReadyState::OPEN)]));
             }) as Box<dyn FnMut()>)
         };
 
@@ -295,10 +293,8 @@ impl WorkerSocket {
             let url = url.clone();
             let bus_tx = bus_tx;
             Closure::wrap(Box::new(move |_e: web_sys::CloseEvent| {
-                let _ = bus_tx.unbounded_send(Internal::Health(vec![(
-                    url.clone(),
-                    ReadyState::CLOSED,
-                )]));
+                let _ = bus_tx
+                    .unbounded_send(Internal::Health(vec![(url.clone(), ReadyState::CLOSED)]));
 
                 if retry_count >= MAX_RETRIES {
                     return;

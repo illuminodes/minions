@@ -14,8 +14,8 @@ impl UserRelay {
             &[crate::browser::idb_manager::NostrDbStoreName::UserRelay.as_ref()],
             idb::TransactionMode::ReadOnly,
         )?;
-        let store =
-            transaction.object_store(crate::browser::idb_manager::NostrDbStoreName::UserRelay.as_ref())?;
+        let store = transaction
+            .object_store(crate::browser::idb_manager::NostrDbStoreName::UserRelay.as_ref())?;
         let relays = store
             .get_all(None, None)?
             .await?

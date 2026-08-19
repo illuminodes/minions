@@ -26,8 +26,8 @@
 //! so the worker has ONE code path rather than a build per transport. The
 //! `#[cfg]` stops at this module.
 
-use wasm_bindgen::prelude::*;
 use crate::transport::{Envelope, Inbound, Outbound};
+use wasm_bindgen::prelude::*;
 
 /// How many frames one `receive` call takes at most.
 ///
@@ -80,7 +80,10 @@ impl PoolTransport {
         if self.uses_shared_rings() {
             "relay transport: shared rings (SharedArrayBuffer), all traffic".to_string()
         } else {
-            format!("relay transport: JSON bridge, all traffic — {}", Self::why_not_rings())
+            format!(
+                "relay transport: JSON bridge, all traffic — {}",
+                Self::why_not_rings()
+            )
         }
     }
 
@@ -142,13 +145,14 @@ impl PoolTransport {
     ///
     /// This is the honest measure of how far the reader fell behind, because
     /// the instantaneous backlog is usually zero. It never means data was lost.
-    #[allow(dead_code, reason = "reporting it needs a metrics frame; see worker_sink")]
+    #[allow(
+        dead_code,
+        reason = "reporting it needs a metrics frame; see worker_sink"
+    )]
     #[must_use]
     pub fn peak_backlog(&self) -> usize {
         self.rings_peak_backlog()
     }
-
-
 
     /// Announce that this thread has stopped draining, so the peer stops
     /// encoding for a reader that will never return.
@@ -165,7 +169,7 @@ impl PoolTransport {
 impl PoolTransport {
     fn worker_owned() -> Self {
         use super::isolation::Isolation;
-        use super::ring_pair::{Role, RingPair};
+        use super::ring_pair::{RingPair, Role};
 
         if !Isolation::is_available() {
             return Self {
@@ -183,7 +187,7 @@ impl PoolTransport {
     }
 
     fn app_attached(handles: Option<&JsValue>) -> Self {
-        use super::ring_pair::{Role, RingPair};
+        use super::ring_pair::{RingPair, Role};
 
         let Some(pair) = handles.and_then(|h| RingPair::attach(h).ok()) else {
             return Self {
@@ -227,7 +231,9 @@ impl PoolTransport {
     }
 
     fn rings_flush(&self) -> usize {
-        self.endpoint.as_ref().map_or(0, super::endpoint::Endpoint::flush)
+        self.endpoint
+            .as_ref()
+            .map_or(0, super::endpoint::Endpoint::flush)
     }
 
     fn rings_backlog(&self) -> usize {
@@ -236,14 +242,15 @@ impl PoolTransport {
             .map_or(0, super::endpoint::Endpoint::backlog)
     }
 
-    #[allow(dead_code, reason = "reporting it needs a metrics frame; see worker_sink")]
+    #[allow(
+        dead_code,
+        reason = "reporting it needs a metrics frame; see worker_sink"
+    )]
     fn rings_peak_backlog(&self) -> usize {
         self.endpoint
             .as_ref()
             .map_or(0, super::endpoint::Endpoint::peak_backlog)
     }
-
-
 
     fn rings_close(&self) {
         if let Some(endpoint) = self.endpoint.as_ref() {
@@ -299,7 +306,10 @@ impl PoolTransport {
         0
     }
 
-    #[allow(dead_code, reason = "reporting it needs a metrics frame; see worker_sink")]
+    #[allow(
+        dead_code,
+        reason = "reporting it needs a metrics frame; see worker_sink"
+    )]
     fn rings_peak_backlog(&self) -> usize {
         0
     }

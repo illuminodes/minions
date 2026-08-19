@@ -34,19 +34,13 @@ impl Isolation {
     }
 
     fn cross_origin_isolated() -> bool {
-        js_sys::Reflect::get(
-            &js_sys::global(),
-            &JsValue::from_str("crossOriginIsolated"),
-        )
-        .is_ok_and(|v| v.is_truthy())
+        js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("crossOriginIsolated"))
+            .is_ok_and(|v| v.is_truthy())
     }
 
     fn constructor_present() -> bool {
-        js_sys::Reflect::get(
-            &js_sys::global(),
-            &JsValue::from_str("SharedArrayBuffer"),
-        )
-        .is_ok_and(|v| !v.is_undefined() && !v.is_null())
+        js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("SharedArrayBuffer"))
+            .is_ok_and(|v| !v.is_undefined() && !v.is_null())
     }
 
     /// A one-line explanation for logs when the transport is unavailable.

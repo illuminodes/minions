@@ -12,8 +12,8 @@
 //! which is what the store actually wants: a note it can dispatch. The bridge
 //! pays the parse it always paid, and the rings pay nothing.
 
-use nostro2::{NostrNote, NostrRelayEvent};
 use crate::transport::Outbound;
+use nostro2::{NostrNote, NostrRelayEvent};
 
 use super::websocket::ReadyState;
 use super::worker::WorkerOut;

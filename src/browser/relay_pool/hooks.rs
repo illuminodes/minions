@@ -181,8 +181,8 @@ pub fn use_recent_notes(kinds: Vec<u32>, seconds: i64, limit: Option<u32>) -> Ve
     // hammering every relay with REQ + CLOSE on each render cycle.
     const GRANULARITY: i64 = 30;
     #[allow(clippy::cast_sign_loss)] // `.max(0)` guarantees non-negative
-    let since = ((crate::WallClock::unix_seconds() - seconds) / GRANULARITY * GRANULARITY).max(0)
-        as u64;
+    let since =
+        ((crate::WallClock::unix_seconds() - seconds) / GRANULARITY * GRANULARITY).max(0) as u64;
 
     use_nostr_notes(NostrSubscription {
         kinds: Some(kinds.into_iter().collect()),

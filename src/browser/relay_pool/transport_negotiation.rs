@@ -40,7 +40,10 @@ impl TransportNegotiation {
     }
 
     /// Whether the choice is already final.
-    #[allow(dead_code, reason = "the loop acts on the returned status; tests assert on this")]
+    #[allow(
+        dead_code,
+        reason = "the loop acts on the returned status; tests assert on this"
+    )]
     #[must_use]
     pub const fn is_settled(&self) -> bool {
         self.settled

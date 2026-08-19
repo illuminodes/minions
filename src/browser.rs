@@ -40,9 +40,10 @@ pub use idb_manager::{IdbStore, NostrIdb};
 pub use key_manager::{GiftwrapScheme, IdbKeypairEntry, NostrId, NostrIdAction};
 pub use minion_error::MinionError;
 pub use relay_pool::{
-    is_relay_worker, relay_worker_main, spawn_relay_bridge, BoundedDedup, JsonCodec, NoteIngestor,
-    NostrRelayPool, NostrRelayPoolAction, ReadyState, RelayCommand, RelayEventSubscription,
-    RelayReactor, SubscriptionId, SubscriptionInfo, TransportStatus, UserRelay, WorkerOut,
+    is_relay_worker, relay_worker_main, spawn_relay_bridge, BoundedDedup, JsonCodec,
+    NostrRelayPool, NostrRelayPoolAction, NoteIngestor, ReadyState, RelayCommand,
+    RelayEventSubscription, RelayReactor, SubscriptionId, SubscriptionInfo, TransportStatus,
+    UserRelay, WorkerOut,
 };
 
 // The synthetic-load harness `worker_bench` drives. Off unless `bench-harness`

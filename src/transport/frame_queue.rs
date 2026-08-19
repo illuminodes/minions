@@ -165,7 +165,11 @@ mod tests {
         queue.send(&sink, b"b".to_vec());
         queue.send(&sink, b"c".to_vec());
         assert_eq!(sink.accepted_count(), 1);
-        assert_eq!(queue.backlog(), 2, "nothing may be lost when the sink fills");
+        assert_eq!(
+            queue.backlog(),
+            2,
+            "nothing may be lost when the sink fills"
+        );
     }
 
     #[test]
@@ -217,7 +221,7 @@ mod tests {
     fn every_frame_survives_a_long_stall() {
         let sink = FakeSink::with_capacity(0);
         let mut queue = FrameQueue::new();
-        let sent: Vec<Vec<u8>> = (0..500u32).map(|i| i.to_le_bytes().to_vec()).collect();
+        let sent: Vec<Vec<u8>> = (0..500_u32).map(|i| i.to_le_bytes().to_vec()).collect();
         for frame in &sent {
             queue.send(&sink, frame.clone());
         }

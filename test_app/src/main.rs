@@ -1,8 +1,16 @@
-use nostr_minions::{use_notes_by_kind, use_relay_events, use_text_notes, NostrAppProvider};
+use nostr_minions::{
+    use_notes_by_kind, use_nostr_relay_pool, use_relay_events, use_text_notes, NostrAppProvider,
+    TransportStatus,
+};
 use yew::prelude::*;
 
-#[wasm_bindgen_test::wasm_bindgen_test]
 pub fn main() {
+    // The relay pool reuses this same wasm module for its background worker, so
+    // this entry point also runs on the worker thread (which has no DOM). Skip
+    // rendering there; the reactor registers itself.
+    if nostr_minions::is_relay_worker() {
+        return;
+    }
     yew::Renderer::<App>::new().render();
 }
 
@@ -19,6 +27,16 @@ fn app() -> Html {
             read: true,
             write: true,
         },
+        nostr_minions::UserRelay {
+            url: "wss://relay.illuminodes.com".to_string(),
+            read: true,
+            write: true,
+        },
+        nostr_minions::UserRelay {
+            url: "wss://rof.illuminodes.com".to_string(),
+            read: true,
+            write: true,
+        },
     ];
 
     html! {
@@ -27,6 +45,8 @@ fn app() -> Html {
                 <h1 class="text-2xl font-bold mb-4 text-center" style="flex-shrink: 0;">
                     {"Event Stream Test"}
                 </h1>
+
+                <TransportBanner />
 
                 <div style="display: flex; gap: 1rem; flex: 1; min-height: 0;">
                     <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden;">
@@ -51,6 +71,53 @@ fn splash() -> Html {
             <div class="bg-white p-8 rounded-lg shadow-xl">
                 <p class="text-xl">{"Loading..."}</p>
             </div>
+        </div>
+    }
+}
+
+/// Reports which transport the pool actually chose.
+///
+/// This exists because a silent fallback is indistinguishable from success:
+/// notes arrive over the JSON bridge exactly as they do over the shared rings.
+/// Without this banner, losing the COOP/COEP headers in `Trunk.toml` would
+/// disable the whole shared-ring path and every test here would still pass.
+#[function_component(TransportBanner)]
+fn transport_banner() -> Html {
+    let Some(pool) = use_nostr_relay_pool() else {
+        return html! {};
+    };
+    let status = pool.transport();
+
+    let (bg, fg, detail) = match status {
+        TransportStatus::SharedRings => (
+            "#dcfce7",
+            "#166534",
+            "SharedArrayBuffer rings carry notes and commands.",
+        ),
+        TransportStatus::Bridge => (
+            "#fef3c7",
+            "#92400e",
+            "Page is NOT cross-origin isolated, so the ring path is inactive. \
+             Check the COOP/COEP headers in Trunk.toml.",
+        ),
+        TransportStatus::Pending => (
+            "#e5e7eb",
+            "#374151",
+            "Waiting for the worker to offer its rings.",
+        ),
+    };
+
+    html! {
+        <div
+            data-testid="transport-status"
+            data-transport={status.label()}
+            style={format!(
+                "flex-shrink: 0; margin-bottom: 0.75rem; padding: 0.5rem 0.75rem; \
+                 border-radius: 0.375rem; background: {bg}; color: {fg}; font-size: 0.875rem;"
+            )}
+        >
+            <strong>{"Transport: "}{status.label()}</strong>
+            <span style="margin-left: 0.5rem;">{detail}</span>
         </div>
     }
 }
@@ -266,14 +333,6 @@ fn relay_events_component() -> Html {
                         *other_count.borrow_mut() += 1;
                         format!("[CLOSED] sub={sub_id}")
                     }
-                    nostr_minions::NostrRelayEvent::Ping => {
-                        *other_count.borrow_mut() += 1;
-                        "[PING]".to_string()
-                    }
-                    nostr_minions::NostrRelayEvent::Close(reason) => {
-                        *other_count.borrow_mut() += 1;
-                        format!("[CLOSE] {reason}")
-                    }
                     // Notes are handled by note subscriptions, not relay event subscribers
                     nostr_minions::NostrRelayEvent::NewNote(..) => return,
                 };
@@ -365,7 +424,7 @@ fn relay_events_component() -> Html {
 
 /// Format Unix timestamp to relative time
 fn format_timestamp(timestamp: i64) -> String {
-    let now = nostr_minions::NostrNote::now();
+    let now = nostr_minions::WallClock::unix_seconds();
     let diff = now - timestamp;
 
     if diff < 60 {

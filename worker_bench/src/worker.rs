@@ -4,15 +4,10 @@
 //! does nothing but register the relay reactor so the application can bridge
 //! to it. All relay I/O, dedup, and filter-matching happen here, off the UI
 //! thread.
-
-#[path = "relay_worker.rs"]
-mod relay_worker;
-
-use relay_worker::{JsonCodec, RelayReactor};
-use yew_agent::Registrable;
+//!
+//! The reactor is `nostr_minions`' own — the same one the library ships to
+//! consumers — so what this bench measures is what applications actually run.
 
 fn main() {
-    // Must match the codec on the provider side (app.rs), or the two ends
-    // won't agree on the wire format.
-    RelayReactor::registrar().encoding::<JsonCodec>().register();
+    nostr_minions::relay_worker_main();
 }

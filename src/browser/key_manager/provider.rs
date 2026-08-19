@@ -1,6 +1,10 @@
-use nostro2_signer::nostro2::{NostrNote, NostrSigner};
+use nostro2::{NostrNote, NostrSigner};
+use nostro2_nips::Nip44;
+use nostro2_signer::NostrKeypair;
 use std::rc::Rc;
 use yew::prelude::*;
+
+use super::GiftwrapScheme;
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct IdbKeypairEntry {
@@ -9,13 +13,12 @@ pub struct IdbKeypairEntry {
     pub keypair: web_sys::CryptoKey,
 }
 impl IdbKeypairEntry {
-    pub async fn from_keypair(
-        keypair: nostro2_signer::keypair::NostrKeypair,
-    ) -> Result<Self, crate::MinionError> {
-        let array = keypair.secret_key();
+    pub async fn from_keypair(keypair: NostrKeypair) -> Result<Self, crate::MinionError> {
+        use nostro2::NostrKeypair as _;
+        let array = keypair.secret_bytes();
         let js_array = web_sys::js_sys::Uint8Array::from(array.as_slice());
         let crypto_key: web_sys::CryptoKey =
-            crate::crypto::import_key_array(js_array.into()).await?;
+            crate::browser::crypto::import_key_array(js_array.into()).await?;
         Ok(Self {
             pubkey: keypair.public_key(),
             keypair: crypto_key,
@@ -23,11 +26,25 @@ impl IdbKeypairEntry {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// The signed-in identity.
+///
+/// `NostrKeypair` is opaque (no `PartialEq`), so equality — which Yew needs to
+/// decide whether context consumers re-render — compares the public key only.
+/// Two `NostrId`s with the same pubkey hold the same secret by construction.
+#[derive(Clone, Debug)]
 pub struct NostrId {
-    identity: Option<nostro2_signer::keypair::NostrKeypair>,
+    identity: Option<NostrKeypair>,
     pubkey: Option<String>,
 }
+
+impl PartialEq for NostrId {
+    fn eq(&self, other: &Self) -> bool {
+        self.pubkey == other.pubkey
+    }
+}
+
+impl Eq for NostrId {}
+
 impl NostrId {
     #[must_use]
     pub fn get_pubkey(&self) -> Option<&str> {
@@ -38,7 +55,7 @@ impl NostrId {
             .identity
             .as_ref()
             .ok_or(crate::MinionError::NoNostrKeyFound)?;
-        Ok(id.sign_nostr_note(note)?)
+        Ok(note.sign_with(id)?)
     }
     pub fn sign_encrypted_note(
         &self,
@@ -49,11 +66,8 @@ impl NostrId {
             .identity
             .as_ref()
             .ok_or(crate::MinionError::NoNostrKeyFound)?;
-        Ok(id.sign_encrypted_note(
-            note,
-            pubkey,
-            &nostro2_signer::keypair::EncryptionScheme::Nip44,
-        )?)
+        id.nip44_encrypt_note(note, pubkey)?;
+        Ok(note.sign_with(id)?)
     }
     pub fn decrypt_note(&self, event: &NostrNote) -> Result<String, crate::MinionError> {
         let id = self
@@ -61,33 +75,29 @@ impl NostrId {
             .as_ref()
             .ok_or(crate::MinionError::NoNostrKeyFound)?;
         Ok(id
-            .decrypt_note(
-                event,
-                event.pubkey.as_str(),
-                &nostro2_signer::keypair::EncryptionScheme::Nip44,
-            )?
+            .nip44_decrypt_note(event, event.pubkey.as_str())?
             .to_string())
     }
     #[must_use]
-    pub const fn get_nostr_key(&self) -> Option<&nostro2_signer::keypair::NostrKeypair> {
+    pub const fn get_nostr_key(&self) -> Option<&NostrKeypair> {
         self.identity.as_ref()
     }
     pub fn create_giftwrap(
         &self,
         inner_note: &mut NostrNote,
         peer_pubkey: &str,
-        scheme: &nostro2_signer::keypair::GiftwrapScheme,
+        scheme: GiftwrapScheme,
     ) -> Result<NostrNote, crate::MinionError> {
         let id = self
             .identity
             .as_ref()
             .ok_or(crate::MinionError::NoNostrKeyFound)?;
-        Ok(id.giftwrap_note(inner_note, peer_pubkey, scheme)?)
+        Ok(scheme.wrap(id, inner_note, peer_pubkey)?)
     }
 }
 
 pub enum NostrIdAction {
-    LoadIdentity(String, nostro2_signer::keypair::NostrKeypair),
+    LoadIdentity(String, NostrKeypair),
     DeleteIdentity,
 }
 impl Reducible for NostrId {
@@ -110,7 +120,7 @@ pub type NostrIdStore = UseReducerHandle<NostrId>;
 
 #[function_component(NostrIdProvider)]
 pub fn nostr_id_provider(props: &yew::html::ChildrenProps) -> HtmlResult {
-    let idb = crate::idb_manager::use_idb_database();
+    let idb = crate::browser::idb_manager::use_idb_database();
     let identity = yew::suspense::use_future_with((), |_| async move {
         match idb {
             Some(idb) => idb.load_identity().await,
@@ -119,10 +129,10 @@ pub fn nostr_id_provider(props: &yew::html::ChildrenProps) -> HtmlResult {
     })?;
     let ctx = use_reducer(|| NostrId {
         identity: identity.as_ref().cloned().ok().flatten(),
-        pubkey: identity.as_ref().ok().and_then(|id| {
-            id.as_ref()
-                .map(nostro2_signer::keypair::NostrKeypair::public_key)
-        }),
+        pubkey: identity
+            .as_ref()
+            .ok()
+            .and_then(|id| id.as_ref().map(NostrSigner::public_key)),
     });
 
     Ok(html! {

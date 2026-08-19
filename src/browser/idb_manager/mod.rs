@@ -37,7 +37,7 @@ pub type IdbStore = UseReducerHandle<IdbManager>;
 #[function_component(IdbManagerProvider)]
 pub fn idb_manager_provider(props: &yew::html::ChildrenProps) -> HtmlResult {
     let db = yew::suspense::use_future_with((), |_| async move {
-        crate::idb_manager::IdbManager::new().await
+        crate::browser::idb_manager::IdbManager::new().await
     })?;
     let Ok(db) = (db).as_ref().cloned() else {
         // Log the error so developers can diagnose IndexedDB failures

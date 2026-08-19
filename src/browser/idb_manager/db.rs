@@ -85,31 +85,31 @@ impl NostrIdb {
 
     pub async fn get_relays(
         &self,
-    ) -> Result<Vec<crate::relay_pool::UserRelay>, crate::MinionError> {
+    ) -> Result<Vec<crate::browser::relay_pool::UserRelay>, crate::MinionError> {
         let transaction = self.db.transaction(
-            &[crate::idb_manager::NostrDbStoreName::UserRelay.as_ref()],
+            &[crate::browser::idb_manager::NostrDbStoreName::UserRelay.as_ref()],
             idb::TransactionMode::ReadOnly,
         )?;
         let store =
-            transaction.object_store(crate::idb_manager::NostrDbStoreName::UserRelay.as_ref())?;
+            transaction.object_store(crate::browser::idb_manager::NostrDbStoreName::UserRelay.as_ref())?;
         let relays = store
             .get_all(None, None)?
             .await?
             .into_iter()
-            .filter_map(|key| crate::relay_pool::UserRelay::try_from(key).ok())
+            .filter_map(|key| crate::browser::relay_pool::UserRelay::try_from(key).ok())
             .collect();
         Ok(relays)
     }
     pub async fn add_relay(
         &self,
-        relay: crate::relay_pool::UserRelay,
+        relay: crate::browser::relay_pool::UserRelay,
     ) -> Result<(), crate::MinionError> {
         let transaction = self.db.transaction(
-            &[crate::idb_manager::NostrDbStoreName::UserRelay.as_ref()],
+            &[crate::browser::idb_manager::NostrDbStoreName::UserRelay.as_ref()],
             idb::TransactionMode::ReadWrite,
         )?;
         let store =
-            transaction.object_store(crate::idb_manager::NostrDbStoreName::UserRelay.as_ref())?;
+            transaction.object_store(crate::browser::idb_manager::NostrDbStoreName::UserRelay.as_ref())?;
         store
             .put(&serde_wasm_bindgen::to_value(&relay)?, None)?
             .await?;
@@ -118,11 +118,11 @@ impl NostrIdb {
     }
     pub async fn remove_relay(&self, relay_url: String) -> Result<(), crate::MinionError> {
         let transaction = self.db.transaction(
-            &[crate::idb_manager::NostrDbStoreName::UserRelay.as_ref()],
+            &[crate::browser::idb_manager::NostrDbStoreName::UserRelay.as_ref()],
             idb::TransactionMode::ReadWrite,
         )?;
         let store =
-            transaction.object_store(crate::idb_manager::NostrDbStoreName::UserRelay.as_ref())?;
+            transaction.object_store(crate::browser::idb_manager::NostrDbStoreName::UserRelay.as_ref())?;
         store
             .delete(wasm_bindgen::JsValue::from_str(relay_url.as_str()))?
             .await?;
@@ -132,11 +132,11 @@ impl NostrIdb {
 
     pub async fn get_identity(&self) -> Result<crate::IdbKeypairEntry, crate::MinionError> {
         let transaction = self.db.transaction(
-            &[crate::idb_manager::NostrDbStoreName::UserIdentity.as_ref()],
+            &[crate::browser::idb_manager::NostrDbStoreName::UserIdentity.as_ref()],
             idb::TransactionMode::ReadOnly,
         )?;
         let store = transaction
-            .object_store(crate::idb_manager::NostrDbStoreName::UserIdentity.as_ref())?;
+            .object_store(crate::browser::idb_manager::NostrDbStoreName::UserIdentity.as_ref())?;
         let keys = store.get_all(None, Some(1))?.await?;
         let Some(keys) = keys
             .into_iter()
@@ -152,11 +152,11 @@ impl NostrIdb {
         identity: crate::IdbKeypairEntry,
     ) -> Result<(), crate::MinionError> {
         let transaction = self.db.transaction(
-            &[crate::idb_manager::NostrDbStoreName::UserIdentity.as_ref()],
+            &[crate::browser::idb_manager::NostrDbStoreName::UserIdentity.as_ref()],
             idb::TransactionMode::ReadWrite,
         )?;
         let store = transaction
-            .object_store(crate::idb_manager::NostrDbStoreName::UserIdentity.as_ref())?;
+            .object_store(crate::browser::idb_manager::NostrDbStoreName::UserIdentity.as_ref())?;
         store
             .put(&serde_wasm_bindgen::to_value(&identity)?, None)?
             .await?;
@@ -165,11 +165,11 @@ impl NostrIdb {
     }
     pub async fn remove_identity(&self, pubkey: String) -> Result<(), crate::MinionError> {
         let transaction = self.db.transaction(
-            &[crate::idb_manager::NostrDbStoreName::UserIdentity.as_ref()],
+            &[crate::browser::idb_manager::NostrDbStoreName::UserIdentity.as_ref()],
             idb::TransactionMode::ReadWrite,
         )?;
         let store = transaction
-            .object_store(crate::idb_manager::NostrDbStoreName::UserIdentity.as_ref())?;
+            .object_store(crate::browser::idb_manager::NostrDbStoreName::UserIdentity.as_ref())?;
         store
             .delete(wasm_bindgen::JsValue::from_str(pubkey.as_str()))?
             .await?;
@@ -178,13 +178,13 @@ impl NostrIdb {
     }
     pub async fn load_identity(
         &self,
-    ) -> Result<Option<nostro2_signer::keypair::NostrKeypair>, crate::MinionError> {
+    ) -> Result<Option<nostro2_signer::NostrKeypair>, crate::MinionError> {
         let transaction = self.db.transaction(
-            &[crate::idb_manager::NostrDbStoreName::UserIdentity.as_ref()],
+            &[crate::browser::idb_manager::NostrDbStoreName::UserIdentity.as_ref()],
             idb::TransactionMode::ReadOnly,
         )?;
         let store = transaction
-            .object_store(crate::idb_manager::NostrDbStoreName::UserIdentity.as_ref())?;
+            .object_store(crate::browser::idb_manager::NostrDbStoreName::UserIdentity.as_ref())?;
         let keys = store.get_all(None, Some(1))?.await?;
         let Some(keys) = keys
             .into_iter()
@@ -194,12 +194,13 @@ impl NostrIdb {
             return Ok(None);
         };
 
-        let secret_array = crate::crypto::export_raw_key(keys.keypair).await?;
+        let secret_array = crate::browser::crypto::export_raw_key(keys.keypair).await?;
         let secret_slice = web_sys::js_sys::Uint8Array::new(&secret_array);
-        let mut keypair =
-            nostro2_signer::keypair::NostrKeypair::try_from(secret_slice.to_vec().as_slice())?;
-        // Keys loaded from storage should be extractable for backup/recovery
-        keypair.set_extractable(true);
+        let secret: [u8; 32] = secret_slice
+            .to_vec()
+            .try_into()
+            .map_err(|_| crate::MinionError::NoNostrKeyFound)?;
+        let keypair = nostro2_signer::NostrKeypair::from_secret_bytes(&secret)?;
         Ok(Some(keypair))
     }
 }

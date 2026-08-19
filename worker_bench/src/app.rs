@@ -17,13 +17,13 @@
 //! it survives the boundary), and a 1 Hz `[BENCH]` console dump. The
 //! `SmoothnessMeter` is the human-visible version of the jank histogram.
 
-#[path = "relay_worker.rs"]
-mod relay_worker;
+mod drain;
+mod metrics;
+mod raf;
 mod ring;
+mod sab;
+mod sab_panel;
 mod shared;
-// Reuse the single metrics module loaded by relay_worker; loading metrics.rs
-// again via #[path] would define it twice in this bin.
-use relay_worker::metrics;
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -31,8 +31,8 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use metrics::{JankHistogram, Latency, Throughput};
+use nostr_minions::{FloodSpec, JsonCodec, RelayCommand, RelayReactor, WorkerOut};
 use nostro2::{NostrNote, NostrRelayEvent, NostrSubscription};
-use relay_worker::{JsonCodec, RelayCommand, RelayReactor};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use yew::prelude::*;
@@ -46,7 +46,7 @@ const DRAIN_PER_FRAME: usize = 200;
 
 fn kind1_filter() -> NostrSubscription {
     NostrSubscription {
-        kinds: Some(vec![1]),
+        kinds: Some([1].into()),
         limit: Some(LIMIT),
         ..Default::default()
     }
@@ -59,13 +59,11 @@ fn main() {
     yew::Renderer::<App>::new().render();
 }
 
-/// Self-rescheduling `requestAnimationFrame` callback handle.
-type RafClosure = Rc<RefCell<Option<Closure<dyn FnMut(f64)>>>>;
 
 /// Shared, mutable benchmark state. One instance lives at the app root and is
 /// updated by whichever path is active and read by the metrics UI.
 #[derive(Default)]
-struct Metrics {
+pub struct Metrics {
     jank: JankHistogram,
     throughput: Throughput,
     latency_samples: Option<Latency>,
@@ -78,6 +76,9 @@ struct Metrics {
     /// overload signal: the ring is bounded, so when the consumer can't keep up
     /// the producer drops rather than growing memory unbounded.
     dropped: u64,
+    /// Times the reactor drain rAF closure entered. Separates "the chain never
+    /// ran" from "it ran but saw an empty queue".
+    drain_frames: u64,
 }
 
 // The metrics cell is a singleton shared by reference across the app, so all
@@ -103,6 +104,7 @@ impl Metrics {
         self.label = label;
         self.worker_queue = 0;
         self.dropped = 0;
+        self.drain_frames = 0;
     }
 }
 
@@ -114,6 +116,7 @@ enum Path {
     InThread,
     Reactor,
     Ring,
+    Sab,
 }
 
 #[function_component(App)]
@@ -187,9 +190,9 @@ fn app() -> Html {
     let iso_color = if isolated { "#16a34a" } else { "#dc2626" };
     html! {
         <div style="font-family:system-ui; padding:1rem; background:#f3f4f6; min-height:100vh;">
-            <h1 style="text-align:center; margin:.2rem;">{"Relay Pool Benchmark — 3 architectures"}</h1>
+            <h1 style="text-align:center; margin:.2rem;">{"Relay Pool Benchmark — 4 architectures"}</h1>
             <p style="text-align:center; font-size:.8rem; color:#6b7280; margin:.2rem;">
-                {"One path at a time. Same synthetic flood through the same parse+dedup+filter for all three. "}
+                {"One path at a time. Same synthetic flood through the same parse+dedup+filter for all four. "}
                 {"crossOriginIsolated: "}<b style={format!("color:{iso_color}")}>{ if isolated {"true"} else {"false"} }</b>
                 {" (shared-ring path needs true)"}
             </p>
@@ -198,6 +201,7 @@ fn app() -> Html {
                 { btn("In-Thread", Path::InThread, switch(Path::InThread, "in-thread"), "#2563eb") }
                 { btn("Reactor (postMessage)", Path::Reactor, switch(Path::Reactor, "reactor"), "#d97706") }
                 { btn("Shared Ring (SAB)", Path::Ring, switch(Path::Ring, "ring"), "#16a34a") }
+                { btn("SAB bytes (stable)", Path::Sab, switch(Path::Sab, "sab"), "#7c3aed") }
                 { btn("Stop", Path::None, switch(Path::None, "idle"), "#6b7280") }
                 <span style="margin-left:1rem; font-size:.85rem;">
                     {"rate: "}
@@ -234,6 +238,9 @@ fn app() -> Html {
                     Path::Ring => html!{
                         <RingPanel key="ring" metrics={metrics.clone()} rate={*rate} payload={*payload} />
                     },
+                    Path::Sab => html!{
+                        <sab_panel::SabPanel key="sab" metrics={metrics.clone()} rate={*rate} payload={*payload} />
+                    },
                 }}
             </div>
         </div>
@@ -241,10 +248,10 @@ fn app() -> Html {
 }
 
 #[derive(Properties, PartialEq)]
-struct PathProps {
-    metrics: SharedMetrics,
-    rate: u32,
-    payload: u32,
+pub struct PathProps {
+    pub metrics: SharedMetrics,
+    pub rate: u32,
+    pub payload: u32,
 }
 
 /// In-thread path: flood feeder runs parse + dedup + filter ON THE MAIN THREAD
@@ -294,7 +301,7 @@ fn in_thread_panel(props: &PathProps) -> Html {
                                 continue;
                             }
                         }
-                        if !nostr_minions::note_matches_filter(&note, &filter) {
+                        if !filter.matches(&note) {
                             continue;
                         }
                         if let Some(em) = metrics::emit_ms_from_content(&note.content) {
@@ -341,30 +348,40 @@ fn reactor_panel(props: &PathProps) -> Html {
         let pending = pending.clone();
         let metrics = props.metrics.clone();
         use_reactor_bridge::<RelayReactor, _>(move |ev| {
-            if let yew_agent::reactor::ReactorEvent::Output(out) = ev {
-                match out {
-                    relay_worker::WorkerOut::Note(note) => {
-                        if let Some(em) = metrics::emit_ms_from_content(&note.content) {
-                            metrics
-                                .borrow_mut()
-                                .latency()
-                                .record(metrics::wall_ms() - em);
-                        }
-                        metrics.borrow_mut().throughput.produce(1);
-                        pending.borrow_mut().push_back(note);
-                    }
-                    relay_worker::WorkerOut::QueueDepth(depth) => {
-                        metrics.borrow_mut().worker_queue = depth;
-                    }
-                }
+            let yew_agent::reactor::ReactorEvent::Output(WorkerOut::Note(raw)) = ev else {
+                return;
+            };
+            // The bridge ships the relay's own EVENT frame; the main thread
+            // parses it exactly as a real consumer's provider does.
+            let Ok(NostrRelayEvent::NewNote(.., note)) = raw.parse::<NostrRelayEvent>() else {
+                return;
+            };
+            if let Some(em) = metrics::emit_ms_from_content(&note.content) {
+                metrics
+                    .borrow_mut()
+                    .latency()
+                    .record(metrics::wall_ms() - em);
             }
+            metrics.borrow_mut().throughput.produce(1);
+            pending.borrow_mut().push_back(note);
         })
     };
 
     use_effect_with((), {
         let bridge = bridge.clone();
         move |()| {
-            bridge.send(RelayCommand::Subscribe(kind1_filter()));
+            let filter = kind1_filter();
+            let req: nostro2::NostrClientEvent = filter.clone().into();
+            if let (Ok(filter_json), Ok(req_json)) = (
+                nostr_minions::NostrJson::to_string(&filter),
+                nostr_minions::NostrJson::to_string(&req),
+            ) {
+                bridge.send(RelayCommand::Subscribe {
+                    sub_id: "bench".to_string(),
+                    filter_json,
+                    req_json,
+                });
+            }
             || ()
         }
     });
@@ -377,16 +394,20 @@ fn reactor_panel(props: &PathProps) -> Html {
         Callback::from(move |_| {
             let start = *seq.borrow();
             *seq.borrow_mut() += u64::from(rate) * u64::from(FLOOD_SECS) + 1;
-            bridge.send(RelayCommand::Flood {
+            bridge.send(RelayCommand::Flood(FloodSpec {
                 rate,
                 secs: FLOOD_SECS,
                 start_seq: start,
                 payload_bytes: payload,
-            });
+            }));
         })
     };
 
-    drain_loop(notes.clone(), pending, props.metrics.clone());
+    drain::use_drain(drain::Drain::new(
+        notes.clone(),
+        pending,
+        props.metrics.clone(),
+    ));
 
     *renders.borrow_mut() += 1;
     let snapshot: Vec<NostrNote> = notes.borrow().iter().cloned().collect();
@@ -437,9 +458,7 @@ fn ring_panel(props: &PathProps) -> Html {
             // fresh producer/consumer pair on its own ring.
             let consumer: Rc<RefCell<Option<_>>> = Rc::new(RefCell::new(None));
             let bound_ptr = Rc::new(RefCell::new(0usize));
-            let cb: RafClosure = Rc::new(RefCell::new(None));
-            let cb2 = cb.clone();
-            *cb.borrow_mut() = Some(Closure::wrap(Box::new(move |_ts: f64| {
+            let raf = raf::RafLoop::start(move |_ts| {
                 let ptr = *ring_ptr.borrow();
                 // Reflect the worker's shared drop counter into metrics each frame.
                 let dropped = unsafe { ring::dropped_count(*dropped_ptr.borrow()) };
@@ -478,22 +497,8 @@ fn ring_panel(props: &PathProps) -> Html {
                         force.force_update();
                     }
                 }
-                if let (Some(win), Some(c)) = (web_sys::window(), cb2.borrow().as_ref()) {
-                    let _ = win.request_animation_frame(c.as_ref().unchecked_ref());
-                }
-            }) as Box<dyn FnMut(f64)>));
-            if let (Some(win), Some(c)) = (web_sys::window(), cb.borrow().as_ref()) {
-                let _ = win.request_animation_frame(c.as_ref().unchecked_ref());
-            }
-            // Stop the self-rescheduling rAF chain on unmount: clear the cell so
-            // the next already-scheduled frame finds `None` and does NOT
-            // reschedule. Just dropping the outer `cb` would NOT cancel the
-            // in-flight frame (the browser still holds `cb2`), leaking an
-            // immortal loop per mount — which compounded across path switches
-            // and exploded after a tab background/resume requeued them.
-            move || {
-                *cb.borrow_mut() = None;
-            }
+            });
+            move || drop(raf)
         });
     }
 
@@ -580,72 +585,13 @@ fn ring_panel(props: &PathProps) -> Html {
     }
 }
 
-/// Shared rAF drain loop for the reactor path: move up to DRAIN_PER_FRAME
-/// pending notes into the render buffer, render once per frame when non-empty.
-fn drain_loop(
-    notes: Rc<RefCell<VecDeque<NostrNote>>>,
-    pending: Rc<RefCell<VecDeque<NostrNote>>>,
-    metrics: SharedMetrics,
-) {
-    #[hook]
-    fn use_drain(
-        notes: Rc<RefCell<VecDeque<NostrNote>>>,
-        pending: Rc<RefCell<VecDeque<NostrNote>>>,
-        metrics: SharedMetrics,
-    ) {
-        let force = use_force_update();
-        use_effect_with((), move |()| {
-            let cb: RafClosure = Rc::new(RefCell::new(None));
-            let cb2 = cb.clone();
-            *cb.borrow_mut() = Some(Closure::wrap(Box::new(move |_ts: f64| {
-                let drained = {
-                    let mut pend = pending.borrow_mut();
-                    if pend.is_empty() {
-                        0usize
-                    } else {
-                        let take = pend.len().min(DRAIN_PER_FRAME);
-                        let mut buf = notes.borrow_mut();
-                        for _ in 0..take {
-                            if let Some(note) = pend.pop_front() {
-                                buf.push_front(note);
-                            }
-                        }
-                        buf.truncate(LIMIT as usize);
-                        take
-                    }
-                };
-                if drained > 0 {
-                    metrics.borrow_mut().throughput.render(drained as u64);
-                    force.force_update();
-                }
-                if let (Some(win), Some(c)) = (web_sys::window(), cb2.borrow().as_ref()) {
-                    let _ = win.request_animation_frame(c.as_ref().unchecked_ref());
-                }
-            }) as Box<dyn FnMut(f64)>));
-            if let (Some(win), Some(c)) = (web_sys::window(), cb.borrow().as_ref()) {
-                let _ = win.request_animation_frame(c.as_ref().unchecked_ref());
-            }
-            // Stop the self-rescheduling rAF chain on unmount: clear the cell so
-            // the next already-scheduled frame finds `None` and does NOT
-            // reschedule. Just dropping the outer `cb` would NOT cancel the
-            // in-flight frame (the browser still holds `cb2`), leaking an
-            // immortal loop per mount — which compounded across path switches
-            // and exploded after a tab background/resume requeued them.
-            move || {
-                *cb.borrow_mut() = None;
-            }
-        });
-    }
-    use_drain(notes, pending, metrics);
-}
-
 #[derive(Properties, PartialEq)]
-struct PanelProps {
-    title: &'static str,
-    color: &'static str,
-    render_count: usize,
-    notes: Vec<NostrNote>,
-    on_flood: Callback<MouseEvent>,
+pub struct PanelProps {
+    pub title: &'static str,
+    pub color: &'static str,
+    pub render_count: usize,
+    pub notes: Vec<NostrNote>,
+    pub on_flood: Callback<MouseEvent>,
 }
 
 #[function_component(Panel)]
@@ -763,9 +709,7 @@ fn smoothness_meter() -> Html {
         let fps = fps.clone();
         move |()| {
             let last = Rc::new(RefCell::new(0f64));
-            let cb: RafClosure = Rc::new(RefCell::new(None));
-            let cb2 = cb.clone();
-            *cb.borrow_mut() = Some(Closure::wrap(Box::new(move |ts: f64| {
+            let raf = raf::RafLoop::start(move |ts| {
                 let prev = *last.borrow();
                 if prev > 0.0 {
                     let dt = ts - prev;
@@ -776,22 +720,8 @@ fn smoothness_meter() -> Html {
                 }
                 *last.borrow_mut() = ts;
                 angle.set((*angle + 6.0) % 360.0);
-                if let (Some(win), Some(c)) = (web_sys::window(), cb2.borrow().as_ref()) {
-                    let _ = win.request_animation_frame(c.as_ref().unchecked_ref());
-                }
-            }) as Box<dyn FnMut(f64)>));
-            if let (Some(win), Some(c)) = (web_sys::window(), cb.borrow().as_ref()) {
-                let _ = win.request_animation_frame(c.as_ref().unchecked_ref());
-            }
-            // Stop the self-rescheduling rAF chain on unmount: clear the cell so
-            // the next already-scheduled frame finds `None` and does NOT
-            // reschedule. Just dropping the outer `cb` would NOT cancel the
-            // in-flight frame (the browser still holds `cb2`), leaking an
-            // immortal loop per mount — which compounded across path switches
-            // and exploded after a tab background/resume requeued them.
-            move || {
-                *cb.borrow_mut() = None;
-            }
+            });
+            move || drop(raf)
         }
     });
 
@@ -826,30 +756,14 @@ fn use_bench_sampler(metrics: SharedMetrics) {
         let metrics = metrics.clone();
         use_effect_with((), move |()| {
             let last = Rc::new(RefCell::new(0f64));
-            let cb: RafClosure = Rc::new(RefCell::new(None));
-            let cb2 = cb.clone();
-            *cb.borrow_mut() = Some(Closure::wrap(Box::new(move |ts: f64| {
+            let raf = raf::RafLoop::start(move |ts| {
                 let prev = *last.borrow();
                 if prev > 0.0 {
                     metrics.borrow_mut().jank.record(ts - prev);
                 }
                 *last.borrow_mut() = ts;
-                if let (Some(win), Some(c)) = (web_sys::window(), cb2.borrow().as_ref()) {
-                    let _ = win.request_animation_frame(c.as_ref().unchecked_ref());
-                }
-            }) as Box<dyn FnMut(f64)>));
-            if let (Some(win), Some(c)) = (web_sys::window(), cb.borrow().as_ref()) {
-                let _ = win.request_animation_frame(c.as_ref().unchecked_ref());
-            }
-            // Stop the self-rescheduling rAF chain on unmount: clear the cell so
-            // the next already-scheduled frame finds `None` and does NOT
-            // reschedule. Just dropping the outer `cb` would NOT cancel the
-            // in-flight frame (the browser still holds `cb2`), leaking an
-            // immortal loop per mount — which compounded across path switches
-            // and exploded after a tab background/resume requeued them.
-            move || {
-                *cb.borrow_mut() = None;
-            }
+            });
+            move || drop(raf)
         });
     }
 
@@ -877,6 +791,14 @@ fn use_bench_sampler(metrics: SharedMetrics) {
             set("backlog", (m.throughput.backlog() as f64).into());
             set("worker_queue", (m.worker_queue as f64).into());
             set("dropped", (m.dropped as f64).into());
+            set("drain_frames", (m.drain_frames as f64).into());
+            web_sys::console::log_1(
+                &format!(
+                    "[DRAIN] frames={} produced={} rendered={}",
+                    m.drain_frames, m.throughput.produced, m.throughput.rendered
+                )
+                .into(),
+            );
             set("lat_p50_ms", p50.into());
             set("lat_p95_ms", p95.into());
             set("lat_p99_ms", p99.into());

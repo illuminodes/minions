@@ -22,8 +22,10 @@ name = "worker"
 path = "src/worker.rs"
 
 [dependencies]
-# Pull the in-thread relay pool implementation we are benchmarking against.
-nostr-minions = { path = "../" }
+# The library under test. `bench-harness` exposes the synthetic flood on the
+# REAL reactor, so this bench drives the shipped ingestion path — there is no
+# second copy of it here to drift out of sync.
+nostr-minions = { path = "../", features = ["bench-harness"] }
 
 yew = { version = "0.23.0", features = ["csr"] }
 yew-agent = "0.5.0"
@@ -31,7 +33,7 @@ yew-agent = "0.5.0"
 # nostro2 note/filter types travel across the worker boundary; they are
 # already Serialize/Deserialize. We depend on it directly so the worker and
 # app agree on the exact same types (re-exported by nostr-minions too).
-nostro2 = "0.4.2"
+nostro2 = { version = "0.8", default-features = false }
 
 # Lock-free ring buffer used for zero-copy IPC across the shared-memory worker
 # boundary (raw-pointer handle seam added in 0.11.x+). Local path during the

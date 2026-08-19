@@ -11,11 +11,11 @@ impl UserRelay {
         db: std::rc::Rc<idb::Database>,
     ) -> Result<Vec<Self>, crate::MinionError> {
         let transaction = db.transaction(
-            &[crate::idb_manager::NostrDbStoreName::UserRelay.as_ref()],
+            &[crate::browser::idb_manager::NostrDbStoreName::UserRelay.as_ref()],
             idb::TransactionMode::ReadOnly,
         )?;
         let store =
-            transaction.object_store(crate::idb_manager::NostrDbStoreName::UserRelay.as_ref())?;
+            transaction.object_store(crate::browser::idb_manager::NostrDbStoreName::UserRelay.as_ref())?;
         let relays = store
             .get_all(None, None)?
             .await?

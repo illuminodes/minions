@@ -14,11 +14,7 @@ use super::SubscriptionId;
 ///
 /// # Example
 /// ```rust
-/// let notes = use_nostr_notes(NostrSubscription {
-///     kinds: Some(vec![1]),
-///     limit: Some(50),
-///     ..Default::default()
-/// });
+/// let notes = use_nostr_notes(NostrSubscription::new().kind(1).limit(50));
 /// ```
 #[hook]
 pub fn use_nostr_notes(filter: NostrSubscription) -> Vec<NostrNote> {
@@ -133,7 +129,7 @@ pub fn use_relay_events(callback: Callback<nostro2::NostrRelayEvent>) {
 #[hook]
 pub fn use_text_notes(limit: Option<u32>) -> Vec<NostrNote> {
     use_nostr_notes(NostrSubscription {
-        kinds: Some(vec![1]),
+        kinds: Some([1].into()),
         limit,
         ..Default::default()
     })
@@ -148,7 +144,7 @@ pub fn use_text_notes(limit: Option<u32>) -> Vec<NostrNote> {
 #[hook]
 pub fn use_notes_by_authors(authors: Vec<String>, limit: Option<u32>) -> Vec<NostrNote> {
     use_nostr_notes(NostrSubscription {
-        authors: Some(authors),
+        authors: Some(authors.into_iter().collect()),
         limit,
         ..Default::default()
     })
@@ -163,7 +159,7 @@ pub fn use_notes_by_authors(authors: Vec<String>, limit: Option<u32>) -> Vec<Nos
 #[hook]
 pub fn use_notes_by_kind(kind: u32, limit: Option<u32>) -> Vec<NostrNote> {
     use_nostr_notes(NostrSubscription {
-        kinds: Some(vec![kind]),
+        kinds: Some([kind].into()),
         limit,
         ..Default::default()
     })
@@ -185,10 +181,11 @@ pub fn use_recent_notes(kinds: Vec<u32>, seconds: i64, limit: Option<u32>) -> Ve
     // hammering every relay with REQ + CLOSE on each render cycle.
     const GRANULARITY: i64 = 30;
     #[allow(clippy::cast_sign_loss)] // `.max(0)` guarantees non-negative
-    let since = ((NostrNote::now() - seconds) / GRANULARITY * GRANULARITY).max(0) as u64;
+    let since = ((crate::WallClock::unix_seconds() - seconds) / GRANULARITY * GRANULARITY).max(0)
+        as u64;
 
     use_nostr_notes(NostrSubscription {
-        kinds: Some(kinds),
+        kinds: Some(kinds.into_iter().collect()),
         since: Some(since),
         limit,
         ..Default::default()
@@ -199,10 +196,7 @@ pub fn use_recent_notes(kinds: Vec<u32>, seconds: i64, limit: Option<u32>) -> Ve
 ///
 /// # Example
 /// ```rust
-/// let note = use_live_note(NostrSubscription {
-///     kinds: Some(vec![1]),
-///     ..Default::default()
-/// });
+/// let note = use_live_note(NostrSubscription::new().kind(1));
 /// ```
 #[hook]
 pub fn use_live_note(filter: NostrSubscription) -> Option<NostrNote> {

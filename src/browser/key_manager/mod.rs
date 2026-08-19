@@ -1,4 +1,6 @@
+mod giftwrap;
 mod provider;
+pub use giftwrap::GiftwrapScheme;
 pub use provider::{IdbKeypairEntry, NostrId, NostrIdAction, NostrIdProvider, NostrIdStore};
 
 #[cfg(feature = "test-components")]
@@ -12,7 +14,7 @@ pub fn use_nostr_id_ctx() -> Option<provider::NostrIdStore> {
 }
 
 #[yew::hook]
-pub fn use_nostr_key() -> Option<nostro2_signer::keypair::NostrKeypair> {
+pub fn use_nostr_key() -> Option<nostro2_signer::NostrKeypair> {
     let key_ctx = yew::use_context::<provider::NostrIdStore>()?;
     key_ctx.get_nostr_key().cloned()
 }
@@ -24,12 +26,12 @@ pub fn use_nostr_pubkey() -> Option<String> {
 }
 
 #[yew::hook]
-pub fn use_create_local_key(
-) -> Option<yew::callback::Callback<nostro2_signer::keypair::NostrKeypair>> {
+pub fn use_create_local_key() -> Option<yew::callback::Callback<nostro2_signer::NostrKeypair>> {
+    use nostro2::NostrSigner as _;
     let idb_ctx = crate::use_idb_database()?;
     let key_ctx = yew::use_context::<provider::NostrIdStore>()?;
     Some(yew::callback::Callback::from(
-        move |keypair: nostro2_signer::keypair::NostrKeypair| {
+        move |keypair: nostro2_signer::NostrKeypair| {
             let idb_ctx = idb_ctx.clone();
             let key_ctx = key_ctx.clone();
 
@@ -51,6 +53,7 @@ pub fn use_create_local_key(
 
 #[yew::hook]
 pub fn use_delete_local_key() -> Option<yew::callback::Callback<()>> {
+    use nostro2::NostrSigner as _;
     let idb_ctx = crate::use_idb_database()?;
     let key_ctx = yew::use_context::<provider::NostrIdStore>()?;
     Some(yew::callback::Callback::from(move |()| {

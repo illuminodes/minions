@@ -1,6 +1,7 @@
-use nostro2::NostrSigner;
-use nostro2_signer::nostro2::NostrNote;
+use nostro2::{NostrKeypair as _, NostrNote, NostrSigner};
 use yew::prelude::*;
+
+use crate::GiftwrapScheme;
 
 #[function_component(NostrIdLoginTestSuspense)]
 pub fn nostr_id_login_test_suspense() -> Html {
@@ -114,11 +115,7 @@ pub fn nostr_id_login_test() -> Html {
                 }
 
                 // Create the giftwrapped note (unsigned)
-                match ctx.create_giftwrap(
-                    &mut inner_note,
-                    &pubkey,
-                    &nostro2_signer::keypair::GiftwrapScheme::Ephemeral,
-                ) {
+                match ctx.create_giftwrap(&mut inner_note, &pubkey, GiftwrapScheme::Ephemeral) {
                     Ok(mut giftwrapped_note) => {
                         // Sign and encrypt the giftwrapped note
                         match ctx.sign_encrypted_note(&mut giftwrapped_note, &pubkey) {
@@ -167,11 +164,11 @@ pub fn nostr_id_login_test() -> Html {
             </yew::suspense::Suspense>
             <button onclick={
                 let ctx = ctx.clone();
-                Callback::from(move |_| ctx.dispatch(crate::key_manager::NostrIdAction::DeleteIdentity))
+                Callback::from(move |_| ctx.dispatch(crate::browser::key_manager::NostrIdAction::DeleteIdentity))
             }>
                 {"Delete Identity"}
             </button>
-            <button onclick={create_local_key.reform(|_| nostro2_signer::keypair::NostrKeypair::generate(true))}>
+            <button onclick={create_local_key.reform(|_| nostro2_signer::NostrKeypair::generate())}>
                 {"New Local Identity"}
             </button>
             <button onclick={sign_onclick}>

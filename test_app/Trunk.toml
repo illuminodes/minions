@@ -6,12 +6,26 @@ watch = ["src", "index.html", "public", "../src"]
 port = 2100
 open = false
 
+# These two headers are what make `crossOriginIsolated` true, which is what
+# makes `SharedArrayBuffer` constructible. Without them the pool probes the
+# page at runtime, finds it is not isolated, and quietly uses the JSON bridge --
+# so the ring path would look fine and never actually run.
+#
+# `require-corp` blocks cross-origin subresources that do not opt in. That is
+# not a Trunk quirk; it is the cost of isolation, and it is why the library
+# cannot set these for a consumer. A CDN script added to `index.html` must opt
+# in, either through `Cross-Origin-Resource-Policy` or through CORS plus a
+# `crossorigin` attribute. Check a URL before you add it:
+#
+#     cargo run --manifest-path ../coep_probe/Cargo.toml -- <url>
+headers = { "Cross-Origin-Opener-Policy" = "same-origin", "Cross-Origin-Embedder-Policy" = "require-corp" }
+
 [[hooks]]
 stage = "pre_build"
 command = "bash"
 command_arguments = [
     "-c",
-    "tailwindcss4 -i public/styles/input.css -o public/styles/output.css"
+    "tailwindcss -i public/styles/input.css -o public/styles/output.css"
 ]
 
 

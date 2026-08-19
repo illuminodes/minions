@@ -1,6 +1,6 @@
 [package]
 name = "nostr-minions"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2021"
 license = "BSD-3-Clause"
 description = "A Yew-based framework for client side Nostr apps"
@@ -9,28 +9,126 @@ readme = "README.md"
 homepage = "https://github.com/illuminodes/minions"
 
 [features]
+# The nostro2 stack picks its curve and its JSON backend at compile time, and
+# both choices are mutually exclusive (upstream `compile_error!`s enforce it).
+# Mirror both axes here so consumers of `nostr-minions` keep the same control:
+#
+#   nostr-minions = { version = "0.4", default-features = false, features = ["secp256k1", "bourne"] }
+#
+# The default matches the nostro2 stack default: k256 + serde.
+default = ["k256", "serde"]
 test-components = []
+# Exposes the synthetic flood generator on the relay reactor so `worker_bench`
+# can drive the REAL ingestion path instead of keeping its own copy.
+# Off by default: a normal build carries none of this.
+bench-harness = []
+
+# The `SharedArrayBuffer` note transport. The worker writes matched notes into
+# a shared byte ring as a flat binary encoding instead of posting one JSON
+# message per note; the UI thread drains the ring on an animation frame.
+#
+# Measured against the JSON bridge at 3000 notes/s: 0.0% dropped frames versus
+# 11%, worst frame 17ms versus 83ms.
+#
+# OFF BY DEFAULT, and enabling it is not enough on its own. A
+# `SharedArrayBuffer` exists only on a CROSS-ORIGIN ISOLATED page, which needs
+# response headers a library cannot set for its consumer:
+#
+#   Cross-Origin-Opener-Policy: same-origin
+#   Cross-Origin-Embedder-Policy: require-corp
+#
+# Those headers also break unisolated third-party embeds (ads, CDN scripts,
+# iframes). So the feature only makes the path AVAILABLE; the pool still probes
+# `crossOriginIsolated` at runtime and falls back to the JSON bridge when the
+# page is not isolated. A consumer that enables it on a non-isolated page gets
+# the bridge, not a panic.
+# Only the ring machinery is gated. The message vocabulary (`transport`'s
+# `Envelope` / `NoteCodec`) is NOT: those types are the pool's own language in
+# both builds, so the worker keeps one code path either way.
+sab-transport = []
+
+k256 = ["nostro2/k256", "nostro2-nips/k256", "nostro2-signer/k256"]
+# `secp256k1` draws entropy through `rand_core` 0.9 -> `getrandom` 0.3, which
+# needs its `wasm_js` feature on `wasm32-unknown-unknown`. Cargo features are
+# additive, so turning it on here turns it on for that transitive copy.
+#
+# Building this backend for wasm also needs, from the CONSUMER's environment:
+#   CFLAGS_wasm32_unknown_unknown=-Wno-implicit-function-declaration
+# `secp256k1-sys` 0.11's bundled C calls `memmove` without including
+# <string.h>, which clang 16+ rejects. Upstream C bug, not fixable from here.
+# The default `k256` backend is pure Rust and needs none of this.
+secp256k1 = [
+    "dep:getrandom",
+    "nostro2/secp256k1",
+    "nostro2-nips/secp256k1",
+    "nostro2-signer/secp256k1",
+]
+
+serde = ["nostro2/serde", "nostro2-nips/serde", "nostro2-signer/serde"]
+bourne = [
+    "dep:json-bourne",
+    "nostro2/bourne",
+    "nostro2-nips/bourne",
+    "nostro2-signer/bourne",
+]
 
 [dependencies]
 # Nostr Stack
-nostro2 = "0.4.2"
-nostro2-signer = "0.2.2"
-# nostro2 = { path = "../NostrO2/nostro2" }
-# nostro2-signer = { path = "../NostrO2/nostro2-signer" }
+nostro2 = { version = "0.8", default-features = false }
+nostro2-nips = { version = "0.5", default-features = false }
+nostro2-signer = { version = "0.6", default-features = false }
+# nostro2 = { path = "../NostrO2/crates/core", default-features = false }
+# nostro2-nips = { path = "../NostrO2/crates/nips", default-features = false }
+# nostro2-signer = { path = "../NostrO2/crates/signer", default-features = false }
 
 # JSON manipulation
+# `serde` and `serde_json` are NOT optional: this crate serializes its own
+# types (IDB entries, `ReadyState`) and the worker bridge frames with them,
+# independent of which JSON backend nostro2 uses for the Nostr wire types.
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Only linked under the `bourne` backend, where the Nostr wire types are
+# encoded/parsed with it instead of `serde_json`.
+json-bourne = { version = "0.2", optional = true }
+
+# The browser bindings. `src/browser` is gated to `wasm32`, and so are its
+# dependencies: off that target the crate is `src/transport` alone, which is
+# plain Rust. That is what lets `cargo test` build and run on the host — this
+# crate cannot execute a wasm test binary without a runner.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# Present only to flip `wasm_js` on the `getrandom` 0.3 that `secp256k1` pulls
+# in for entropy; nothing in this crate calls it directly.
+getrandom = { version = "0.3", features = ["wasm_js"], optional = true }
+
 serde-wasm-bindgen = "0.6.5"
 
 # DOM and Browser Bindings
 web-sys = { version = "0.3", features = [
     "SubtleCrypto", "CryptoKey", "Window", "Crypto",
     "AesKeyGenParams", "AesGcmParams", "DomStringList",
+    # Relay sockets + the self-spawned Web Worker reactor live here now:
+    # the pool's WebSockets, dedup, and filter-matching run OFF the UI thread.
+    "WebSocket", "MessageEvent", "CloseEvent", "ErrorEvent",
+    "Worker", "WorkerOptions", "WorkerType", "DedicatedWorkerGlobalScope",
+    "Blob", "BlobPropertyBag", "Url", "Performance",
+    "Document", "Element", "NodeList", "Location",
 ] }
 
 # I/O
 wasm-bindgen-futures = "0.4"
+
+# Worker reactor bridge: the relay pool runs as a yew-agent Reactor in a Web
+# Worker, bridged to the UI thread over JSON postMessage.
+yew-agent = "0.5.0"
+
+# `ReactorBridge` IS a `futures::Stream + Sink` — driving it on the UI thread
+# (and the sync-callback → async-loop mpsc handoff inside the worker) needs the
+# `futures` traits/channels. NOT swappable for quetzalcoatl: that crate's value
+# is lock-free CROSS-THREAD transport (the dropped SAB path); here both ends of
+# the in-worker channel share one thread, and an unbounded mpsc must never drop
+# a matched note. `futures` is already in the tree via yew + yew-agent (gloo /
+# pinned), so naming it here adds no compile cost.
+futures = "0.3"
 
 # PWA stack
 yew = { version = "0.23.0" }

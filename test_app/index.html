@@ -5,9 +5,33 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js'></script>
-    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/core/locales/es.global.js'></script>
+    <!-- These two CDN scripts are here to DEMONSTRATE that third-party
+         JavaScript still works on a cross-origin isolated page.
 
+         `Cross-Origin-Embedder-Policy: require-corp` (set in Trunk.toml, and
+         required for SharedArrayBuffer) blocks cross-origin subresources that
+         do not OPT IN. It does not block third-party code as such.
+
+         jsDelivr opts in with `Cross-Origin-Resource-Policy: cross-origin`,
+         which is the stronger of the two ways: these two files would load even
+         WITHOUT the `crossorigin` attribute below. Verify it yourself:
+
+             cargo run --manifest-path coep_probe/Cargo.toml
+
+         The attribute stays because it is free, and because a CDN that opts in
+         through CORS instead REQUIRES it. Run the probe against any new URL
+         before you add it; `coep_probe` reports which of the two applies.
+
+         What CANNOT be fixed this way is a third-party <iframe>: it must send
+         COEP itself, and most embeds (YouTube, Stripe, ads) do not. That is the
+         real cost of isolation. -->
+    <script crossorigin="anonymous"
+            src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.19/index.global.min.js"></script>
+    <!-- The locale path was ALSO wrong before, and failed silently as a 404:
+         `fullcalendar@6.1.19` ships only 8 files and has no `core/` directory.
+         In v6 the locales live in the separate `@fullcalendar/core` package. -->
+    <script crossorigin="anonymous"
+            src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.19/locales/es.global.min.js"></script>
 
     <title>Minions Demo</title>
 

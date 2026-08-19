@@ -1,11 +1,41 @@
 mod bounded_dedup;
+#[cfg(feature = "sab-transport")]
+mod endpoint;
+#[cfg(feature = "bench-harness")]
+mod flood;
 mod hooks;
+mod ingest;
+mod ingested;
+mod message_bridge;
+#[cfg(feature = "sab-transport")]
+mod isolation;
 mod nostr_relay;
+mod pool_transport;
+mod app_link;
+mod handshake;
+mod pool_event;
 mod provider;
+mod relay_set;
+#[cfg(feature = "sab-transport")]
+mod ring_pair;
+mod ring_poller;
+mod ring_pump;
+#[cfg(feature = "sab-transport")]
+mod sab_ring;
 mod subscription;
+mod transport_negotiation;
+mod transport_status;
 mod websocket;
+mod worker;
+mod worker_boot;
+mod worker_sink;
 
 pub use bounded_dedup::BoundedDedup;
+#[cfg(feature = "bench-harness")]
+pub use flood::{FloodRunner, FloodSpec, SyntheticFrame};
+pub use ingest::NoteIngestor;
+pub use worker::{JsonCodec, RelayCommand, RelayReactor, WorkerOut};
+pub use worker_boot::{relay_worker_main, spawn_relay_bridge};
 pub use hooks::{
     use_live_note, use_nostr_notes, use_notes_by_authors, use_notes_by_kind, use_recent_notes,
     use_relay_events, use_text_notes,
@@ -14,11 +44,10 @@ pub use nostr_relay::UserRelay;
 pub use provider::{
     NostrRelayPool, NostrRelayPoolAction, NostrRelayPoolProvider, NostrRelayPoolStore,
 };
-pub use subscription::{
-    note_matches_filter, RelayEventSubscription, SubscriptionId, SubscriptionInfo,
-};
-pub use websocket::NostrWebSocket;
+pub use subscription::{RelayEventSubscription, SubscriptionId, SubscriptionInfo};
+pub use transport_status::TransportStatus;
 pub use websocket::ReadyState;
+pub use worker_boot::is_relay_worker;
 
 #[yew::hook]
 pub fn use_nostr_relay_pool() -> Option<provider::NostrRelayPoolStore> {
@@ -28,11 +57,7 @@ pub fn use_nostr_relay_pool() -> Option<provider::NostrRelayPoolStore> {
 #[cfg(feature = "test-components")]
 #[yew::function_component(RelayPoolTest)]
 pub fn relay_pool_test() -> yew::Html {
-    let notes = use_nostr_notes(nostro2::NostrSubscription {
-        kinds: Some(vec![1]),
-        limit: Some(20),
-        ..Default::default()
-    });
+    let notes = use_nostr_notes(nostro2::NostrSubscription::new().kind(1).limit(20));
     let note_count = notes.len();
 
     yew::html! {

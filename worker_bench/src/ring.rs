@@ -13,9 +13,7 @@
 //! which is exactly the contract `quetzalcoatl`'s `producer_from_raw` /
 //! `consumer_from_raw` require.
 
-// Reuse the single metrics module owned by `relay_worker` (loading metrics.rs
-// again here via #[path] would compile it twice in this bin — duplicate_mod).
-use crate::relay_worker::metrics;
+use crate::metrics;
 
 use nostro2::{NostrNote, NostrRelayEvent, NostrSubscription};
 use quetzalcoatl::capacity::Capacity;
@@ -135,7 +133,7 @@ pub fn ring_worker_main(
 
     let filter: NostrSubscription =
         serde_json::from_str(&filter_json).unwrap_or(NostrSubscription {
-            kinds: Some(vec![1]),
+            kinds: Some([1].into()),
             ..Default::default()
         });
 
@@ -174,7 +172,7 @@ pub fn ring_worker_main(
                 continue;
             }
         }
-        if !nostr_minions::note_matches_filter(&note, &filter) {
+        if !filter.matches(&note) {
             continue;
         }
         // BLOCKING push: never drop. When the ring is full the producer parks

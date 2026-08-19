@@ -1,0 +1,15 @@
+[package]
+name = "coep_probe"
+version = "0.1.0"
+edition = "2021"
+license = "BSD-3-Clause"
+description = "Report whether a URL can load on a cross-origin isolated page"
+
+# A HOST tool, not part of the wasm library. It answers one question before you
+# commit to isolation: will this third-party URL still load under COEP?
+[[bin]]
+name = "coep_probe"
+path = "src/main.rs"
+
+[dependencies]
+ureq = "2"

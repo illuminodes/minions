@@ -1,6 +1,6 @@
 [package]
 name = "nostr-minions"
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 license = "BSD-3-Clause"
 description = "A Yew-based framework for client side Nostr apps"
@@ -111,7 +111,7 @@ web-sys = { version = "0.3", features = [
     "WebSocket", "MessageEvent", "CloseEvent", "ErrorEvent",
     "Worker", "WorkerOptions", "WorkerType", "DedicatedWorkerGlobalScope",
     "Blob", "BlobPropertyBag", "Url", "Performance",
-    "Document", "Element", "NodeList", "Location",
+    "Document", "Element", "NodeList", "Location", "console",
 ] }
 
 # I/O

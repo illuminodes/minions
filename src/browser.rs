@@ -8,6 +8,7 @@
 mod app_provider;
 mod clock;
 mod crypto;
+mod dev_console;
 mod idb_manager;
 mod key_manager;
 mod minion_error;
@@ -27,6 +28,7 @@ pub use relay_pool::{
 // The JSON + clock helpers, so consumers can encode Nostr types without caring
 // which backend the build selected.
 pub use clock::WallClock;
+pub use dev_console::DevConsole;
 pub use nostr_json::NostrJson;
 
 // Providers / components

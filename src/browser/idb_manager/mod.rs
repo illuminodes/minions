@@ -45,7 +45,7 @@ pub fn idb_manager_provider(props: &yew::html::ChildrenProps) -> HtmlResult {
         // Render children without context so downstream hooks return None
         // and components can degrade gracefully instead of showing a blank screen.
         if let Err(e) = db.as_ref() {
-            web_sys::console::error_1(&format!("nostr-minions: IndexedDB unavailable: {e}").into());
+            crate::DevConsole::error(format_args!("nostr-minions: IndexedDB unavailable: {e}"));
         }
         return Ok(html! { {props.children.clone()} });
     };

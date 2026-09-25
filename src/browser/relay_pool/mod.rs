@@ -1,5 +1,6 @@
 mod app_link;
 mod bounded_dedup;
+mod delivery_ledger;
 #[cfg(feature = "sab-transport")]
 mod endpoint;
 #[cfg(feature = "bench-harness")]

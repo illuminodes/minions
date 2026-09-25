@@ -39,6 +39,9 @@ pub struct NostrRelayPool {
             std::collections::HashMap<super::SubscriptionId, super::SubscriptionInfo>,
         >,
     >,
+    /// Notes already handed to each subscription, so one arriving again for
+    /// another subscription is not delivered twice.
+    deliveries: std::rc::Rc<std::cell::RefCell<super::delivery_ledger::DeliveryLedger>>,
     /// Relay-event subscriptions (EOSE/OK/NOTICE/AUTH/…).
     relay_event_subscribers: std::rc::Rc<
         std::cell::RefCell<
@@ -133,6 +136,7 @@ impl NostrRelayPool {
             note_count: 0,
         };
         self.subscriptions.borrow_mut().insert(id.clone(), info);
+        self.deliveries.borrow_mut().open(id.clone());
 
         // Hand the worker the filter (for matching), the id, and the prebuilt
         // REQ frame (so relays see the same id). Fire-and-forget.
@@ -150,6 +154,7 @@ impl NostrRelayPool {
     /// Unsubscribe from a subscription (sends CLOSE to relays via the worker).
     pub fn unsubscribe(&self, id: &super::SubscriptionId) {
         self.subscriptions.borrow_mut().remove(id);
+        self.deliveries.borrow_mut().close(id);
         let _ = self
             .cmd_tx
             .unbounded_send(RelayCommand::Close(id.as_str().to_string()));
@@ -188,11 +193,13 @@ impl NostrRelayPool {
 
     /// Dispatch a worker-matched note to the subscriptions whose filter it
     /// matches. The worker already confirmed the note matches *some* active
-    /// filter; the re-check here only ROUTES it to the right callback(s).
+    /// filter; the re-check here only ROUTES it to the right callback(s), each
+    /// of which receives a given note at most once.
     fn dispatch_note(&self, note: &nostro2::NostrNote) {
         let mut subs = self.subscriptions.borrow_mut();
+        let mut deliveries = self.deliveries.borrow_mut();
         for sub in subs.values_mut() {
-            if sub.filter.matches(note) {
+            if sub.filter.matches(note) && deliveries.first_delivery(&sub.id, note) {
                 sub.note_count += 1;
                 sub.callback.emit(note.clone());
             }
@@ -309,6 +316,7 @@ pub fn nostr_relay_pool_provider(props: &RelayContextProps) -> Html {
     let relay_health = use_mut_ref(std::collections::HashMap::new);
     let transport = use_transport_cell();
     let subscriptions = use_mut_ref(std::collections::HashMap::new);
+    let deliveries = use_mut_ref(super::delivery_ledger::DeliveryLedger::default);
     let relay_event_subscribers = use_mut_ref(std::collections::HashMap::new);
 
     // The outbound command channel. The sender lives in the store; the receiver
@@ -333,6 +341,7 @@ pub fn nostr_relay_pool_provider(props: &RelayContextProps) -> Html {
                 relay_health,
                 transport,
                 subscriptions,
+                deliveries,
                 relay_event_subscribers,
             }
         }
@@ -352,9 +361,9 @@ pub fn nostr_relay_pool_provider(props: &RelayContextProps) -> Html {
             };
             match super::worker_boot::spawn_relay_bridge() {
                 Ok(bridge) => spawn_driver(bridge, cmd_rx, dispatch, relays),
-                Err(e) => web_sys::console::error_1(
-                    &format!("relay pool: failed to spawn worker: {e:?}").into(),
-                ),
+                Err(e) => crate::DevConsole::error(format_args!(
+                    "relay pool: failed to spawn worker: {e:?}"
+                )),
             }
         }
     });
@@ -401,7 +410,7 @@ fn spawn_driver(
         let mut bridge = bridge;
         let mut negotiation = super::transport_negotiation::TransportNegotiation::new();
         let settle = |status, link: &super::app_link::AppLink| {
-            web_sys::console::log_1(&link.describe().into());
+            crate::DevConsole::log(link.describe());
             dispatch.dispatch(NostrRelayPoolAction::TransportSettled(status));
         };
         loop {

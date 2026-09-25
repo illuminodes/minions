@@ -10,12 +10,14 @@ pub struct BoundedDedup {
 }
 
 impl BoundedDedup {
-    /// Create a new bounded dedup tracker with a maximum size
+    /// Create a new bounded dedup tracker with a maximum size.
+    ///
+    /// Storage grows on demand, so an idle tracker costs nothing up front.
     #[must_use]
     pub fn new(max_size: usize) -> Self {
         Self {
-            ids: VecDeque::with_capacity(max_size),
-            set: HashSet::with_capacity(max_size),
+            ids: VecDeque::new(),
+            set: HashSet::new(),
             max_size,
         }
     }

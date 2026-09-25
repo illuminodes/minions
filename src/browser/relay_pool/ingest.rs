@@ -59,6 +59,10 @@ impl NoteIngestor {
     /// Returns what to ship, or `None` when the frame is unparseable, a
     /// duplicate, or a note no active filter wants.
     ///
+    /// Duplicates are tracked per subscription: the same note arriving for a
+    /// newly opened subscription is shipped again, so that subscription is not
+    /// starved by an earlier one having already received it.
+    ///
     /// A matched note is returned in BOTH forms — the original string and the
     /// parsed note — because the parse happened here and the transport in use
     /// decides which form costs nothing. See [`Ingested`].
@@ -68,12 +72,12 @@ impl NoteIngestor {
             return None;
         };
 
-        let NostrRelayEvent::NewNote(.., note) = event else {
+        let NostrRelayEvent::NewNote(_, sub_id, note) = event else {
             return Some(Ingested::RelayEvent(raw));
         };
 
         if let Some(ref id) = note.id {
-            if !self.dedup.borrow_mut().insert(id.clone()) {
+            if !self.dedup.borrow_mut().insert(format!("{sub_id}:{id}")) {
                 return None;
             }
         }

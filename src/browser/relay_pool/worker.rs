@@ -70,7 +70,11 @@ impl yew_agent::Codec for JsonCodec {
             );
             super::handshake::RingHandshake::DECODES_AS.to_string()
         });
-        serde_json::from_str(&s).expect("worker message: deserialize")
+        serde_json::from_str(&s).unwrap_or_else(|e| {
+            crate::DevConsole::error(format_args!("relay worker: undecodable frame ({e}): {s}"));
+            serde_json::from_str(super::handshake::RingHandshake::DECODES_AS)
+                .unwrap_or_else(|_| panic!("worker message: deserialize {s:?}: {e}"))
+        })
     }
 }
 

@@ -70,11 +70,9 @@ impl Verdict {
                 "loads ONLY with crossorigin=\"anonymous\" on the tag \
                  (Access-Control-Allow-Origin: {allow_origin})"
             ),
-            Self::Blocked => {
-                "BLOCKED under COEP: no CORP header and no CORS. Self-host it, \
+            Self::Blocked => "BLOCKED under COEP: no CORP header and no CORS. Self-host it, \
                  or do not isolate the page."
-                    .to_string()
-            }
+                .to_string(),
         }
     }
 }
@@ -197,10 +195,7 @@ mod tests {
 
     #[test]
     fn unsafe_none_does_not_let_a_frame_embed() {
-        assert_eq!(
-            FrameVerdict::of(Some("unsafe-none")),
-            FrameVerdict::Blocked
-        );
+        assert_eq!(FrameVerdict::of(Some("unsafe-none")), FrameVerdict::Blocked);
     }
 
     #[test]

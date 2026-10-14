@@ -8,8 +8,8 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
-use nostro2::NostrNote;
 use nostr_minions::transport::NoteCodec;
+use nostro2::NostrNote;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use yew::prelude::*;

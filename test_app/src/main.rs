@@ -1,5 +1,5 @@
 use nostr_minions::{
-    use_notes_by_kind, use_nostr_relay_pool, use_relay_events, use_text_notes, NostrAppProvider,
+    use_nostr_relay_pool, use_notes_by_kind, use_relay_events, use_text_notes, NostrAppProvider,
     TransportStatus,
 };
 use yew::prelude::*;

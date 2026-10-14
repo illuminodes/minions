@@ -59,7 +59,6 @@ fn main() {
     yew::Renderer::<App>::new().render();
 }
 
-
 /// Shared, mutable benchmark state. One instance lives at the app root and is
 /// updated by whichever path is active and read by the metrics UI.
 #[derive(Default)]

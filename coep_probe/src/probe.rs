@@ -95,9 +95,11 @@ impl Probe {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            agent: ureq::AgentBuilder::new()
-                .timeout(std::time::Duration::from_secs(15))
-                .build(),
+            agent: ureq::Agent::config_builder()
+                .timeout_global(Some(std::time::Duration::from_secs(15)))
+                .http_status_as_error(false)
+                .build()
+                .into(),
         }
     }
 
@@ -114,27 +116,26 @@ impl Probe {
         let response = self
             .agent
             .get(url)
-            .set("Origin", "https://localhost")
-            .call();
+            .header("Origin", "https://localhost")
+            .call()
+            .map_err(|e| format!("{url}: {e}"))?;
 
-        let response = match response {
-            Ok(response) | Err(ureq::Error::Status(_, response)) => response,
-            Err(e) => return Err(format!("{url}: {e}")),
-        };
+        let headers = response.headers();
+        let header = |name: &str| headers.get(name).and_then(|v| v.to_str().ok());
 
         let outcome = match usage {
             Usage::Subresource => Outcome::Subresource(Verdict::of(
-                response.header("Cross-Origin-Resource-Policy"),
-                response.header("Access-Control-Allow-Origin"),
+                header("Cross-Origin-Resource-Policy"),
+                header("Access-Control-Allow-Origin"),
             )),
-            Usage::Frame => Outcome::Frame(FrameVerdict::of(
-                response.header("Cross-Origin-Embedder-Policy"),
-            )),
+            Usage::Frame => {
+                Outcome::Frame(FrameVerdict::of(header("Cross-Origin-Embedder-Policy")))
+            }
         };
 
         Ok(Probed {
             url: url.to_string(),
-            status: response.status(),
+            status: response.status().as_u16(),
             outcome,
         })
     }

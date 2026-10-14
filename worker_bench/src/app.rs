@@ -538,7 +538,8 @@ fn ring_panel(props: &PathProps) -> Html {
                 status.set("no glue URL".to_string());
                 return;
             };
-            let filter_json = serde_json::to_string(&kind1_filter()).unwrap_or_default();
+            let filter_json =
+                nostr_minions::NostrJson::to_string(&kind1_filter()).unwrap_or_default();
             let args = [
                 JsValue::from_f64(ptr as f64),
                 JsValue::from_f64(dptr as f64),

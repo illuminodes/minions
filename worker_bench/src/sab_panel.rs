@@ -143,7 +143,8 @@ pub fn sab_panel(props: &PathProps) -> Html {
                 status.set("no glue URL".to_string());
                 return;
             };
-            let filter_json = serde_json::to_string(&kind1_filter()).unwrap_or_default();
+            let filter_json =
+                nostr_minions::NostrJson::to_string(&kind1_filter()).unwrap_or_default();
             let args = [
                 buffer,
                 JsValue::from_f64(f64::from(rate)),

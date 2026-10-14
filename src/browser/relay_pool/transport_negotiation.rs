@@ -135,7 +135,8 @@ mod tests {
         let mut negotiation = TransportNegotiation::new();
         let mut outcome = None;
         for _ in 0..TransportNegotiation::PATIENCE_TICKS {
-            outcome = outcome.or(negotiation.tick_without_offer());
+            let tick = negotiation.tick_without_offer();
+            outcome = outcome.or(tick);
         }
         assert_eq!(outcome, Some(TransportStatus::Bridge));
         assert!(negotiation.is_settled());

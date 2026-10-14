@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0]
+
+### Added
+
+- README section on choosing the curve (`k256` / `secp256k1`) and JSON
+  (`serde` / `bourne`) backends.
+
+### Changed
+
+- **Breaking.** Nostr stack moved to `nostro2` 0.9, `nostro2-nips` 0.7 and
+  `nostro2-signer` 0.8. These types are re-exported from this crate, so
+  consumers that name them directly must move to the same versions.
+- **Breaking, `bourne` backend only.** `json-bourne` 0.2 -> 0.3. Its `Error`
+  type is part of `nostro2`'s public API.
+- **Behaviour.** `NostrId::decrypt_note` no longer decrypts legacy
+  `0x31` NIP-44 payloads, because `nostro2-nips` 0.6 removed that path from
+  `nip_44_decrypt`. NIP-17 rumors now carry a `p` tag for the recipient.
+  Both changes come from the upstream security release; no signature here
+  changed.
+
 ## [0.4.0]
 
 ### Added

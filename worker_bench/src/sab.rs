@@ -220,10 +220,11 @@ struct SabFlood {
 
 impl SabFlood {
     fn new(ring: SabRing, filter_json: &str) -> Self {
-        let filter = serde_json::from_str(filter_json).unwrap_or(NostrSubscription {
-            kinds: Some([1].into()),
-            ..Default::default()
-        });
+        let filter =
+            nostr_minions::NostrJson::parse_str(filter_json).unwrap_or(NostrSubscription {
+                kinds: Some([1].into()),
+                ..Default::default()
+            });
         Self {
             ring,
             filter,

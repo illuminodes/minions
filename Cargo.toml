@@ -1,6 +1,6 @@
 [package]
 name = "nostr-minions"
-version = "0.4.1"
+version = "0.5.0"
 edition = "2021"
 license = "BSD-3-Clause"
 description = "A Yew-based framework for client side Nostr apps"
@@ -13,7 +13,7 @@ homepage = "https://github.com/illuminodes/minions"
 # both choices are mutually exclusive (upstream `compile_error!`s enforce it).
 # Mirror both axes here so consumers of `nostr-minions` keep the same control:
 #
-#   nostr-minions = { version = "0.4", default-features = false, features = ["secp256k1", "bourne"] }
+#   nostr-minions = { version = "0.5", default-features = false, features = ["secp256k1", "bourne"] }
 #
 # The default matches the nostro2 stack default: k256 + serde.
 default = ["k256", "serde"]
@@ -74,9 +74,9 @@ bourne = [
 
 [dependencies]
 # Nostr Stack
-nostro2 = { version = "0.8", default-features = false }
-nostro2-nips = { version = "0.5", default-features = false }
-nostro2-signer = { version = "0.6", default-features = false }
+nostro2 = { version = "0.9", default-features = false }
+nostro2-nips = { version = "0.7", default-features = false }
+nostro2-signer = { version = "0.8", default-features = false }
 # nostro2 = { path = "../NostrO2/crates/core", default-features = false }
 # nostro2-nips = { path = "../NostrO2/crates/nips", default-features = false }
 # nostro2-signer = { path = "../NostrO2/crates/signer", default-features = false }
@@ -89,7 +89,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Only linked under the `bourne` backend, where the Nostr wire types are
 # encoded/parsed with it instead of `serde_json`.
-json-bourne = { version = "0.2", optional = true }
+json-bourne = { version = "0.3", optional = true }
 
 # The browser bindings. `src/browser` is gated to `wasm32`, and so are its
 # dependencies: off that target the crate is `src/transport` alone, which is

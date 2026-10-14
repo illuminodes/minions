@@ -132,7 +132,7 @@ pub fn ring_worker_main(
     running.store(true, std::sync::atomic::Ordering::Release);
 
     let filter: NostrSubscription =
-        serde_json::from_str(&filter_json).unwrap_or(NostrSubscription {
+        nostr_minions::NostrJson::parse_str(&filter_json).unwrap_or(NostrSubscription {
             kinds: Some([1].into()),
             ..Default::default()
         });

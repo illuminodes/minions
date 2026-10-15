@@ -72,7 +72,7 @@ impl WorkerSink {
         self.transport
             .receive_inbound()
             .into_iter()
-            .map(Into::into)
+            .map(RelayCommand::from_wire)
             .collect()
     }
 

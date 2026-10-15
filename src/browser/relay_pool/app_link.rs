@@ -74,7 +74,7 @@ impl AppLink {
         if !self.uses_shared_rings() {
             return false;
         }
-        let sent = self.transport.send_to_worker(&command.clone().into());
+        let sent = self.transport.send_to_worker(&command.clone().to_wire());
         self.transport.flush();
         sent
     }

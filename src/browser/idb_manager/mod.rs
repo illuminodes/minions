@@ -20,14 +20,14 @@ impl IdbManager {
 }
 
 pub enum IdbManagerAction {
-    Loaded(IdbManager),
+    Loaded(db::NostrIdb),
 }
 
 impl Reducible for IdbManager {
     type Action = IdbManagerAction;
     fn reduce(self: std::rc::Rc<Self>, action: Self::Action) -> std::rc::Rc<Self> {
         match action {
-            IdbManagerAction::Loaded(db) => std::rc::Rc::new(db),
+            IdbManagerAction::Loaded(db) => std::rc::Rc::new(Self { db }),
         }
     }
 }

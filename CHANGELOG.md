@@ -24,6 +24,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `nip_44_decrypt`. NIP-17 rumors now carry a `p` tag for the recipient.
   Both changes come from the upstream security release; no signature here
   changed.
+- **Breaking.** `IdbManagerAction::Loaded` carries a `NostrIdb` instead of an
+  `IdbManager`.
+- **Breaking.** `RelayCommand` converts to and from `transport::Inbound` with
+  `RelayCommand::to_wire` / `RelayCommand::from_wire` instead of `From` impls.
+
+### Removed
+
+- `UserRelay::find_all_relays`. Use `NostrIdb::get_relays`.
 
 ## [0.4.0]
 

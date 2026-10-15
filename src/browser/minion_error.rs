@@ -10,6 +10,7 @@ pub enum MinionError {
     CryptoError(wasm_bindgen::JsValue),
     WasmSerde(serde_wasm_bindgen::Error),
     NoIdentityFound,
+    UnverifiedEvent,
 }
 
 impl std::fmt::Display for MinionError {
@@ -24,6 +25,7 @@ impl std::fmt::Display for MinionError {
             Self::CryptoError(e) => write!(f, "Crypto Error: {e:?}"),
             Self::WasmSerde(e) => write!(f, "Serialization Error: {e}"),
             Self::NoIdentityFound => write!(f, "No Identity Found"),
+            Self::UnverifiedEvent => write!(f, "Event id or signature does not verify"),
         }
     }
 }

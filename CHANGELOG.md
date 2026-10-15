@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - README section on choosing the curve (`k256` / `secp256k1`) and JSON
   (`serde` / `bourne`) backends.
+- `NostrId::decrypt_legacy_note` decrypts legacy `0x31` NIP-44 content after
+  verifying the event's id and signature, so data encrypted before 0.5.0 can
+  be read and re-encrypted with `sign_encrypted_note`.
+- `MinionError::UnverifiedEvent`, returned when that check fails. Code that
+  matches `MinionError` exhaustively needs a new arm.
 
 ### Changed
 
@@ -21,7 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   type is part of `nostro2`'s public API.
 - **Behaviour.** `NostrId::decrypt_note` no longer decrypts legacy
   `0x31` NIP-44 payloads, because `nostro2-nips` 0.6 removed that path from
-  `nip_44_decrypt`. NIP-17 rumors now carry a `p` tag for the recipient.
+  `nip_44_decrypt`; it returns `NIP-44 Error: unsupported NIP-44 version
+  byte: 0x31` for them. Use `decrypt_legacy_note` to read such data. NIP-17 rumors now carry a `p` tag for the recipient.
   Both changes come from the upstream security release; no signature here
   changed.
 

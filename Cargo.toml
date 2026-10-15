@@ -54,8 +54,9 @@ k256 = ["nostro2/k256", "nostro2-nips/k256", "nostro2-signer/k256"]
 #
 # Building this backend for wasm also needs, from the CONSUMER's environment:
 #   CFLAGS_wasm32_unknown_unknown=-Wno-implicit-function-declaration
-# `secp256k1-sys` 0.11's bundled C calls `memmove` without including
-# <string.h>, which clang 16+ rejects. Upstream C bug, not fixable from here.
+# `secp256k1-sys` 0.11's wasm-sysroot `string.h` does not declare `memmove`,
+# which clang 16+ rejects. Fixed in `secp256k1-sys` 0.12+, reachable once
+# nostro2 moves to `secp256k1` 0.33.
 # The default `k256` backend is pure Rust and needs none of this.
 secp256k1 = [
     "dep:getrandom",

@@ -39,7 +39,9 @@ pub use hooks::{
     use_relay_events, use_text_notes,
 };
 pub use ingest::NoteIngestor;
+pub use ingested::Ingested;
 pub use nostr_relay::UserRelay;
+pub use pool_event::PoolEvent;
 pub use provider::{
     NostrRelayPool, NostrRelayPoolAction, NostrRelayPoolProvider, NostrRelayPoolStore,
 };

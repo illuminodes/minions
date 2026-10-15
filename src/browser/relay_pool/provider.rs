@@ -5,7 +5,7 @@ use super::worker::RelayCommand;
 /// The relay pool, as seen by the main (UI) thread.
 ///
 /// All relay I/O — `WebSockets`, dedup, filter-matching — runs in a Web Worker
-/// (see [`super::worker`]); this type is a thin **synchronous facade** over the
+/// (see [`RelayReactor`](super::RelayReactor)); this type is a thin **synchronous facade** over the
 /// bridge to that worker. Public methods (`subscribe`, `send`, …) push a
 /// [`RelayCommand`] into `cmd_tx` (fire-and-forget); the provider's driver task
 /// forwards them to the worker and pumps matched notes / relay events / health
@@ -228,8 +228,8 @@ impl NostrRelayPool {
 
 /// Actions that drive the relay-pool store.
 ///
-/// `WorkerEvent` carries a [`WorkerOut`] pumped off the bridge by the driver
-/// task. Health updates re-render consumers (`notify_change`); note / relay-event
+/// `WorkerEvent` carries a [`PoolEvent`](super::PoolEvent) pumped off the bridge
+/// or the rings by the driver task. Health updates re-render consumers (`notify_change`); note / relay-event
 /// dispatch returns `self` (no global re-render — fan-out is per-subscription).
 /// `AddRelay` / `RemoveRelay` enqueue a worker command and re-render.
 pub enum NostrRelayPoolAction {

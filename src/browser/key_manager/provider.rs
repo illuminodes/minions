@@ -1,4 +1,4 @@
-use nostro2::{NostrEvent, NostrNote, NostrSigner};
+use nostro2::{NostrNote, NostrSigner};
 use nostro2_nips::Nip44;
 use nostro2_signer::NostrKeypair;
 use std::rc::Rc;
@@ -76,28 +76,6 @@ impl NostrId {
             .ok_or(crate::MinionError::NoNostrKeyFound)?;
         Ok(id
             .nip44_decrypt_note(event, event.pubkey.as_str())?
-            .to_string())
-    }
-    /// Decrypts content written in the legacy `0x31` NIP-44 format by
-    /// nostro2-nips 0.3.0 and earlier, which [`Self::decrypt_note`] refuses.
-    ///
-    /// The legacy MAC does not cover the nonce, so the event's id and signature
-    /// are verified first. Re-encrypt the result with
-    /// [`Self::sign_encrypted_note`] and republish it to finish the migration.
-    ///
-    /// # Errors
-    /// [`crate::MinionError::UnverifiedEvent`] if the id or signature does not
-    /// verify, or a NIP-44 error if the payload is not in the legacy format.
-    pub fn decrypt_legacy_note(&self, event: &NostrNote) -> Result<String, crate::MinionError> {
-        let id = self
-            .identity
-            .as_ref()
-            .ok_or(crate::MinionError::NoNostrKeyFound)?;
-        if !event.verify() {
-            return Err(crate::MinionError::UnverifiedEvent);
-        }
-        Ok(id
-            .nip_44_decrypt_legacy(&event.content, event.pubkey.as_str())?
             .to_string())
     }
     #[must_use]

@@ -5,6 +5,25 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1]
+
+### Added
+
+- `Ingested` and `PoolEvent` are exported. Public methods already returned
+  them, but code outside the crate could not name their types.
+
+### Changed
+
+- **Breaking.** `IdbManagerAction::Loaded` carries a `NostrIdb` instead of an
+  `IdbManager`.
+- **Breaking.** `RelayCommand` converts to and from `transport::Inbound` with
+  `RelayCommand::to_wire` / `RelayCommand::from_wire` instead of `From` impls.
+- `inout` 0.2.2 -> 0.2.3 in the lockfiles.
+
+### Removed
+
+- **Breaking.** `UserRelay::find_all_relays`. Use `NostrIdb::get_relays`.
+
 ## [0.5.0]
 
 ### Added
@@ -24,14 +43,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `nip_44_decrypt`. NIP-17 rumors now carry a `p` tag for the recipient.
   Both changes come from the upstream security release; no signature here
   changed.
-- **Breaking.** `IdbManagerAction::Loaded` carries a `NostrIdb` instead of an
-  `IdbManager`.
-- **Breaking.** `RelayCommand` converts to and from `transport::Inbound` with
-  `RelayCommand::to_wire` / `RelayCommand::from_wire` instead of `From` impls.
-
-### Removed
-
-- `UserRelay::find_all_relays`. Use `NostrIdb::get_relays`.
 
 ## [0.4.0]
 

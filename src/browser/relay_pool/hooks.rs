@@ -7,8 +7,9 @@ use super::SubscriptionId;
 
 /// Subscribe to notes matching a filter
 ///
-/// Returns a vector of notes that match the filter. The hook automatically
-/// manages subscription lifecycle (subscribe on mount, unsubscribe on unmount).
+/// Returns a vector of notes that match the filter, newest first by
+/// `created_at`. The hook automatically manages subscription lifecycle
+/// (subscribe on mount, unsubscribe on unmount).
 ///
 /// Returns an empty vec if the relay pool context is not available.
 ///
@@ -48,7 +49,14 @@ pub fn use_nostr_notes(filter: NostrSubscription) -> Vec<NostrNote> {
                 Callback::from(move |note: NostrNote| {
                     {
                         let mut current = notes.borrow_mut();
-                        current.push_front(note); // O(1) with VecDeque
+                        // Keep the list newest-first by `created_at`, not by
+                        // arrival. A relay answers a REQ with stored events
+                        // newest first, so pushing each to the front would
+                        // leave the OLDEST note of the batch at index 0, and
+                        // the truncate below would discard the newest ones.
+                        let at = current
+                            .partition_point(|existing| existing.created_at > note.created_at);
+                        current.insert(at, note);
 
                         // Respect limit from filter
                         if let Some(limit) = limit {

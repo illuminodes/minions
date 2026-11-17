@@ -2,28 +2,33 @@
 
 A framework for building performant and secure PWAs in (mostly) full-stack Rust. 
 
-We aim to provide simple building blocks for apps that are fast, secure, and easy to build.
-Open source widget libraries are integrated to Nostr data feeds to provide interactivity and 
-real-time data updates.
+We aim to provide simple building blocks for apps that are fast, secure, and easy to build:
+a relay pool that runs in a Web Worker, key management backed by IndexedDB, and Yew hooks
+that feed Nostr data to your components.
 
 ## Build and run
 
-The app uses Yew to build a WASM client side application. Styling is handled using TailwindCSS.
+`nostr-minions` is a library. Add it to a Yew app that builds to WASM:
 
+```toml
+nostr-minions = "0.5"
+```
 
-To build and run the project, you should have installed:
+The repository also holds `test_app`, a small Yew app that exercises the library.
+It is styled with TailwindCSS. To run it, you should have installed:
 
-- [Rust](https://www.rust-lang.org/)
+- [Rust](https://www.rust-lang.org/), with the `wasm32-unknown-unknown` target
 - [TailwindCSS](https://tailwindcss.com/)
 - [Trunk](https://trunkrs.dev/)
 
-To build a new application, clone the repository and run the following command:
+Then, from a clone of the repository:
 
 ```bash
+cd test_app
 trunk serve
 ```
 
-This will build the project and start a development server.
+This will build the example and start a development server on port 2100.
 
 ## Cargo features
 

@@ -459,7 +459,7 @@ fn spawn_driver(
                 },
             }
 
-            for event in link.drain() {
+            for event in link.drain_batches(super::ring_pump::RingPump::batches_per_turn()) {
                 dispatch.dispatch(NostrRelayPoolAction::WorkerEvent(event));
             }
         }

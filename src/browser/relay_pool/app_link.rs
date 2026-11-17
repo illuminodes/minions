@@ -89,6 +89,25 @@ impl AppLink {
             .collect()
     }
 
+    /// Take up to `batches` batches of worker output, stopping early once the
+    /// ring is empty.
+    ///
+    /// The count is a hard limit on purpose. The worker refills the ring
+    /// while this drains it, so a loop that ran until the ring was empty
+    /// could hold the thread for good.
+    #[must_use]
+    pub fn drain_batches(&self, batches: usize) -> Vec<PoolEvent> {
+        let mut drained = Vec::new();
+        for _ in 0..batches {
+            let events = self.drain();
+            if events.is_empty() {
+                break;
+            }
+            drained.extend(events);
+        }
+        drained
+    }
+
     /// Frames held back because the ring was full.
     ///
     /// On this side the ring carries commands, which are rare, so this is

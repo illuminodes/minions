@@ -77,9 +77,25 @@ impl RelaySet {
     }
 
     /// Replace a dead socket, keeping exactly one socket per URL.
+    ///
+    /// Frames queued on the dead socket move to its replacement. Dropping them
+    /// with the socket would silently lose anything published while the relay
+    /// was reconnecting.
     pub fn reconnect(&mut self, url: &str, retry_count: u32) {
+        let queued: Vec<String> = self
+            .sockets
+            .iter()
+            .filter(|s| s.url() == url)
+            .flat_map(WorkerSocket::take_queued)
+            .collect();
         self.sockets.retain(|s| s.url() != url);
-        self.connect(url, retry_count);
+        if self.connect(url, retry_count) {
+            if let Some(replacement) = self.sockets.last() {
+                for frame in &queued {
+                    replacement.send_str(frame);
+                }
+            }
+        }
         self.emit_health();
     }
 
@@ -91,15 +107,18 @@ impl RelaySet {
         true
     }
 
-    fn connect(&mut self, url: &str, retry_count: u32) {
-        if let Ok(sock) = WorkerSocket::connect(
+    /// Open a socket for `url`, reporting whether one was created.
+    fn connect(&mut self, url: &str, retry_count: u32) -> bool {
+        let Ok(sock) = WorkerSocket::connect(
             url.to_string(),
             retry_count,
             self.ingestor.clone(),
             self.bus_tx.clone(),
-        ) {
-            self.sockets.push(sock);
-        }
+        ) else {
+            return false;
+        };
+        self.sockets.push(sock);
+        true
     }
 
     fn broadcast(&self, frame: &str) {

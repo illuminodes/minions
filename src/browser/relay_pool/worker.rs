@@ -223,6 +223,8 @@ pub struct WorkerSocket {
     _onclose: Closure<dyn FnMut(web_sys::CloseEvent)>,
     _onerror: Closure<dyn FnMut(web_sys::ErrorEvent)>,
     queue: Rc<RefCell<Vec<String>>>,
+    /// Set once the socket has closed with no reconnect left to wait for.
+    abandoned: Rc<std::cell::Cell<bool>>,
 }
 
 impl Drop for WorkerSocket {
@@ -253,6 +255,7 @@ impl WorkerSocket {
     ) -> Result<Self, JsValue> {
         let ws = web_sys::WebSocket::new(&url)?;
         let queue: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
+        let abandoned = Rc::new(std::cell::Cell::new(false));
 
         // On open: re-send every active REQ (so a reconnected socket resumes its
         // subscriptions), then flush anything queued before the socket opened.
@@ -296,7 +299,15 @@ impl WorkerSocket {
         let onclose = {
             let url = url.clone();
             let bus_tx = bus_tx;
+            let queue = queue.clone();
+            let abandoned = abandoned.clone();
             Closure::wrap(Box::new(move |_e: web_sys::CloseEvent| {
+                // Out of retries: nothing will ever flush this queue, so stop
+                // filling it and release what it holds.
+                if retry_count >= MAX_RETRIES {
+                    abandoned.set(true);
+                    queue.borrow_mut().clear();
+                }
                 let _ = bus_tx
                     .unbounded_send(Internal::Health(vec![(url.clone(), ReadyState::CLOSED)]));
 
@@ -334,15 +345,29 @@ impl WorkerSocket {
             _onclose: onclose,
             _onerror: onerror,
             queue,
+            abandoned,
         })
     }
 
     /// Send now if open, otherwise queue until `onopen` fires.
+    ///
+    /// A closed socket still queues, because its replacement inherits the
+    /// queue (see [`Self::take_queued`]). One that ran out of retries has no
+    /// replacement coming, so the frame is dropped instead of held forever.
     pub fn send_str(&self, msg: &str) {
         if self.ws.ready_state() == web_sys::WebSocket::OPEN {
             let _ = self.ws.send_with_str(msg);
-        } else {
+        } else if !self.abandoned.get() {
             self.queue.borrow_mut().push(msg.to_string());
         }
+    }
+
+    /// Take the frames still waiting to be sent, leaving the queue empty.
+    ///
+    /// The reactor loop calls this on a dead socket before replacing it, so a
+    /// frame queued during the backoff window reaches the relay once the
+    /// replacement opens.
+    pub fn take_queued(&self) -> Vec<String> {
+        std::mem::take(&mut *self.queue.borrow_mut())
     }
 }

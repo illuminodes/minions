@@ -4,6 +4,10 @@
 //! use, so a benchmark measures the shipped ingestion path rather than a copy
 //! of it. It lives behind the `bench-harness` feature and compiles to nothing
 //! in a normal build.
+//!
+//! One step is skipped: synthetic notes carry no real signature, so the flood
+//! does not run the signature check a relay frame gets. Its numbers therefore
+//! leave out that cost.
 
 use super::ingest::NoteIngestor;
 
@@ -89,7 +93,7 @@ impl FloodRunner {
                 for _ in 0..per_tick {
                     let raw = SyntheticFrame::new(seq, emit_ms, spec.payload_bytes).render();
                     seq += 1;
-                    if let Some(out) = ingestor.ingest(raw) {
+                    if let Some(out) = ingestor.ingest_unverified(raw) {
                         if !emit(out) {
                             return;
                         }

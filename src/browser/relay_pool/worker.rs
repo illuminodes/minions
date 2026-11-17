@@ -254,8 +254,9 @@ impl WorkerSocket {
         let ws = web_sys::WebSocket::new(&url)?;
         let queue: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
 
-        // On open: re-send every active REQ (so a reconnected socket resumes its
-        // subscriptions), then flush anything queued before the socket opened.
+        // On open: send every active REQ under its original id (so a new or
+        // reconnected socket carries the same subscriptions as the rest of the
+        // pool), then flush anything queued before the socket opened.
         // Also report health so the main thread sees OPEN.
         let onopen = {
             let sender = ws.clone();
@@ -265,9 +266,7 @@ impl WorkerSocket {
             let url = url.clone();
             Closure::wrap(Box::new(move || {
                 for req in ingestor.active_reqs() {
-                    if let Ok(req_str) = crate::NostrJson::to_string(&req) {
-                        let _ = sender.send_with_str(&req_str);
-                    }
+                    let _ = sender.send_with_str(&req);
                 }
                 for msg in queue.borrow().iter() {
                     let _ = sender.send_with_str(msg);

@@ -58,6 +58,24 @@ The `secp256k1` backend on `wasm32-unknown-unknown` needs
 `CFLAGS_wasm32_unknown_unknown=-Wno-implicit-function-declaration` in the
 build environment.
 
+## Key storage
+
+`use_create_local_key` saves the user's secret key in IndexedDB (database
+`nostr_db`, store `user_identity`). The key is held as a Web Crypto
+`CryptoKey`, but it is imported as **extractable**: signing and encryption run
+in wasm, so the raw bytes have to be readable.
+
+The browser therefore does not protect this key from code running on your
+origin. Any script on the page, such as an injected script or a compromised
+dependency, can read the record and export the secret. Treat it like a key
+kept in `localStorage`:
+
+- serve the app with a strict Content-Security-Policy and avoid third-party
+  scripts;
+- if the key must stay out of the page, sign with a NIP-07 browser extension
+  or a NIP-46 remote signer instead of a locally stored key. The key hooks
+  in this crate manage a local key only, so that wiring is up to the app.
+
 ### "Warm" Reloading
 
 The build script will recognize any HTML content inside Yew's functional components and reload new changes on save.

@@ -36,12 +36,21 @@ pub fn use_create_local_key() -> Option<yew::callback::Callback<nostro2_signer::
             let key_ctx = key_ctx.clone();
 
             yew::platform::spawn_local(async move {
-                let Ok(entry) = crate::IdbKeypairEntry::from_keypair(keypair.clone()).await else {
-                    return;
+                let entry = match crate::IdbKeypairEntry::from_keypair(keypair.clone()).await {
+                    Ok(entry) => entry,
+                    Err(e) => {
+                        crate::DevConsole::error(format_args!(
+                            "nostr-minions: could not prepare the key for storage: {e}"
+                        ));
+                        return;
+                    }
                 };
-                let Ok(()) = idb_ctx.add_identity(entry).await else {
+                if let Err(e) = idb_ctx.add_identity(entry).await {
+                    crate::DevConsole::error(format_args!(
+                        "nostr-minions: could not save the key: {e}"
+                    ));
                     return;
-                };
+                }
                 key_ctx.dispatch(provider::NostrIdAction::LoadIdentity(
                     keypair.public_key(),
                     keypair,
@@ -63,9 +72,12 @@ pub fn use_delete_local_key() -> Option<yew::callback::Callback<()>> {
             return;
         };
         yew::platform::spawn_local(async move {
-            let Ok(()) = idb_ctx.remove_identity(key.public_key()).await else {
+            if let Err(e) = idb_ctx.remove_identity(key.public_key()).await {
+                crate::DevConsole::error(format_args!(
+                    "nostr-minions: could not delete the key: {e}"
+                ));
                 return;
-            };
+            }
             key_dispatch.dispatch(provider::NostrIdAction::DeleteIdentity);
         });
     }))

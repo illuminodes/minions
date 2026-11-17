@@ -10,40 +10,54 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  check:
 
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
-    
-    - name: Setup Node.js environment
-      uses: actions/setup-node@v4.1.0
+      with:
+        # The change-risk ratchet below compares against the base commit.
+        fetch-depth: 0
 
-    - name: Install tailwind
-      run: npm install -D tailwindcss
-
-    - name: Install tailwind deps (Forms)
-      run: npm install -D @tailwindcss/forms
-
-    - name: Install tailwind deps (Typography)
-      run: npm install -D @tailwindcss/typography  
-
-    - name: Run Tailwind
-      run: npx tailwindcss -i ./public/styles/input.css -o ./public/styles/output.css -c ./tailwind.config.cjs
-      
-    - name: Install cargo-binstall
-      uses: cargo-bins/cargo-binstall@v1.10.0
-
-    - name: Install Trunk Binary 
-      run: cargo binstall trunk --no-confirm
-      
     - name: Install WASM toolchain
       run: rustup target add wasm32-unknown-unknown
-    
-    - name: Build Project
-      run: trunk build
 
-            
+    - name: Format
+      run: cargo fmt --check
 
-          
+    # `.cargo/config.toml` defaults the target to wasm32, which cannot run a
+    # test binary. The `transport` tests are plain Rust, so name the host.
+    - name: Test (host)
+      run: cargo test --target x86_64-unknown-linux-gnu
+
+    - name: Clippy (wasm32, default features)
+      run: cargo clippy --target wasm32-unknown-unknown -- -D warnings
+
+    - name: Clippy (wasm32, optional features)
+      run: cargo clippy --target wasm32-unknown-unknown --features sab-transport,bench-harness,test-components -- -D warnings
+
+    - name: Build (wasm32)
+      run: cargo build --target wasm32-unknown-unknown
+
+    # `cargo crappy` scores each function by complexity, coverage and idiom.
+    # The crate does not pass a flat threshold (the browser tree has no host
+    # coverage), so a pull request is held to a ratchet instead: no function
+    # may score worse than it does on the base commit, and no new function
+    # may cross the threshold.
+    - name: Install cargo-crappy
+      if: github.event_name == 'pull_request'
+      run: |
+        rustup component add llvm-tools
+        cargo install cargo-crappy --version 0.1.2 --locked
+
+    - name: Change-risk ratchet (cargo crappy)
+      if: github.event_name == 'pull_request'
+      env:
+        # Coverage instrumentation needs a target that can run the tests.
+        CARGO_BUILD_TARGET: x86_64-unknown-linux-gnu
+      run: |
+        git worktree add ../crappy-base "${{ github.event.pull_request.base.sha }}"
+        (cd ../crappy-base && cargo crappy --threshold 30 > ../crappy-base.txt 2>&1) || true
+        cargo crappy --threshold 30 > ../crappy-head.txt 2>&1 || true
+        python3 .github/scripts/crappy_ratchet.py ../crappy-base.txt ../crappy-head.txt

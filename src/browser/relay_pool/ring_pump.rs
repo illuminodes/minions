@@ -22,6 +22,14 @@
 //! the display's own rate, so it drains as often as the result can be seen and
 //! stops entirely in a background tab. A 16ms timer keeps firing there and
 //! burns battery to compute frames nobody sees.
+//!
+//! # Why a slow timer as well
+//!
+//! Stopping entirely is not safe either. The worker's sockets keep receiving
+//! while the tab is hidden, so with nobody draining, the ring fills and every
+//! further frame is held on the worker's heap for as long as the tab stays in
+//! the background. A second, slow tick keeps the ring moving there. While the
+//! tab is visible it adds one redundant drain per second.
 
 use std::cell::RefCell;
 
@@ -41,6 +49,8 @@ type FrameCallback = std::rc::Rc<RefCell<Option<Closure<dyn FnMut(f64)>>>>;
 pub struct RingPump {
     handle: std::rc::Rc<RefCell<Option<i32>>>,
     state: FrameCallback,
+    /// The slow tick that still fires while the tab is hidden.
+    background: Option<(i32, Closure<dyn FnMut()>)>,
 }
 
 impl RingPump {
@@ -52,6 +62,7 @@ impl RingPump {
     #[must_use]
     pub fn start(tick_tx: mpsc::UnboundedSender<()>) -> Option<Self> {
         let window = web_sys::window()?;
+        let background_tx = tick_tx.clone();
         let state: FrameCallback = std::rc::Rc::new(RefCell::new(None));
         let handle = std::rc::Rc::new(RefCell::new(None));
 
@@ -78,13 +89,70 @@ impl RingPump {
             .ok()?;
         *handle.borrow_mut() = Some(first);
         *state.borrow_mut() = Some(frame);
+        // Started last, so an early return above cannot leave a timer running
+        // with nothing left to clear it.
+        let background = Self::start_background(&window, background_tx);
 
-        Some(Self { handle, state })
+        Some(Self {
+            handle,
+            state,
+            background,
+        })
+    }
+
+    /// How often to tick when no animation frame arrives.
+    const BACKGROUND_INTERVAL_MS: i32 = 1000;
+
+    /// Start the slow tick. `None` when the timer cannot start, which leaves
+    /// the animation-frame pump working as before.
+    fn start_background(
+        window: &web_sys::Window,
+        tick_tx: mpsc::UnboundedSender<()>,
+    ) -> Option<(i32, Closure<dyn FnMut()>)> {
+        let tick = Closure::wrap(Box::new(move || {
+            let _ = tick_tx.unbounded_send(());
+        }) as Box<dyn FnMut()>);
+        let handle = window
+            .set_interval_with_callback_and_timeout_and_arguments_0(
+                tick.as_ref().unchecked_ref(),
+                Self::BACKGROUND_INTERVAL_MS,
+            )
+            .ok()?;
+        Some((handle, tick))
+    }
+
+    /// How many ring batches one turn of the driver takes while hidden.
+    const HIDDEN_BATCHES: usize = 64;
+
+    /// How many ring batches the driver should take this turn.
+    ///
+    /// One bounded batch per turn keeps a burst from becoming a long frame.
+    /// A hidden page paints no frames and turns the driver only on the slow
+    /// tick, where a single batch would let the worker's backlog grow without
+    /// limit, so there it takes many.
+    #[must_use]
+    pub fn batches_per_turn() -> usize {
+        if Self::page_hidden() {
+            Self::HIDDEN_BATCHES
+        } else {
+            1
+        }
+    }
+
+    /// Whether the page is in a background tab, where no frame is painted.
+    #[must_use]
+    pub fn page_hidden() -> bool {
+        web_sys::window()
+            .and_then(|window| window.document())
+            .is_some_and(|document| document.hidden())
     }
 }
 
 impl Drop for RingPump {
     fn drop(&mut self) {
+        if let (Some((timer, _)), Some(window)) = (self.background.take(), web_sys::window()) {
+            window.clear_interval_with_handle(timer);
+        }
         self.state.borrow_mut().take();
         let Some(handle) = self.handle.borrow_mut().take() else {
             return;

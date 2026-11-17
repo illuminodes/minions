@@ -87,10 +87,12 @@ impl yew_agent::Codec for JsonCodec {
 /// the socket with no re-encoding.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RelayCommand {
-    /// Connect the pool to this set of relay URLs.
-    Connect(Vec<String>),
-    /// Add a single relay to the pool at runtime.
-    AddRelay(String),
+    /// Connect the pool to this set of relays. Each one carries its `read`
+    /// and `write` flags, which decide the traffic it takes.
+    Connect(Vec<super::UserRelay>),
+    /// Add a single relay to the pool at runtime, or change the flags of one
+    /// already in it.
+    AddRelay(super::UserRelay),
     /// Remove a relay (by URL) from the pool.
     RemoveRelay(String),
     /// Begin matching/streaming notes for this subscription.
@@ -106,8 +108,8 @@ pub enum RelayCommand {
     },
     /// Stop matching for `sub_id` and send CLOSE to relays.
     Close(String),
-    /// Forward a raw client event frame to every open relay (e.g. a signed note
-    /// to publish, or an AUTH response).
+    /// Forward a raw client frame to the relays that take it (e.g. a signed
+    /// note to the relays that write, or an AUTH response to all of them).
     Send(String),
     /// Synthetic load, for `worker_bench`. Frames run through the same
     /// ingestor the sockets use, so the benchmark measures this exact path.
@@ -249,6 +251,7 @@ impl WorkerSocket {
         url: String,
         retry_count: u32,
         ingestor: NoteIngestor,
+        policies: super::relay_set::RelayPolicies,
         bus_tx: mpsc::UnboundedSender<Internal>,
     ) -> Result<Self, JsValue> {
         let ws = web_sys::WebSocket::new(&url)?;
@@ -264,9 +267,12 @@ impl WorkerSocket {
             let bus_tx = bus_tx.clone();
             let url = url.clone();
             Closure::wrap(Box::new(move || {
-                for req in ingestor.active_reqs() {
-                    if let Ok(req_str) = crate::NostrJson::to_string(&req) {
-                        let _ = sender.send_with_str(&req_str);
+                // A write-only relay is never subscribed to.
+                if policies.reads(&url) {
+                    for req in ingestor.active_reqs() {
+                        if let Ok(req_str) = crate::NostrJson::to_string(&req) {
+                            let _ = sender.send_with_str(&req_str);
+                        }
                     }
                 }
                 for msg in queue.borrow().iter() {

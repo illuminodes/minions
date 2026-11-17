@@ -213,7 +213,8 @@ impl NostrRelayPool {
         }
     }
 
-    /// Publish a client event (e.g. a signed note) to every relay via the
+    /// Publish a client event (e.g. a signed note) to every relay that takes
+    /// it (see [`UserRelay`](super::UserRelay)'s `read` / `write`) via the
     /// worker. Fire-and-forget.
     pub fn send<T>(&self, event: T)
     where
@@ -247,7 +248,7 @@ impl Reducible for NostrRelayPool {
             NostrRelayPoolAction::AddRelay(relay) => {
                 let _ = self
                     .cmd_tx
-                    .unbounded_send(RelayCommand::AddRelay(relay.url.clone()));
+                    .unbounded_send(RelayCommand::AddRelay(relay.clone()));
                 self.pending_relays.borrow_mut().push(relay);
                 self.notify_change()
             }
@@ -393,12 +394,11 @@ fn spawn_driver(
     yew::platform::spawn_local(async move {
         let mut link = super::app_link::AppLink::pending();
 
-        // Initial connect: hand the worker every relay URL from props. This
-        // goes over the bridge because the worker has not offered rings yet;
-        // the worker acts on it either way.
-        let urls: Vec<String> = relays.into_iter().map(|r| r.url).collect();
-        if !urls.is_empty() {
-            bridge.send_input(RelayCommand::Connect(urls));
+        // Initial connect: hand the worker every relay from props, with its
+        // read/write flags. This goes over the bridge because the worker has
+        // not offered rings yet; the worker acts on it either way.
+        if !relays.is_empty() {
+            bridge.send_input(RelayCommand::Connect(relays));
         }
 
         // Once the rings carry the notes, the worker stops sending bridge

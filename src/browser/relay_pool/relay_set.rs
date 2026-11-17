@@ -53,16 +53,22 @@ impl RelaySet {
                 filter_json,
                 req_json,
             } => {
+                // Sockets that are not open yet are skipped on purpose: `onopen`
+                // replays every recorded REQ, so queueing this one as well
+                // would open the subscription twice on that relay.
+                self.broadcast_to_open(&req_json);
                 if let Ok(filter) = crate::NostrJson::parse_str::<NostrSubscription>(&filter_json) {
-                    self.ingestor.insert_filter(sub_id, filter);
+                    self.ingestor.insert_filter(sub_id, filter, req_json);
                 }
-                self.broadcast(&req_json);
             }
             RelayCommand::Close(sub_id) => {
                 self.ingestor.remove_filter(&sub_id);
                 let close = NostrClientEvent::close_subscription(&sub_id);
+                // A socket that is not open has nothing to close: it is either
+                // still connecting, and will not replay a filter that is gone,
+                // or on its way out, which ends its subscriptions anyway.
                 if let Ok(close_str) = crate::NostrJson::to_string(&close) {
-                    self.broadcast(&close_str);
+                    self.broadcast_to_open(&close_str);
                 }
             }
             RelayCommand::Send(event_json) => self.broadcast(&event_json),
@@ -105,6 +111,15 @@ impl RelaySet {
     fn broadcast(&self, frame: &str) {
         for sock in &self.sockets {
             sock.send_str(frame);
+        }
+    }
+
+    /// Send a frame to the sockets that are open right now, queueing nothing.
+    fn broadcast_to_open(&self, frame: &str) {
+        for sock in &self.sockets {
+            if sock.ready_state() == ReadyState::OPEN {
+                sock.send_str(frame);
+            }
         }
     }
 

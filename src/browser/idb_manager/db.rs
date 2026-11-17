@@ -33,7 +33,12 @@ impl NostrIdb {
         let mut open_request = factory.open(NOSTR_DB_NAME, Some(NOSTR_DB_VERSION))?;
 
         open_request.on_upgrade_needed(|event| {
-            let _ = Self::upgrade(&event);
+            if let Err(e) = Self::upgrade(&event) {
+                crate::DevConsole::error(format_args!(
+                    "nostr-minions: IndexedDB upgrade failed: {e}"
+                ));
+                Self::abort_upgrade(&event);
+            }
         });
 
         let db = open_request.await?;
@@ -41,6 +46,23 @@ impl NostrIdb {
             db: std::rc::Rc::new(db),
         })
     }
+    /// Cancel a version change whose upgrade failed.
+    ///
+    /// Letting it complete would leave the database at the new version without
+    /// its stores, and `onupgradeneeded` never fires again for a version the
+    /// database already has. Aborting fails the open instead, so the old
+    /// version stays and the next load retries the upgrade.
+    fn abort_upgrade(event: &idb::event::VersionChangeEvent) {
+        use idb::{Event as _, Request as _};
+        if let Some(transaction) = event
+            .target()
+            .ok()
+            .and_then(|request| request.transaction())
+        {
+            let _ = transaction.abort();
+        }
+    }
+
     /// Upgrades the database to the latest version. Checks for existing stores
     /// before creating them to support upgrades from any previous version.
     ///

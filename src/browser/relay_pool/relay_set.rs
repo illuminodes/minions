@@ -77,7 +77,20 @@ impl RelaySet {
     }
 
     /// Replace a dead socket, keeping exactly one socket per URL.
+    ///
+    /// Does nothing unless the set still holds a CLOSED socket for the relay.
+    /// The request comes from a backoff timer that `RemoveRelay` cannot
+    /// cancel, so without the check a relay removed while it waited would be
+    /// connected again, and one removed and re-added would have its new,
+    /// healthy socket torn down.
     pub fn reconnect(&mut self, url: &str, retry_count: u32) {
+        if !self
+            .sockets
+            .iter()
+            .any(|s| s.url() == url && s.ready_state() == ReadyState::CLOSED)
+        {
+            return;
+        }
         self.sockets.retain(|s| s.url() != url);
         self.connect(url, retry_count);
         self.emit_health();

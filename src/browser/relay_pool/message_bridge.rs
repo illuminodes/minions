@@ -15,8 +15,9 @@
 //! The conversions are methods on the pool types, never impls on the wire
 //! types, so `transport` never names anything in `browser`.
 
-use crate::transport::{Inbound, Outbound};
+use crate::transport::{Inbound, Outbound, RelayAccess};
 
+use super::nostr_relay::UserRelay;
 use super::websocket::ReadyState;
 use super::worker::RelayCommand;
 
@@ -24,8 +25,10 @@ impl RelayCommand {
     #[must_use]
     pub fn to_wire(self) -> Inbound {
         match self {
-            Self::Connect(urls) => Inbound::Connect(urls),
-            Self::AddRelay(url) => Inbound::AddRelay(url),
+            Self::Connect(relays) => {
+                Inbound::Connect(relays.into_iter().map(UserRelay::into_wire).collect())
+            }
+            Self::AddRelay(relay) => Inbound::AddRelay(relay.into_wire()),
             Self::RemoveRelay(url) => Inbound::RemoveRelay(url),
             Self::Subscribe {
                 sub_id,
@@ -46,8 +49,10 @@ impl RelayCommand {
     #[must_use]
     pub fn from_wire(message: Inbound) -> Self {
         match message {
-            Inbound::Connect(urls) => Self::Connect(urls),
-            Inbound::AddRelay(url) => Self::AddRelay(url),
+            Inbound::Connect(relays) => {
+                Self::Connect(relays.into_iter().map(UserRelay::from_wire).collect())
+            }
+            Inbound::AddRelay(relay) => Self::AddRelay(UserRelay::from_wire(relay)),
             Inbound::RemoveRelay(url) => Self::RemoveRelay(url),
             Inbound::Subscribe {
                 sub_id,
@@ -60,6 +65,24 @@ impl RelayCommand {
             },
             Inbound::Close(sub_id) => Self::Close(sub_id),
             Inbound::Send(event_json) => Self::Send(event_json),
+        }
+    }
+}
+
+impl UserRelay {
+    fn into_wire(self) -> RelayAccess {
+        RelayAccess {
+            url: self.url,
+            read: self.read,
+            write: self.write,
+        }
+    }
+
+    fn from_wire(relay: RelayAccess) -> Self {
+        Self {
+            url: relay.url,
+            read: relay.read,
+            write: relay.write,
         }
     }
 }

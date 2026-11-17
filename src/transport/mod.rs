@@ -34,7 +34,7 @@ mod reader;
 mod ring_index;
 mod writer;
 
-pub use envelope::{Envelope, Inbound, Outbound};
+pub use envelope::{Envelope, Inbound, Outbound, RelayAccess};
 pub use frame_queue::{FrameQueue, FrameSink};
 pub use note_codec::NoteCodec;
 pub use reader::Reader;

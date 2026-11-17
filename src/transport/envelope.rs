@@ -78,11 +78,20 @@ pub enum Outbound {
     RelayHealth(Vec<(String, u8)>),
 }
 
+/// A relay and the traffic it takes: subscriptions (`read`), published events
+/// (`write`), or both.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct RelayAccess {
+    pub url: String,
+    pub read: bool,
+    pub write: bool,
+}
+
 /// A message travelling from the application to the worker.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Inbound {
-    Connect(Vec<String>),
-    AddRelay(String),
+    Connect(Vec<RelayAccess>),
+    AddRelay(RelayAccess),
     RemoveRelay(String),
     Subscribe {
         sub_id: String,
@@ -149,16 +158,16 @@ impl Envelope {
     pub fn encode_inbound(message: &Inbound) -> Vec<u8> {
         let mut w = Writer::with_capacity(128);
         match message {
-            Inbound::Connect(urls) => {
+            Inbound::Connect(relays) => {
                 w.u8(Tag::Connect as u8);
-                w.u32(u32::try_from(urls.len()).unwrap_or(0));
-                for url in urls {
-                    w.str(url);
+                w.u32(u32::try_from(relays.len()).unwrap_or(0));
+                for relay in relays {
+                    Self::write_access(&mut w, relay);
                 }
             }
-            Inbound::AddRelay(url) => {
+            Inbound::AddRelay(relay) => {
                 w.u8(Tag::AddRelay as u8);
-                w.str(url);
+                Self::write_access(&mut w, relay);
             }
             Inbound::RemoveRelay(url) => {
                 w.u8(Tag::RemoveRelay as u8);
@@ -193,16 +202,16 @@ impl Envelope {
         let message = match tag {
             Tag::Connect => {
                 let count = r.u32()?;
-                let mut urls = Vec::with_capacity(count as usize);
+                let mut relays = Vec::with_capacity(count as usize);
                 for _ in 0..count {
-                    urls.push(r.string()?);
+                    relays.push(Self::read_access(&mut r)?);
                 }
                 if !r.is_done() {
                     return None;
                 }
-                Inbound::Connect(urls)
+                Inbound::Connect(relays)
             }
-            Tag::AddRelay => Inbound::AddRelay(Self::last_string(&mut r)?),
+            Tag::AddRelay => Inbound::AddRelay(Self::last_access(&mut r)?),
             Tag::RemoveRelay => Inbound::RemoveRelay(Self::last_string(&mut r)?),
             Tag::Subscribe => {
                 let sub_id = r.string()?;
@@ -224,6 +233,27 @@ impl Envelope {
         Some(message)
     }
 
+    /// Write a relay as its two flags followed by its URL.
+    fn write_access(w: &mut Writer, relay: &RelayAccess) {
+        w.u8(u8::from(relay.read));
+        w.u8(u8::from(relay.write));
+        w.str(&relay.url);
+    }
+
+    /// Read a relay written by [`Self::write_access`].
+    fn read_access(r: &mut Reader) -> Option<RelayAccess> {
+        let read = r.u8()? != 0;
+        let write = r.u8()? != 0;
+        let url = r.string()?;
+        Some(RelayAccess { url, read, write })
+    }
+
+    /// Read a relay that must be the final field, rejecting trailing bytes.
+    fn last_access(r: &mut Reader) -> Option<RelayAccess> {
+        let relay = Self::read_access(r)?;
+        r.is_done().then_some(relay)
+    }
+
     /// Read a string that must be the final field, rejecting trailing bytes.
     fn last_string(r: &mut Reader) -> Option<String> {
         let value = r.string()?;
@@ -233,7 +263,7 @@ impl Envelope {
 
 #[cfg(test)]
 mod tests {
-    use super::{Envelope, Inbound, Outbound};
+    use super::{Envelope, Inbound, Outbound, RelayAccess};
     use nostro2::{NostrNote, NostrTags};
 
     struct Sample;
@@ -253,6 +283,14 @@ mod tests {
             }
         }
 
+        fn relay(url: &str, read: bool, write: bool) -> RelayAccess {
+            RelayAccess {
+                url: url.to_string(),
+                read,
+                write,
+            }
+        }
+
         fn outbound() -> Vec<Outbound> {
             vec![
                 Outbound::Note(Self::note()),
@@ -267,9 +305,12 @@ mod tests {
 
         fn inbound() -> Vec<Inbound> {
             vec![
-                Inbound::Connect(vec!["wss://a.io".to_string(), "wss://b.io".to_string()]),
+                Inbound::Connect(vec![
+                    Self::relay("wss://a.io", true, false),
+                    Self::relay("wss://b.io", false, true),
+                ]),
                 Inbound::Connect(Vec::new()),
-                Inbound::AddRelay("wss://c.io".to_string()),
+                Inbound::AddRelay(Self::relay("wss://c.io", true, true)),
                 Inbound::RemoveRelay("wss://c.io".to_string()),
                 Inbound::Subscribe {
                     sub_id: "sub-1".to_string(),

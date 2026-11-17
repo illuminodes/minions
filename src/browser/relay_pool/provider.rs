@@ -25,8 +25,6 @@ pub struct NostrRelayPool {
     version: u64,
     /// Outbound command channel to the worker (drained by the driver task).
     cmd_tx: futures::channel::mpsc::UnboundedSender<RelayCommand>,
-    /// Relays the app asked to add before the bridge existed / at runtime.
-    pending_relays: std::rc::Rc<std::cell::RefCell<Vec<crate::browser::relay_pool::UserRelay>>>,
     /// Cached per-relay health, fed by `WorkerOut::RelayHealth`.
     relay_health:
         std::rc::Rc<std::cell::RefCell<std::collections::HashMap<String, super::ReadyState>>>,
@@ -57,7 +55,6 @@ impl std::fmt::Debug for NostrRelayPool {
             .field("version", &self.version)
             .field("transport", &self.transport.get())
             .field("relay_health", &self.relay_health.borrow().len())
-            .field("pending_relays", &self.pending_relays.borrow().len())
             .field("subscriptions", &self.subscriptions.borrow().len())
             .field(
                 "relay_event_subscribers",
@@ -247,8 +244,7 @@ impl Reducible for NostrRelayPool {
             NostrRelayPoolAction::AddRelay(relay) => {
                 let _ = self
                     .cmd_tx
-                    .unbounded_send(RelayCommand::AddRelay(relay.url.clone()));
-                self.pending_relays.borrow_mut().push(relay);
+                    .unbounded_send(RelayCommand::AddRelay(relay.url));
                 self.notify_change()
             }
             NostrRelayPoolAction::RemoveRelay(relay) => {
@@ -312,7 +308,6 @@ fn use_transport_cell() -> std::rc::Rc<std::cell::Cell<super::transport_status::
 
 #[function_component(NostrRelayPoolProvider)]
 pub fn nostr_relay_pool_provider(props: &RelayContextProps) -> Html {
-    let pending_relays = use_mut_ref(Vec::new);
     let relay_health = use_mut_ref(std::collections::HashMap::new);
     let transport = use_transport_cell();
     let subscriptions = use_mut_ref(std::collections::HashMap::new);
@@ -337,7 +332,6 @@ pub fn nostr_relay_pool_provider(props: &RelayContextProps) -> Html {
             NostrRelayPool {
                 version: 0,
                 cmd_tx,
-                pending_relays,
                 relay_health,
                 transport,
                 subscriptions,
@@ -367,11 +361,6 @@ pub fn nostr_relay_pool_provider(props: &RelayContextProps) -> Html {
             }
         }
     });
-
-    // Forward dynamically added relays (AddRelay action queues a worker command
-    // in the reducer; this effect is kept so pending_relays stays observable for
-    // consumers that inspect it).
-    use_effect_with(ctx.clone(), move |_ctx| ());
 
     html! {
         <ContextProvider<NostrRelayPoolStore> context={ctx}>

@@ -33,6 +33,21 @@ mod browser;
 #[cfg(target_arch = "wasm32")]
 pub use browser::*;
 
+// The relay pool's browser-free modules, compiled for host test builds only.
+//
+// `browser` exists only on `wasm32`, and nothing runs a wasm test binary, so
+// the unit tests written next to these modules would otherwise never execute.
+// Each file listed here uses nothing but `std` and its siblings, which is what
+// lets it compile outside the tree it lives in.
+#[cfg(all(test, not(target_arch = "wasm32")))]
+#[allow(dead_code, reason = "only the modules' own tests use them on the host")]
+#[path = "browser/relay_pool"]
+mod relay_pool_host_tests {
+    mod bounded_dedup;
+    mod transport_negotiation;
+    mod transport_status;
+}
+
 // Re-export nostro2 types directly for convenience.
 // This allows: use minions::NostrNote instead of minions::nostro2::NostrNote
 pub use nostro2::*;

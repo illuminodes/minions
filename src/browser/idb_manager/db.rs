@@ -147,6 +147,19 @@ impl NostrIdb {
         };
         Ok(keys)
     }
+    /// Empty `store`, then save `entry` as its only record.
+    ///
+    /// The identity store holds ONE identity: `load_identity` reads the first
+    /// record in key order, which is not the newest once two exist.
+    async fn replace_contents(
+        store: &idb::ObjectStore,
+        entry: &wasm_bindgen::JsValue,
+    ) -> Result<(), idb::Error> {
+        store.clear()?.await?;
+        store.put(entry, None)?.await.map(|_| ())
+    }
+
+    /// Store `identity` as the only saved identity, replacing any other.
     pub async fn add_identity(
         &self,
         identity: crate::IdbKeypairEntry,
@@ -157,9 +170,14 @@ impl NostrIdb {
         )?;
         let store = transaction
             .object_store(crate::browser::idb_manager::NostrDbStoreName::UserIdentity.as_ref())?;
-        store
-            .put(&serde_wasm_bindgen::to_value(&identity)?, None)?
-            .await?;
+        let entry = serde_wasm_bindgen::to_value(&identity)?;
+        // The clear and the put succeed together or not at all. Without the
+        // abort, a put that fails after the clear would commit an empty store
+        // and the previous key would be gone with nothing in its place.
+        if let Err(e) = Self::replace_contents(&store, &entry).await {
+            let _ = transaction.abort();
+            return Err(e.into());
+        }
         transaction.commit()?.await?;
         Ok(())
     }

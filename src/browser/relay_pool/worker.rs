@@ -36,6 +36,12 @@ use super::ReadyState;
 
 const MAX_RECONNECT_SECS: u32 = 120;
 const MAX_RETRIES: u32 = 10;
+/// How long a socket must stay open before its relay counts as healthy again.
+///
+/// A relay that accepts the connection and closes it straight away (auth
+/// required, rate limited, overloaded) must keep backing off, so opening alone
+/// does not clear the retry count.
+const STABLE_OPEN_MS: f64 = 30_000.0;
 
 /// JSON codec for the worker bridge.
 ///
@@ -253,6 +259,9 @@ impl WorkerSocket {
     ) -> Result<Self, JsValue> {
         let ws = web_sys::WebSocket::new(&url)?;
         let queue: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
+        // When this socket opened, if it has. `onclose` reads it to tell a
+        // connection that worked for a while from one that never held.
+        let opened_at: Rc<std::cell::Cell<Option<f64>>> = Rc::new(std::cell::Cell::new(None));
 
         // On open: re-send every active REQ (so a reconnected socket resumes its
         // subscriptions), then flush anything queued before the socket opened.
@@ -263,7 +272,9 @@ impl WorkerSocket {
             let ingestor = ingestor.clone();
             let bus_tx = bus_tx.clone();
             let url = url.clone();
+            let opened_at = opened_at.clone();
             Closure::wrap(Box::new(move || {
+                opened_at.set(Some(web_sys::js_sys::Date::now()));
                 for req in ingestor.active_reqs() {
                     if let Ok(req_str) = crate::NostrJson::to_string(&req) {
                         let _ = sender.send_with_str(&req_str);
@@ -300,10 +311,18 @@ impl WorkerSocket {
                 let _ = bus_tx
                     .unbounded_send(Internal::Health(vec![(url.clone(), ReadyState::CLOSED)]));
 
-                if retry_count >= MAX_RETRIES {
+                // A connection that held starts the backoff over. Otherwise
+                // the count would only ever grow, and `MAX_RETRIES` would
+                // bound a relay's disconnects over the whole life of the page
+                // instead of its consecutive failures.
+                let held = opened_at
+                    .take()
+                    .is_some_and(|at| web_sys::js_sys::Date::now() - at >= STABLE_OPEN_MS);
+                let failures = if held { 0 } else { retry_count };
+                if failures >= MAX_RETRIES {
                     return;
                 }
-                let next = retry_count + 1;
+                let next = failures + 1;
                 let timeout_secs = 2_u32.saturating_pow(next).min(MAX_RECONNECT_SECS);
                 let url = url.clone();
                 let bus_tx = bus_tx.clone();

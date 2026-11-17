@@ -195,21 +195,44 @@ impl NostrRelayPool {
     /// matches. The worker already confirmed the note matches *some* active
     /// filter; the re-check here only ROUTES it to the right callback(s), each
     /// of which receives a given note at most once.
+    ///
+    /// The callbacks run only after both maps are released. `emit` is
+    /// synchronous, so a callback that subscribes or unsubscribes (take the
+    /// first note, then close) would otherwise borrow a map this method still
+    /// holds and panic. A subscription closed by an earlier callback in the
+    /// same dispatch still receives this one note.
     fn dispatch_note(&self, note: &nostro2::NostrNote) {
-        let mut subs = self.subscriptions.borrow_mut();
-        let mut deliveries = self.deliveries.borrow_mut();
-        for sub in subs.values_mut() {
-            if sub.filter.matches(note) && deliveries.first_delivery(&sub.id, note) {
-                sub.note_count += 1;
-                sub.callback.emit(note.clone());
-            }
+        let callbacks: Vec<_> = {
+            let mut subs = self.subscriptions.borrow_mut();
+            let mut deliveries = self.deliveries.borrow_mut();
+            subs.values_mut()
+                .filter(|sub| sub.filter.matches(note))
+                .filter_map(|sub| {
+                    deliveries.first_delivery(&sub.id, note).then(|| {
+                        sub.note_count += 1;
+                        sub.callback.clone()
+                    })
+                })
+                .collect()
+        };
+        for callback in callbacks {
+            callback.emit(note.clone());
         }
     }
 
     /// Dispatch a relay event to all relay-event subscribers.
+    ///
+    /// As in [`Self::dispatch_note`], the map is released before any callback
+    /// runs, so a callback may unsubscribe itself.
     fn dispatch_relay_event(&self, event: &nostro2::NostrRelayEvent) {
-        for sub in self.relay_event_subscribers.borrow().values() {
-            sub.callback.emit(event.clone());
+        let callbacks: Vec<_> = self
+            .relay_event_subscribers
+            .borrow()
+            .values()
+            .map(|sub| sub.callback.clone())
+            .collect();
+        for callback in callbacks {
+            callback.emit(event.clone());
         }
     }
 
